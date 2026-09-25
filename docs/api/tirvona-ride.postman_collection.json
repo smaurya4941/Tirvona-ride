@@ -1,0 +1,59 @@
+{
+  "info": {
+    "name": "Tirvona Rides API",
+    "description": "Manual testing collection for the Tirvona Rides backend. Select the \"Tirvona Rides — Local\" environment. Folders are added per roadmap phase.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Liveness",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/health/live",
+            "description": "200 whenever the process is running."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('success envelope', () => pm.expect(pm.response.json().success).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Readiness (MongoDB + Redis)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/health",
+            "description": "200 when MongoDB is up and Redis is up or not configured; 503 with the same report otherwise."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('database is up', () => pm.expect(pm.response.json().data.checks.database).to.eql('up'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

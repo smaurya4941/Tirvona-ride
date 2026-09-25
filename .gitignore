@@ -1,0 +1,39 @@
+# Dependencies & build output
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.eslintcache
+
+# Runtime data
+uploads/
+*.log
+logs/
+npm-debug.log*
+
+# Environment — only the *.example templates are committed
+.env
+.env.*
+!.env.example
+!.env.test.example
+!.env.production.example
+
+# Credentials (Firebase service accounts, keys, certificates)
+*service-account*.json
+*serviceAccount*.json
+firebase-adminsdk*.json
+*.pem
+*.key
+*.p12
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local artefacts
+mermaid-diagram.png
