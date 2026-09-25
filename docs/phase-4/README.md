@@ -201,6 +201,7 @@ committed (`.gitignore`).
 | -------- | ------- | ----- |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | — | Test keys `rzp_test_…`. **Live keys `rzp_live_…` are refused unless `NODE_ENV=production`.** Required in production. Unset in development → `/payments/create` answers 503 `PAYMENT_GATEWAY_NOT_CONFIGURED`. |
 | `RAZORPAY_WEBHOOK_SECRET` | — | Required in production (≥ 12 chars) |
+| `PAYMENTS_ENABLED` | `true` | `false` lets production start without the three Razorpay keys; payments then answer 503 `PAYMENT_GATEWAY_NOT_CONFIGURED` |
 | `RAZORPAY_API_BASE_URL` | `https://api.razorpay.com/v1` | |
 | `RAZORPAY_TIMEOUT_MS` | 10000 | Every Razorpay call has a hard timeout |
 | `PAYMENT_BRAND_NAME` | Tirvona Rides | Checkout title |

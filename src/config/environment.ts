@@ -525,20 +525,26 @@ export function validateEnvironment(
   if (nodeEnv === "production") {
     // Redis is deliberately not required: Phase 3 runs realtime on MongoDB +
     // a single Socket.IO node. It becomes required with the Redis adapter.
+    // PAYMENTS_ENABLED=false is an explicit opt-out for deployments without a
+    // Razorpay account yet: /payments/* answer 503 PAYMENT_GATEWAY_NOT_CONFIGURED
+    // and the reconciler skips gateway calls. Forgetting the keys still fails.
+    const paymentsEnabled = boolean(
+      isSet(input.PAYMENTS_ENABLED) ? String(input.PAYMENTS_ENABLED) : undefined,
+      true,
+    );
+    const razorpayKeys = ["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET"];
     for (const name of [
       "MONGODB_URI",
       "CORS_ORIGINS",
       "JWT_ACCESS_SECRET",
       "JWT_REFRESH_SECRET",
-      "RAZORPAY_KEY_ID",
-      "RAZORPAY_KEY_SECRET",
-      "RAZORPAY_WEBHOOK_SECRET",
+      ...(paymentsEnabled ? razorpayKeys : []),
       "PUBLIC_BASE_URL",
     ]) {
       if (!isSet(input[name]))
         throw new Error(`${name} is required in production`);
     }
-    if (String(input.RAZORPAY_WEBHOOK_SECRET).length < 12)
+    if (isSet(input.RAZORPAY_WEBHOOK_SECRET) && String(input.RAZORPAY_WEBHOOK_SECRET).length < 12)
       throw new Error("RAZORPAY_WEBHOOK_SECRET must contain at least 12 characters");
     for (const name of ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"]) {
       if (String(input[name]).length < 32)

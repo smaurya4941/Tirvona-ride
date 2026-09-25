@@ -101,6 +101,16 @@ describe("validateEnvironment", () => {
     },
   );
 
+  it("allows production without Razorpay only when PAYMENTS_ENABLED=false", () => {
+    const input = productionInput();
+    delete input.RAZORPAY_KEY_ID;
+    delete input.RAZORPAY_KEY_SECRET;
+    delete input.RAZORPAY_WEBHOOK_SECRET;
+    expect(() => validateEnvironment(input)).toThrow("RAZORPAY_KEY_ID");
+    expect(() => validateEnvironment({ ...input, PAYMENTS_ENABLED: "true" })).toThrow("RAZORPAY_KEY_ID");
+    expect(() => validateEnvironment({ ...input, PAYMENTS_ENABLED: "false" })).not.toThrow();
+  });
+
   it("never accepts live Razorpay keys outside production", () => {
     expect(() =>
       validateEnvironment({ RAZORPAY_KEY_ID: "rzp_live_AbCdEf123456", RAZORPAY_KEY_SECRET: "x" }),
