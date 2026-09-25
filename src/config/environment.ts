@@ -94,7 +94,22 @@ export interface Environment {
   shareRideLinkBaseUrl: string;
   shareRideMaxHours: number;
   shareRideGraceMinutes: number;
+  placesProvider: PlacesProviderName;
+  googleMapsApiKey: string;
+  nominatimBaseUrl: string;
+  nominatimContactEmail: string;
+  nominatimMinIntervalMs: number;
+  placesCountryCodes: string[];
+  placesBiasLatitude: number;
+  placesBiasLongitude: number;
+  placesBiasRadiusKm: number;
+  placesTimeoutMs: number;
+  placesCacheTtlSeconds: number;
+  placesCacheMaxEntries: number;
 }
+
+export const PLACES_PROVIDERS = ["nominatim", "google", "none"] as const;
+export type PlacesProviderName = (typeof PLACES_PROVIDERS)[number];
 
 type RawEnvironment = Record<string, string | undefined>;
 
@@ -318,6 +333,27 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
   // Hard cap on a link's life, and how long it outlives the ride.
   shareRideMaxHours: integer(env.SHARE_RIDE_MAX_HOURS, 12),
   shareRideGraceMinutes: integer(env.SHARE_RIDE_GRACE_MINUTES, 30),
+
+  // ── Place search (autocomplete, reverse geocoding) ────────────────────
+  // Proxied through the API so map keys never ship inside the app and every
+  // lookup is cached and rate-limited in one place. "google" needs
+  // GOOGLE_MAPS_API_KEY; "none" leaves only the curated popular places.
+  placesProvider: ((env.PLACES_PROVIDER || "").trim().toLowerCase() ||
+    (env.GOOGLE_MAPS_API_KEY ? "google" : "nominatim")) as PlacesProviderName,
+  googleMapsApiKey: (env.GOOGLE_MAPS_API_KEY || "").trim(),
+  nominatimBaseUrl: stripTrailingSlashes(env.NOMINATIM_BASE_URL || "https://nominatim.openstreetmap.org"),
+  nominatimContactEmail: (env.NOMINATIM_CONTACT_EMAIL || "").trim(),
+  // The public Nominatim allows 1 request/second per application; a
+  // self-hosted instance can lower this (0 = no spacing).
+  nominatimMinIntervalMs: integer(env.NOMINATIM_MIN_INTERVAL_MS, 1_000),
+  placesCountryCodes: csv(env.PLACES_COUNTRY_CODES, "in").map((code) => code.toLowerCase()),
+  // Results near the service area rank first (Vrindavan–Mathura by default).
+  placesBiasLatitude: decimal(env.PLACES_BIAS_LATITUDE, 27.5406),
+  placesBiasLongitude: decimal(env.PLACES_BIAS_LONGITUDE, 77.6708),
+  placesBiasRadiusKm: decimal(env.PLACES_BIAS_RADIUS_KM, 50),
+  placesTimeoutMs: integer(env.PLACES_TIMEOUT_MS, 5_000),
+  placesCacheTtlSeconds: integer(env.PLACES_CACHE_TTL_SECONDS, 21_600),
+  placesCacheMaxEntries: integer(env.PLACES_CACHE_MAX_ENTRIES, 5_000),
 });
 
 export const environment = (): Environment => environmentFrom(process.env);
@@ -358,12 +394,16 @@ const POSITIVE_INTEGERS = [
   "SOS_POST_RIDE_GRACE_MINUTES",
   "SHARE_RIDE_MAX_HOURS",
   "SHARE_RIDE_GRACE_MINUTES",
+  "PLACES_TIMEOUT_MS",
+  "PLACES_CACHE_TTL_SECONDS",
+  "PLACES_CACHE_MAX_ENTRIES",
 ];
 
 const POSITIVE_DECIMALS = [
   "ROUTE_AVERAGE_SPEED_KMPH",
   "ROUTE_DISTANCE_FACTOR",
   "MATCHING_RADIUS_KM",
+  "PLACES_BIAS_RADIUS_KM",
 ];
 
 const isSet = (value: unknown): boolean => String(value ?? "").trim() !== "";
@@ -482,6 +522,33 @@ export function validateEnvironment(
     if (!["http:", "https:"].includes(protocol)) throw new Error(`${name} must be a valid HTTP(S) URL`);
     if (nodeEnv === "production" && protocol !== "https:")
       throw new Error(`${name} must be an HTTPS URL in production`);
+  }
+
+  // Place search: a known provider, Google only with its key, and a bias
+  // point that is a real coordinate.
+  if (!(PLACES_PROVIDERS as readonly string[]).includes(resolved.placesProvider))
+    throw new Error(`PLACES_PROVIDER must be one of ${PLACES_PROVIDERS.join(", ")}`);
+  if (resolved.placesProvider === "google" && !resolved.googleMapsApiKey)
+    throw new Error("GOOGLE_MAPS_API_KEY is required when PLACES_PROVIDER=google");
+  if (
+    isSet(input.NOMINATIM_MIN_INTERVAL_MS) &&
+    (!Number.isInteger(Number(input.NOMINATIM_MIN_INTERVAL_MS)) || Number(input.NOMINATIM_MIN_INTERVAL_MS) < 0)
+  )
+    throw new Error("NOMINATIM_MIN_INTERVAL_MS must be 0 or a positive integer");
+  if (isSet(input.PLACES_BIAS_LATITUDE) && Math.abs(Number(input.PLACES_BIAS_LATITUDE)) > 90)
+    throw new Error("PLACES_BIAS_LATITUDE must be between -90 and 90");
+  if (isSet(input.PLACES_BIAS_LONGITUDE) && Math.abs(Number(input.PLACES_BIAS_LONGITUDE)) > 180)
+    throw new Error("PLACES_BIAS_LONGITUDE must be between -180 and 180");
+  for (const code of resolved.placesCountryCodes)
+    if (!/^[a-z]{2}$/.test(code)) throw new Error("PLACES_COUNTRY_CODES must be two-letter ISO country codes");
+  if (isSet(input.NOMINATIM_BASE_URL)) {
+    let protocol = "";
+    try {
+      protocol = new URL(String(input.NOMINATIM_BASE_URL)).protocol;
+    } catch {
+      protocol = "";
+    }
+    if (!["http:", "https:"].includes(protocol)) throw new Error("NOMINATIM_BASE_URL must be a valid HTTP(S) URL");
   }
 
   if (isSet(input.APP_TIME_ZONE)) {

@@ -19,6 +19,7 @@ import { HealthModule } from "./modules/health/health.module";
 import { LocationsModule } from "./modules/locations/locations.module";
 import { MatchingModule } from "./modules/matching/matching.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
+import { PlacesModule } from "./modules/places/places.module";
 import { PaymentsModule } from "./modules/payments/payments.module";
 import { PricingModule } from "./modules/pricing/pricing.module";
 import { RatingsModule } from "./modules/ratings/ratings.module";
@@ -124,6 +125,8 @@ const ENV_FILES: Record<string, string[]> = {
     RatingsModule,
     SafetyModule,
     ComplaintsModule,
+    // Place search for the booking flow (autocomplete, reverse geocoding)
+    PlacesModule,
     AdminModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: HttpThrottlerGuard }],

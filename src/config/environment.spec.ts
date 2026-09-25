@@ -174,6 +174,16 @@ describe("validateEnvironment", () => {
       }),
     ).toThrow("Wildcard");
   });
+
+  it("validates place-search settings", () => {
+    expect(() => validateEnvironment({ PLACES_PROVIDER: "mapquest" })).toThrow("PLACES_PROVIDER");
+    expect(() => validateEnvironment({ PLACES_PROVIDER: "google" })).toThrow("GOOGLE_MAPS_API_KEY");
+    expect(() => validateEnvironment({ PLACES_PROVIDER: "google", GOOGLE_MAPS_API_KEY: "key" })).not.toThrow();
+    expect(() => validateEnvironment({ PLACES_COUNTRY_CODES: "india" })).toThrow("PLACES_COUNTRY_CODES");
+    expect(() => validateEnvironment({ PLACES_BIAS_LATITUDE: "95" })).toThrow("PLACES_BIAS_LATITUDE");
+    expect(() => validateEnvironment({ NOMINATIM_BASE_URL: "nominatim" })).toThrow("NOMINATIM_BASE_URL");
+    expect(() => validateEnvironment({ NOMINATIM_MIN_INTERVAL_MS: "0" })).not.toThrow();
+  });
 });
 
 describe("environment", () => {
@@ -189,6 +199,13 @@ describe("environment", () => {
     expect(config.mongoDbName).toBe("tirvona_ride");
     expect(config.redisUrl).toBe("");
     expect(config.swaggerEnabled).toBe(true);
+    expect(config.placesProvider).toBe("nominatim");
+    expect(config.placesCountryCodes).toEqual(["in"]);
+  });
+
+  it("picks Google place search when a Maps key is present", () => {
+    process.env = { GOOGLE_MAPS_API_KEY: "key" };
+    expect(environment().placesProvider).toBe("google");
   });
 
   it("disables Swagger by default in production", () => {
