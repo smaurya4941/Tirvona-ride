@@ -12,7 +12,10 @@ import type { Server, ServerOptions } from "socket.io";
  * - Connection-state recovery: a client that drops for less than
  *   REALTIME_RECOVERY_WINDOW_MS reconnects into the same rooms and receives
  *   the non-volatile events it missed. Apps still re-sync over REST after
- *   every reconnect; recovery just narrows the gap.
+ *   every reconnect; recovery just narrows the gap. Note: recovery appends
+ *   an offset argument to every emitted event; the Dart client delivers
+ *   `[body, offset]`, which the app unwraps (`eventBody` in
+ *   realtime_client.dart). Acks are unaffected.
  * - Small max payload: clients only ever send tiny messages.
  */
 export class RealtimeIoAdapter extends IoAdapter {

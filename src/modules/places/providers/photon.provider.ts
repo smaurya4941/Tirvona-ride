@@ -45,21 +45,6 @@ const BIAS_PROMINENCE_SCALE = "0.1";
 /** Reverse geocoding only names a spot within this many kilometres. */
 const REVERSE_RADIUS_KM = 0.3;
 
-/**
- * Komoot Photon (https://photon.komoot.io, or self-hosted) — a free
- * search-as-you-type geocoder over OpenStreetMap data. Unlike Nominatim it
- * matches word prefixes ("noida sec" → "Noida Sector 18") and ranks by
- * distance from the rider, which is what a pickup/destination box needs.
- *
- * Ids use the same `osm:N123` scheme as Nominatim, so a fallback Nominatim
- * can resolve them. Photon has no lookup-by-id endpoint: `resolve` returns
- * null (its suggestions always carry coordinates, so the app never asks).
- *
- * The public instance is offered under a fair-use policy: calls are spaced
- * PHOTON_MIN_INTERVAL_MS apart and every answer is cached by PlacesService.
- * For heavy traffic run the Photon Docker image with an India extract and
- * point PHOTON_BASE_URL at it (then set PHOTON_MIN_INTERVAL_MS=0).
- */
 @Injectable()
 export class PhotonProvider extends GeocodingProvider {
   readonly name = "photon";
