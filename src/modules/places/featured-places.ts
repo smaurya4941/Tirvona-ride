@@ -206,3 +206,8 @@ export function featuredNear(point: GeoCoordinates, radiusMeters: number): Featu
   }
   return best?.place;
 }
+
+/** Whether any curated place lies within [radiusMeters] — i.e. the rider is in Braj. */
+export function isNearFeatured(point: GeoCoordinates, radiusMeters: number): boolean {
+  return FEATURED_PLACES.some((place) => haversineMeters(point, place) <= radiusMeters);
+}

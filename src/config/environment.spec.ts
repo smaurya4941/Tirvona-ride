@@ -183,6 +183,10 @@ describe("validateEnvironment", () => {
     expect(() => validateEnvironment({ PLACES_BIAS_LATITUDE: "95" })).toThrow("PLACES_BIAS_LATITUDE");
     expect(() => validateEnvironment({ NOMINATIM_BASE_URL: "nominatim" })).toThrow("NOMINATIM_BASE_URL");
     expect(() => validateEnvironment({ NOMINATIM_MIN_INTERVAL_MS: "0" })).not.toThrow();
+    expect(() => validateEnvironment({ PLACES_PROVIDER: "photon" })).not.toThrow();
+    expect(() => validateEnvironment({ PHOTON_BASE_URL: "photon" })).toThrow("PHOTON_BASE_URL");
+    expect(() => validateEnvironment({ PHOTON_MIN_INTERVAL_MS: "-5" })).toThrow("PHOTON_MIN_INTERVAL_MS");
+    expect(() => validateEnvironment({ PLACES_FEATURED_RADIUS_KM: "0" })).toThrow("PLACES_FEATURED_RADIUS_KM");
   });
 });
 
@@ -199,7 +203,8 @@ describe("environment", () => {
     expect(config.mongoDbName).toBe("tirvona_ride");
     expect(config.redisUrl).toBe("");
     expect(config.swaggerEnabled).toBe(true);
-    expect(config.placesProvider).toBe("nominatim");
+    expect(config.placesProvider).toBe("osm");
+    expect(config.photonBaseUrl).toBe("https://photon.komoot.io");
     expect(config.placesCountryCodes).toEqual(["in"]);
   });
 

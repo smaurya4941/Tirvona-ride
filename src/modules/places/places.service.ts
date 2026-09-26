@@ -3,7 +3,14 @@ import { ConfigService } from "@nestjs/config";
 import { ApiException, apiNotFound } from "../../common/exceptions/api.exception";
 import type { GeoCoordinates } from "../locations/geo";
 import { haversineMeters } from "../locations/geo";
-import { featuredNear, featuredToResolved, findFeatured, popularPlaces, searchFeatured } from "./featured-places";
+import {
+  featuredNear,
+  featuredToResolved,
+  findFeatured,
+  isNearFeatured,
+  popularPlaces,
+  searchFeatured,
+} from "./featured-places";
 import { coordinateLabel, normalizeQuery } from "./place-text";
 import type {
   AutocompleteRequest,
@@ -42,6 +49,7 @@ export class PlacesService {
   private readonly logger = new Logger(PlacesService.name);
   private readonly bias: GeoCoordinates;
   private readonly biasRadiusMeters: number;
+  private readonly featuredRadiusMeters: number;
   private readonly countryCodes: string[];
   private readonly cacheTtlMs: number;
   private readonly searchCache: TtlCache<ProviderSuggestion[]>;
@@ -57,6 +65,7 @@ export class PlacesService {
       longitude: config.getOrThrow<number>("placesBiasLongitude"),
     };
     this.biasRadiusMeters = config.getOrThrow<number>("placesBiasRadiusKm") * 1000;
+    this.featuredRadiusMeters = config.getOrThrow<number>("placesFeaturedRadiusKm") * 1000;
     this.countryCodes = config.getOrThrow<string[]>("placesCountryCodes");
     this.cacheTtlMs = config.getOrThrow<number>("placesCacheTtlSeconds") * 1000;
     const maxEntries = config.getOrThrow<number>("placesCacheMaxEntries");
@@ -93,11 +102,15 @@ export class PlacesService {
       return { suggestions: featured.slice(0, request.limit), degraded: true };
     }
 
-    const merged: PlaceSuggestion[] = [...featured];
-    for (const suggestion of fromProvider) {
+    const provided = fromProvider.map((suggestion) => ({ ...withDistance(suggestion, request.near), featured: false }));
+    // In Braj the curated landmarks lead; elsewhere (a rider in Noida typing
+    // "gokul" wants the local Gokul first) they follow the local results.
+    const [first, then] = this.isInBraj(request.near) ? [featured, provided] : [provided, featured];
+    const merged: PlaceSuggestion[] = [];
+    for (const suggestion of [...first, ...then]) {
       if (merged.length >= request.limit) break;
       if (merged.some((existing) => sameSpot(existing, suggestion))) continue;
-      merged.push({ ...withDistance(suggestion, request.near), featured: false });
+      merged.push(suggestion);
     }
     return { suggestions: merged, degraded: false };
   }
@@ -151,8 +164,14 @@ export class PlacesService {
     };
   }
 
+  /** Curated places, nearest first; none for a rider far from Braj. */
   popular(near: GeoCoordinates | undefined, limit: number): PlaceSuggestion[] {
-    return popularPlaces(near, limit);
+    return this.isInBraj(near) ? popularPlaces(near, limit) : [];
+  }
+
+  /** Unknown positions count as in Braj, the service area. */
+  private isInBraj(near: GeoCoordinates | undefined): boolean {
+    return !near || isNearFeatured(near, this.featuredRadiusMeters);
   }
 }
 
@@ -173,7 +192,7 @@ function withDistance(suggestion: ProviderSuggestion, near?: GeoCoordinates): Pr
   return { ...base, distanceMeters: Math.round(haversineMeters(near, { latitude, longitude })) };
 }
 
-function sameSpot(a: PlaceSuggestion, b: ProviderSuggestion): boolean {
+function sameSpot(a: ProviderSuggestion, b: ProviderSuggestion): boolean {
   const sameName = normalizeQuery(a.name) === normalizeQuery(b.name);
   if (a.latitude === undefined || a.longitude === undefined || b.latitude === undefined || b.longitude === undefined)
     return sameName;

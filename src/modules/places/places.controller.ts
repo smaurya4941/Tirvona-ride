@@ -30,7 +30,7 @@ export class PlacesController {
   @Get("autocomplete")
   // The app debounces keystrokes; this still allows brisk typing.
   @Throttle({ default: { limit: 90, ttl: 60_000 } })
-  @ApiOperation({ summary: "Search places as the rider types (curated Braj landmarks first)" })
+  @ApiOperation({ summary: "Search places as the rider types (curated Braj landmarks first when the rider is in Braj)" })
   async autocomplete(@Query() query: AutocompleteQueryDto): Promise<ApiSuccessBody<AutocompleteResult>> {
     return ok(
       await this.places.autocomplete({

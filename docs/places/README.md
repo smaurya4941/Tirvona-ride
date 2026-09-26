@@ -16,8 +16,8 @@ Now they can pick any real location, the same ways Uber and Rapido offer:
 Flutter app                                   API (NestJS)                     Provider
 ───────────                                   ────────────                     ────────
 LocationSearchScreen ─┐
-MapLocationPicker ────┼─ PlacesRepository ──► GET /api/v1/places/autocomplete ─► Google Places (New)
-Home (locate me) ─────┘                       GET /api/v1/places/resolve        or Nominatim (OSM)
+MapLocationPicker ────┼─ PlacesRepository ──► GET /api/v1/places/autocomplete ─► Photon → Nominatim (OSM, free)
+Home (locate me) ─────┘                       GET /api/v1/places/resolve        or Google Places (New)
                                               GET /api/v1/places/reverse        or none
                                               GET /api/v1/places/popular  ────► curated list (in code)
 ```
@@ -42,7 +42,7 @@ All endpoints need a customer or driver bearer token and return the usual
 | `GET /places/autocomplete?q=&latitude=&longitude=&sessionToken=&limit=` | Suggestions: curated matches first, then provider results (de-duplicated). `degraded: true` means only curated places were searched. | 90/min |
 | `GET /places/resolve?id=&sessionToken=` | Coordinates for a suggestion that came without them (Google). `404 PLACE_NOT_FOUND`, `503 PLACES_UNAVAILABLE`. | 30/min |
 | `GET /places/reverse?latitude=&longitude=` | Names the spot at a coordinate (current location, map pin). **Always answers.** When no name is found, `approximate: true` and the address is a coordinate label. The rider's exact coordinates are always kept. | 30/min |
-| `GET /places/popular?latitude=&longitude=&limit=` | Curated places, nearest first. | default |
+| `GET /places/popular?latitude=&longitude=&limit=` | Curated places, nearest first. Empty for a rider more than `PLACES_FEATURED_RADIUS_KM` from every curated place (the app then hides the section). | default |
 
 Suggestion ids carry their source as a prefix: `featured:<slug>`, `osm:N123`
 or `google:<placeId>`. `resolve` only accepts those prefixes.
@@ -65,18 +65,43 @@ Failed provider calls are never cached.
 | `PLACES_PROVIDER` | Notes |
 |---|---|
 | `google` | Places API (New) for autocomplete and details, Geocoding API for reverse. Best autocomplete. Needs `GOOGLE_MAPS_API_KEY` with both APIs enabled; restrict the key to the server's IP. The app's session token makes keystrokes plus the final tap one billed session. |
-| `nominatim` | OpenStreetMap. Free. The public server allows about 1 request per second for the whole application. The API spaces calls `NOMINATIM_MIN_INTERVAL_MS` apart and refuses (the search then degrades) instead of queueing riders. Set `NOMINATIM_CONTACT_EMAIL`. For real traffic, self-host and point `NOMINATIM_BASE_URL` at it with `NOMINATIM_MIN_INTERVAL_MS=0`. |
+| `osm` | **Default, free, no key.** [Photon](https://github.com/komoot/photon) for autocomplete and reverse geocoding, with Nominatim as the fallback when Photon fails (and for resolving `osm:` ids and naming a spot Photon cannot). Photon matches word prefixes ("noida sec" → Noida Sector 18, 62…) and ranks around the rider (zoom 12 bias, tuned with Noida and Vrindavan queries). Uses the public `photon.komoot.io` (fair use, calls spaced `PHOTON_MIN_INTERVAL_MS` apart) unless `PHOTON_BASE_URL` points elsewhere. |
+| `photon` | Photon alone. |
+| `nominatim` | OpenStreetMap, Nominatim alone. Free. Matches whole words only, so it is a poor fit for a search box. The public server allows about 1 request per second for the whole application. The API spaces calls `NOMINATIM_MIN_INTERVAL_MS` apart and refuses (the search then degrades) instead of queueing riders. Set `NOMINATIM_CONTACT_EMAIL`. For real traffic, self-host and point `NOMINATIM_BASE_URL` at it with `NOMINATIM_MIN_INTERVAL_MS=0`. |
 | `none` | Only curated places are searchable. Reverse geocoding returns coordinate labels. |
 
-The default is `google` when `GOOGLE_MAPS_API_KEY` is set, otherwise
-`nominatim`. **Recommendation for production: `google`.** Nominatim's text
-search is not true type-ahead, and the public server's rate limit does not
-fit a live ride app.
+The default is `google` when `GOOGLE_MAPS_API_KEY` is set, otherwise `osm`.
+
+**Production without Google:** the public Photon and Nominatim servers are
+shared, best-effort services. Before real traffic, self-host Photon on one
+small VM (a recent Java runtime, per the Photon README; a few GB of disk
+for the India index):
+
+```
+# Official jar and ready-made India index (keep the two versions compatible:
+# see the Photon release notes).
+wget https://github.com/komoot/photon/releases/download/1.3.0/photon-1.3.0.jar
+wget https://download1.graphhopper.com/public/extracts/by-country-code/in/photon-db-in-latest.tar.bz2
+tar -xjf photon-db-in-latest.tar.bz2    # the index, next to the jar
+java -jar photon-1.3.0.jar              # serves on port 2322
+```
+
+Keep port 2322 private to the API server, then set
+`PHOTON_BASE_URL=http://<host>:2322` and `PHOTON_MIN_INTERVAL_MS=0`. Keep `NOMINATIM_CONTACT_EMAIL` set for the fallback.
+
+### Riders outside Braj (testing from Noida)
+
+Search works anywhere in `PLACES_COUNTRY_CODES` and is ranked around the
+rider's GPS position (sent as `latitude`/`longitude`). When the rider is
+farther than `PLACES_FEATURED_RADIUS_KM` (default 75) from every curated Braj
+landmark, local results come before curated matches and `popular` is empty.
+Rides can be estimated and booked anywhere; only drivers near the pickup are
+matched, so test with a driver account online near the customer.
 
 All settings, with comments, are in `.env.example` under "Place search":
-`PLACES_COUNTRY_CODES`, `PLACES_BIAS_*` (results near Vrindavan–Mathura rank
-first; this is not a hard boundary), `PLACES_TIMEOUT_MS` and
-`PLACES_CACHE_*`. The cache is in memory, per API process.
+`PLACES_COUNTRY_CODES`, `PLACES_BIAS_*` (used when the app sends no position;
+not a hard boundary), `PLACES_FEATURED_RADIUS_KM`, `PHOTON_*`,
+`PLACES_TIMEOUT_MS` and `PLACES_CACHE_*`. The cache is in memory, per API process.
 
 To add or fix a curated landmark, edit
 `src/modules/places/featured-places.ts`. Use the main entrance or drop-off
@@ -106,11 +131,13 @@ point as the coordinates, and add the names riders actually type as aliases.
 ## Tests
 
 - API unit tests: `src/modules/places/**/*.spec.ts` (service, curated search,
-  cache, text helpers, both providers against a mocked `fetch`) and
+  cache, text helpers, the Nominatim, Google and Photon providers against a
+  mocked `fetch`, the Photon → Nominatim fallback and request spacing) and
   `src/config/environment.spec.ts`.
 - API end-to-end: `test/places.e2e-spec.ts` (auth, validation, curated-first
   ranking, outage fallback, resolve and 404, reverse geocoding, then a fare
-  estimate from searched places).
+  estimate from searched places, and a rider in Noida: no Braj popular list,
+  search biased to the rider, local fare estimate).
 - App: `test/features/places/` (models, recent places, the debounced search
   controller, the booking controller's location flow, and widget tests of the
   search screen).

@@ -12,6 +12,7 @@ const settings: Record<string, unknown> = {
   placesBiasLatitude: 27.5406,
   placesBiasLongitude: 77.6708,
   placesBiasRadiusKm: 50,
+  placesFeaturedRadiusKm: 75,
   placesCountryCodes: ["in"],
   placesCacheTtlSeconds: 600,
   placesCacheMaxEntries: 100,
@@ -24,6 +25,8 @@ const config = {
 } as unknown as ConfigService;
 
 const VRINDAVAN = { latitude: 27.5714, longitude: 77.6716 };
+/** Sector 62, Noida — ~120 km from Braj, where the app is tested from. */
+const NOIDA = { latitude: 28.627, longitude: 77.3727 };
 
 class FakeProvider extends GeocodingProvider {
   readonly name = "fake";
@@ -207,6 +210,30 @@ describe("PlacesService", () => {
     });
   });
 
+  it("ranks local results ahead of curated Braj matches for a rider far from Braj", async () => {
+    provider.results = [
+      {
+        id: "osm:N9",
+        name: "Gokul Dham Society",
+        secondaryText: "Sector 62, Noida",
+        address: "Gokul Dham Society, Sector 62, Noida",
+        latitude: 28.6205,
+        longitude: 77.3701,
+      },
+    ];
+    const far = await service.autocomplete({ query: "gokul", near: NOIDA, limit: 5 });
+    expect(far.suggestions.map((place) => place.name)).toEqual(["Gokul Dham Society", "Gokul"]);
+    expect(provider.searches[0].bias).toEqual(NOIDA);
+
+    const inBraj = await service.autocomplete({ query: "gokul", near: VRINDAVAN, limit: 5 });
+    expect(inBraj.suggestions.map((place) => place.name)).toEqual(["Gokul", "Gokul Dham Society"]);
+  });
+
+  it("offers no popular Braj places to a rider far from Braj", () => {
+    expect(service.popular(NOIDA, 8)).toEqual([]);
+    expect(service.popular(undefined, 3)).toHaveLength(3);
+  });
+
   it("lists popular places nearest first", () => {
     const nearMathura = service.popular({ latitude: 27.4808, longitude: 77.6734 }, 3);
     expect(nearMathura[0].name).toBe("Mathura Junction");
@@ -242,6 +269,10 @@ describe("place text", () => {
     expect(
       secondaryLine("Prem Mandir, Raman Reiti, Vrindavan, Vrindavan, Mathura, Uttar Pradesh, 281121, India", "Prem Mandir"),
     ).toBe("Raman Reiti, Vrindavan, Mathura, Uttar Pradesh");
+    // Non-adjacent repeats, and the name restated mid-address (Photon street fields).
+    expect(
+      secondaryLine("Fortis Hospital, Sector 62, Noida, Fortis Hospital, Sector 62, Noida, Uttar Pradesh", "Fortis Hospital"),
+    ).toBe("Sector 62, Noida, Uttar Pradesh");
   });
 
   it("keeps booking addresses within the ride DTO limit", () => {

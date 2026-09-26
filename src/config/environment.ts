@@ -99,16 +99,19 @@ export interface Environment {
   nominatimBaseUrl: string;
   nominatimContactEmail: string;
   nominatimMinIntervalMs: number;
+  photonBaseUrl: string;
+  photonMinIntervalMs: number;
   placesCountryCodes: string[];
   placesBiasLatitude: number;
   placesBiasLongitude: number;
   placesBiasRadiusKm: number;
+  placesFeaturedRadiusKm: number;
   placesTimeoutMs: number;
   placesCacheTtlSeconds: number;
   placesCacheMaxEntries: number;
 }
 
-export const PLACES_PROVIDERS = ["nominatim", "google", "none"] as const;
+export const PLACES_PROVIDERS = ["osm", "photon", "nominatim", "google", "none"] as const;
 export type PlacesProviderName = (typeof PLACES_PROVIDERS)[number];
 
 type RawEnvironment = Record<string, string | undefined>;
@@ -336,21 +339,29 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
 
   // ── Place search (autocomplete, reverse geocoding) ────────────────────
   // Proxied through the API so map keys never ship inside the app and every
-  // lookup is cached and rate-limited in one place. "google" needs
+  // lookup is cached and rate-limited in one place. "osm" (the free
+  // default) is Photon with Nominatim as fallback; "google" needs
   // GOOGLE_MAPS_API_KEY; "none" leaves only the curated popular places.
   placesProvider: ((env.PLACES_PROVIDER || "").trim().toLowerCase() ||
-    (env.GOOGLE_MAPS_API_KEY ? "google" : "nominatim")) as PlacesProviderName,
+    (env.GOOGLE_MAPS_API_KEY ? "google" : "osm")) as PlacesProviderName,
   googleMapsApiKey: (env.GOOGLE_MAPS_API_KEY || "").trim(),
   nominatimBaseUrl: stripTrailingSlashes(env.NOMINATIM_BASE_URL || "https://nominatim.openstreetmap.org"),
   nominatimContactEmail: (env.NOMINATIM_CONTACT_EMAIL || "").trim(),
   // The public Nominatim allows 1 request/second per application; a
   // self-hosted instance can lower this (0 = no spacing).
   nominatimMinIntervalMs: integer(env.NOMINATIM_MIN_INTERVAL_MS, 1_000),
+  photonBaseUrl: stripTrailingSlashes(env.PHOTON_BASE_URL || "https://photon.komoot.io"),
+  // Fair use of the public Photon; 0 for a self-hosted instance.
+  photonMinIntervalMs: integer(env.PHOTON_MIN_INTERVAL_MS, 200),
   placesCountryCodes: csv(env.PLACES_COUNTRY_CODES, "in").map((code) => code.toLowerCase()),
   // Results near the service area rank first (Vrindavan–Mathura by default).
   placesBiasLatitude: decimal(env.PLACES_BIAS_LATITUDE, 27.5406),
   placesBiasLongitude: decimal(env.PLACES_BIAS_LONGITUDE, 77.6708),
   placesBiasRadiusKm: decimal(env.PLACES_BIAS_RADIUS_KM, 50),
+  // Riders farther than this from every curated Braj landmark (testers in
+  // Noida, pilgrims still at home) get no "Popular in Braj" list, and local
+  // search results rank ahead of curated matches.
+  placesFeaturedRadiusKm: decimal(env.PLACES_FEATURED_RADIUS_KM, 75),
   placesTimeoutMs: integer(env.PLACES_TIMEOUT_MS, 5_000),
   placesCacheTtlSeconds: integer(env.PLACES_CACHE_TTL_SECONDS, 21_600),
   placesCacheMaxEntries: integer(env.PLACES_CACHE_MAX_ENTRIES, 5_000),
@@ -404,6 +415,7 @@ const POSITIVE_DECIMALS = [
   "ROUTE_DISTANCE_FACTOR",
   "MATCHING_RADIUS_KM",
   "PLACES_BIAS_RADIUS_KM",
+  "PLACES_FEATURED_RADIUS_KM",
 ];
 
 const isSet = (value: unknown): boolean => String(value ?? "").trim() !== "";
@@ -535,20 +547,26 @@ export function validateEnvironment(
     (!Number.isInteger(Number(input.NOMINATIM_MIN_INTERVAL_MS)) || Number(input.NOMINATIM_MIN_INTERVAL_MS) < 0)
   )
     throw new Error("NOMINATIM_MIN_INTERVAL_MS must be 0 or a positive integer");
+  if (
+    isSet(input.PHOTON_MIN_INTERVAL_MS) &&
+    (!Number.isInteger(Number(input.PHOTON_MIN_INTERVAL_MS)) || Number(input.PHOTON_MIN_INTERVAL_MS) < 0)
+  )
+    throw new Error("PHOTON_MIN_INTERVAL_MS must be 0 or a positive integer");
   if (isSet(input.PLACES_BIAS_LATITUDE) && Math.abs(Number(input.PLACES_BIAS_LATITUDE)) > 90)
     throw new Error("PLACES_BIAS_LATITUDE must be between -90 and 90");
   if (isSet(input.PLACES_BIAS_LONGITUDE) && Math.abs(Number(input.PLACES_BIAS_LONGITUDE)) > 180)
     throw new Error("PLACES_BIAS_LONGITUDE must be between -180 and 180");
   for (const code of resolved.placesCountryCodes)
     if (!/^[a-z]{2}$/.test(code)) throw new Error("PLACES_COUNTRY_CODES must be two-letter ISO country codes");
-  if (isSet(input.NOMINATIM_BASE_URL)) {
+  for (const name of ["NOMINATIM_BASE_URL", "PHOTON_BASE_URL"] as const) {
+    if (!isSet(input[name])) continue;
     let protocol = "";
     try {
-      protocol = new URL(String(input.NOMINATIM_BASE_URL)).protocol;
+      protocol = new URL(String(input[name])).protocol;
     } catch {
       protocol = "";
     }
-    if (!["http:", "https:"].includes(protocol)) throw new Error("NOMINATIM_BASE_URL must be a valid HTTP(S) URL");
+    if (!["http:", "https:"].includes(protocol)) throw new Error(`${name} must be a valid HTTP(S) URL`);
   }
 
   if (isSet(input.APP_TIME_ZONE)) {

@@ -5,6 +5,7 @@ import { bookingAddress, secondaryLine } from "../place-text";
 import type { PlaceSuggestion, ResolvedPlace } from "../places.types";
 import { GeocodingProvider, GeocodingProviderError } from "./geocoding.provider";
 import type { ProviderSearchRequest } from "./geocoding.provider";
+import { RequestSpacer } from "./request-spacer";
 
 interface NominatimPlace {
   osm_type?: string;
@@ -26,8 +27,9 @@ const KM_PER_DEGREE = 111.32;
  * contact e-mail and at most one request per second for the whole
  * application — this class spaces every call NOMINATIM_MIN_INTERVAL_MS apart
  * and refuses (retryably) rather than queue a rider for seconds. Results are
- * cached upstream by PlacesService. For heavy production traffic point
- * NOMINATIM_BASE_URL at a self-hosted instance or use PLACES_PROVIDER=google.
+ * cached upstream by PlacesService. Nominatim matches whole words only, so
+ * the default PLACES_PROVIDER=osm uses Photon for search-as-you-type and
+ * keeps this class as its fallback and for /lookup of osm: ids.
  */
 @Injectable()
 export class NominatimProvider extends GeocodingProvider {
@@ -36,21 +38,22 @@ export class NominatimProvider extends GeocodingProvider {
   private readonly logger = new Logger(NominatimProvider.name);
   private readonly baseUrl: string;
   private readonly contactEmail: string;
-  private readonly minIntervalMs: number;
   private readonly timeoutMs: number;
-  private readonly maxQueueWaitMs: number;
-  private nextSlotAt = 0;
+  private readonly spacer: RequestSpacer;
 
   constructor(config: ConfigService) {
     super();
     this.baseUrl = config.getOrThrow<string>("nominatimBaseUrl");
     this.contactEmail = config.get<string>("nominatimContactEmail") ?? "";
-    this.minIntervalMs = config.getOrThrow<number>("nominatimMinIntervalMs");
     this.timeoutMs = config.getOrThrow<number>("placesTimeoutMs");
-    this.maxQueueWaitMs = Math.min(this.timeoutMs, 3_000);
+    this.spacer = new RequestSpacer(
+      "Nominatim",
+      config.getOrThrow<number>("nominatimMinIntervalMs"),
+      Math.min(this.timeoutMs, 3_000),
+    );
     if (this.baseUrl.includes("nominatim.openstreetmap.org") && !this.contactEmail)
       this.logger.warn(
-        "NOMINATIM_CONTACT_EMAIL is not set: the public Nominatim may block this server. Set it, self-host, or use PLACES_PROVIDER=google",
+        "NOMINATIM_CONTACT_EMAIL is not set: the public Nominatim may block this server. Set it, self-host, or use PLACES_PROVIDER=osm",
       );
   }
 
@@ -141,7 +144,7 @@ export class NominatimProvider extends GeocodingProvider {
   private async get<T>(path: string, params: URLSearchParams): Promise<T> {
     params.set("accept-language", "en");
     if (this.contactEmail) params.set("email", this.contactEmail);
-    await this.acquireSlot();
+    await this.spacer.acquire();
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}${path}?${params.toString()}`, {
@@ -165,20 +168,5 @@ export class NominatimProvider extends GeocodingProvider {
     } catch {
       throw new GeocodingProviderError("Nominatim returned malformed JSON", true);
     }
-  }
-
-  /**
-   * Spaces calls minIntervalMs apart across the whole process. A caller that
-   * would wait longer than maxQueueWaitMs is refused instead (the service
-   * then falls back to the curated places), so a burst never piles up.
-   */
-  private async acquireSlot(): Promise<void> {
-    if (this.minIntervalMs <= 0) return;
-    const now = Date.now();
-    const slot = Math.max(now, this.nextSlotAt);
-    const wait = slot - now;
-    if (wait > this.maxQueueWaitMs) throw new GeocodingProviderError("Nominatim request budget exhausted", true);
-    this.nextSlotAt = slot + this.minIntervalMs;
-    if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
   }
 }

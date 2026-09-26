@@ -83,7 +83,7 @@ describe("Place search (e2e)", () => {
       JWT_REFRESH_SECRET: randomBytes(48).toString("base64url"),
       MATCHING_SWEEP_INTERVAL_MS: "0",
       PAYMENT_RECONCILE_INTERVAL_MS: "0",
-      PLACES_PROVIDER: "nominatim",
+      PLACES_PROVIDER: "osm",
     });
 
     const { AppModule } = await import("../src/app.module");
@@ -216,6 +216,30 @@ describe("Place search (e2e)", () => {
       .post("/api/v1/rides/estimate/all")
       .set(asCustomer())
       .send({ pickup: pick(here), destination: pick(popular) })
+      .expect(200);
+    expect(estimates.body.data.length).toBeGreaterThan(0);
+  });
+
+  it("serves a rider far from Braj (testing from Noida): no Braj popular list, local fares", async () => {
+    const noida = { latitude: 28.627, longitude: 77.3727 };
+    const popular = await api().get("/api/v1/places/popular").query({ ...noida, limit: 8 }).set(asCustomer()).expect(200);
+    expect(popular.body.data).toEqual([]);
+
+    const search = await api()
+      .get("/api/v1/places/autocomplete")
+      .query({ q: "govind", ...noida })
+      .set(asCustomer())
+      .expect(200);
+    expect(geocoder.searches.at(-1)?.bias).toEqual(noida);
+    expect(search.body.data.degraded).toBe(false);
+
+    const estimates = await api()
+      .post("/api/v1/rides/estimate/all")
+      .set(asCustomer())
+      .send({
+        pickup: { address: "Sector 62, Noida", ...noida },
+        destination: { address: "Botanical Garden, Noida", latitude: 28.5641, longitude: 77.3342 },
+      })
       .expect(200);
     expect(estimates.body.data.length).toBeGreaterThan(0);
   });

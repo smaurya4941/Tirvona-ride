@@ -37,9 +37,15 @@ export function secondaryLine(fullAddress: string, name: string, maxParts = 4): 
     .filter(Boolean)
     .filter((part) => !/^\d{5,6}$/.test(part))
     .filter((part) => !/^(india|bharat)$/i.test(part));
-  if (parts.length && normalizeQuery(parts[0]) === normalizedName) parts.shift();
-  // Consecutive duplicates ("Mathura, Mathura") are common in OSM data.
-  const unique = parts.filter((part, index) => index === 0 || normalizeQuery(part) !== normalizeQuery(parts[index - 1]));
+  // Repeats ("Mathura, Mathura", "Sector 62, Noida, Sector 62") are common
+  // in OSM data, and so is a street field that restates the whole address.
+  const seen = new Set<string>([normalizedName]);
+  const unique = parts.filter((part) => {
+    const key = normalizeQuery(part);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   return clampAddress(unique.slice(0, maxParts).join(", "));
 }
 
