@@ -101,6 +101,14 @@ describe("planPaymentNotifications", () => {
     expect(drafts[0].message).toContain("₹125");
   });
 
+  it("cash: the customer is reminded to hand it over, the driver to collect it", () => {
+    const drafts = planPaymentNotifications(ride(), RidePaymentStatus.SUCCESS, 125, "cash");
+    expect(drafts.map((draft) => `${draft.userId}:${draft.type}`)).toEqual(["c1:PAYMENT_SUCCESS", "du1:PAYMENT_RECEIVED"]);
+    expect(drafts[0].message).toContain("₹125 in cash");
+    expect(drafts[1].title).toBe("Collect cash");
+    expect(drafts[1].message).toContain("Please collect it");
+  });
+
   it("failure: only the customer, with a retry prompt", () => {
     const drafts = planPaymentNotifications(ride(), RidePaymentStatus.FAILED, 125.5);
     expect(drafts).toHaveLength(1);

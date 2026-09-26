@@ -4,6 +4,7 @@ import type {
   CommissionType,
   EarningStatus,
   EarningsPeriod,
+  PaymentMode,
 } from "./earning-status";
 
 // API shapes. Stored amounts are paise; every amount below is rupees.
@@ -39,6 +40,10 @@ export interface EarningView {
   commissionRate: number;
   commissionAmount: number;
   netEarning: number;
+  /** CASH: the driver collected the fare; ONLINE: paid via Razorpay. */
+  paymentMode: PaymentMode;
+  /** "cash", or Razorpay's method (upi, card, netbanking, wallet…). */
+  paymentMethod?: string;
   status: EarningStatus;
   availableAt: Date;
   payoutId?: string;
@@ -60,6 +65,10 @@ export interface EarningsBalances {
   pending: number;
   available: number;
   paid: number;
+  /** Driver's share of cash fares — already in their hand, never paid out. */
+  collected: number;
+  /** Tirvona's commission on cash fares, owed by the driver. */
+  commissionDue: number;
 }
 
 export interface EarningsSummary {

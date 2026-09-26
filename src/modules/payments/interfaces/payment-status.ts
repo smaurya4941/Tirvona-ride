@@ -4,7 +4,8 @@
  *
  * CREATED    — a Razorpay order exists; nothing captured yet.
  * AUTHORIZED — Razorpay holds an authorised payment we have not captured.
- * CAPTURED   — money collected and verified by the backend. Success.
+ * CAPTURED   — money collected and verified by the backend. Success. For a
+ *              CASH payment: the customer chose to pay the driver in cash.
  * FAILED     — the latest attempt failed; the customer may retry.
  * REFUNDED / PARTIALLY_REFUNDED — synced from Razorpay refund webhooks.
  */
@@ -48,4 +49,14 @@ export enum PaymentEventSource {
   SYSTEM = "SYSTEM",
 }
 
-export const PAYMENT_GATEWAY = "RAZORPAY";
+/** How a payment was settled (the record's `gateway`). */
+export enum PaymentGateway {
+  RAZORPAY = "RAZORPAY",
+  /** Handed to the driver; no gateway involved. */
+  CASH = "CASH",
+}
+
+export const PAYMENT_GATEWAY = PaymentGateway.RAZORPAY;
+
+/** `method` of a cash payment (Razorpay methods are upi, card, …). */
+export const CASH_METHOD = "cash";

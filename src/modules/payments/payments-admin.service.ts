@@ -13,7 +13,7 @@ import { RidePaymentStateService } from "../rides/ride-payment-state.service";
 import type { RideDocument } from "../rides/schemas/ride.schema";
 import { User } from "../users/schemas/user.schema";
 import type { AdminPaymentsQueryDto } from "./dto/payment.dto";
-import { PaymentStatus } from "./interfaces/payment-status";
+import { PaymentGateway, PaymentStatus } from "./interfaces/payment-status";
 import type {
   AdminPaymentDetail,
   AdminPaymentListItem,
@@ -23,6 +23,13 @@ import type {
 import { PaymentsService } from "./payments.service";
 import { Payment } from "./schemas/payment.schema";
 import type { PaymentDocument } from "./schemas/payment.schema";
+
+/** Settled payments grouped by gateway (paise). */
+interface GatewayTotals {
+  _id: string;
+  amount: number;
+  count: number;
+}
 
 const DAY_MS = 86_400_000;
 const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -142,15 +149,15 @@ export class PaymentsAdminService {
     const captured = { status: { $in: [PaymentStatus.CAPTURED, PaymentStatus.REFUNDED, PaymentStatus.PARTIALLY_REFUNDED] } };
     const [todayRows, allRows, failedToday, outstanding, needsAttention, earnings] = await Promise.all([
       this.paymentModel
-        .aggregate<{ amount: number; count: number }>([
+        .aggregate<GatewayTotals>([
           { $match: { ...captured, paidAt: { $gte: today } } },
-          { $group: { _id: null, amount: { $sum: "$amountPaise" }, count: { $sum: 1 } } },
+          { $group: { _id: "$gateway", amount: { $sum: "$amountPaise" }, count: { $sum: 1 } } },
         ])
         .exec(),
       this.paymentModel
-        .aggregate<{ amount: number; count: number }>([
+        .aggregate<GatewayTotals>([
           { $match: captured },
-          { $group: { _id: null, amount: { $sum: "$amountPaise" }, count: { $sum: 1 } } },
+          { $group: { _id: "$gateway", amount: { $sum: "$amountPaise" }, count: { $sum: 1 } } },
         ])
         .exec(),
       this.paymentModel.countDocuments({ status: PaymentStatus.FAILED, updatedAt: { $gte: today } }).exec(),
@@ -158,12 +165,21 @@ export class PaymentsAdminService {
       this.paymentModel.countDocuments({ "duplicateCaptures.0": { $exists: true } }).exec(),
       this.earningsAdmin.totals(),
     ]);
+    // "Collected" is money Tirvona received online; cash stayed with drivers.
+    const online = (rows: GatewayTotals[]) => rows.filter((row) => row._id !== PaymentGateway.CASH);
+    const cash = (rows: GatewayTotals[]) => rows.find((row) => row._id === PaymentGateway.CASH);
+    const sum = (rows: GatewayTotals[], key: "amount" | "count") => rows.reduce((total, row) => total + row[key], 0);
     return {
       currency: "INR",
-      collectedToday: toRupees(todayRows[0]?.amount ?? 0),
-      capturedToday: todayRows[0]?.count ?? 0,
-      collectedTotal: toRupees(allRows[0]?.amount ?? 0),
-      capturedTotal: allRows[0]?.count ?? 0,
+      collectedToday: toRupees(sum(online(todayRows), "amount")),
+      capturedToday: sum(online(todayRows), "count"),
+      collectedTotal: toRupees(sum(online(allRows), "amount")),
+      capturedTotal: sum(online(allRows), "count"),
+      cashToday: toRupees(cash(todayRows)?.amount ?? 0),
+      cashRidesToday: cash(todayRows)?.count ?? 0,
+      cashTotal: toRupees(cash(allRows)?.amount ?? 0),
+      cashRidesTotal: cash(allRows)?.count ?? 0,
+      commissionDue: earnings.commissionDue,
       commissionTotal: earnings.commission,
       failedToday,
       outstandingRides: outstanding.rides,
@@ -178,6 +194,7 @@ export class PaymentsAdminService {
     const filter: QueryFilter<Payment> = {};
     const and: QueryFilter<Payment>[] = [];
     if (query.status) filter.status = query.status;
+    if (query.gateway) filter.gateway = query.gateway;
 
     const createdAt: Record<string, Date> = {};
     if (query.from) createdAt.$gte = this.boundary(query.from, false);

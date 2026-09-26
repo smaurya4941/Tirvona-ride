@@ -749,7 +749,7 @@ describe("Phase 4 — payments & earnings (e2e)", () => {
       expect(data.summary.today).toMatchObject({ net, rides: 5 });
       expect(data.summary.week.net).toBe(net);
       expect(data.summary.total.net).toBe(net);
-      expect(data.summary.balances).toEqual({ pending: 0, available: net, paid: 0 });
+      expect(data.summary.balances).toEqual({ pending: 0, available: net, paid: 0, collected: 0, commissionDue: 0 });
       expect(data.items).toHaveLength(5);
       expect(data.periodTotals.net).toBe(net);
     });
@@ -878,6 +878,141 @@ describe("Phase 4 — payments & earnings (e2e)", () => {
       expect(driverView.items.every((item: { status: string; payoutReference?: string }) => item.status === "PAID")).toBe(
         true,
       );
+    });
+  });
+
+  // ── Cash ──────────────────────────────────────────────────────────────
+
+  describe("Pay cash", () => {
+    let ride: Awaited<ReturnType<typeof completedRide>>;
+    const payCash = (who: Who, rideId: string) => api().post("/api/v1/payments/cash").set(as(who)).send({ rideId });
+
+    beforeAll(async () => {
+      // Driver A is still online from the earlier rides: send every cash ride to B.
+      await api().patch("/api/v1/drivers/availability").set(as("driverA")).send({ isOnline: false }).expect(200);
+      ride = await completedRide("customerA", "driverB");
+    });
+
+    it("only the ride's customer can pay it in cash", async () => {
+      await payCash("driverB", ride.id).expect(403);
+      await payCash("customerB", ride.id).expect(404);
+    });
+
+    it("marks the ride paid in cash for exactly the final fare, without Razorpay", async () => {
+      const ordersBefore = razorpay.ordersCreated;
+      const payment = (await payCash("customerA", ride.id).expect(200)).body.data;
+      expect(payment).toMatchObject({
+        gateway: "CASH",
+        method: "cash",
+        status: "CAPTURED",
+        ridePaymentStatus: "SUCCESS",
+        amount: ride.fare.finalFare,
+      });
+      expect(payment.razorpayPaymentId).toBeUndefined();
+      expect(razorpay.ordersCreated).toBe(ordersBefore);
+
+      const rideView = (await api().get(`/api/v1/rides/${ride.id}`).set(as("driverB")).expect(200)).body.data;
+      expect(rideView.paymentStatus).toBe("SUCCESS");
+      expect(rideView.payment).toMatchObject({ method: "cash", amount: ride.fare.finalFare });
+    });
+
+    it("cannot be paid again, in cash or online", async () => {
+      expect((await payCash("customerA", ride.id).expect(409)).body.code).toBe("PAYMENT_ALREADY_COMPLETED");
+      const online = await api().post("/api/v1/payments/create").set(as("customerA")).send({ rideId: ride.id }).expect(409);
+      expect(online.body.code).toBe("PAYMENT_ALREADY_COMPLETED");
+    });
+
+    it("the driver's earning is COLLECTED (never paid out) and the commission is due", async () => {
+      const earnings = (await api().get("/api/v1/earnings").set(as("driverB")).expect(200)).body.data;
+      const line = earnings.items.find((item: { rideId: string }) => item.rideId === ride.id);
+      // The rate is whatever applied at the time (the Commission tests changed it).
+      expect(line).toMatchObject({ paymentMode: "CASH", paymentMethod: "cash", status: "COLLECTED" });
+      expect(line.grossFare).toBeCloseTo(line.netEarning + line.commissionAmount, 2);
+      expect(earnings.summary.balances).toMatchObject({
+        available: 0,
+        pending: 0,
+        collected: line.netEarning,
+        commissionDue: line.commissionAmount,
+      });
+
+      // A cash line can never be included in a payout.
+      const payout = await api()
+        .post("/api/v1/admin/earnings/payouts")
+        .set(as("admin"))
+        .send({ driverId: driverProfileIds.driverB, earningIds: [line.id], payoutReference: "BANK-CASH-1" });
+      expect(payout.status).toBeGreaterThanOrEqual(400);
+    });
+
+    it("tells the driver to collect the cash", async () => {
+      let titles: string[] = [];
+      for (let attempt = 0; attempt < 20 && !titles.includes("Collect cash"); attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        const page = (await api().get("/api/v1/notifications").set(as("driverB")).expect(200)).body.data;
+        titles = page.items.map((item: { title: string }) => item.title);
+      }
+      expect(titles).toContain("Collect cash");
+    });
+
+    it("cash supersedes an abandoned online order; completing that order later is flagged, not counted", async () => {
+      const second = await completedRide("customerB", "driverB");
+      const checkout = await createPayment("customerB", second.id);
+      await payCash("customerB", second.id).expect(200);
+
+      // The customer finishes the old UPI checkout anyway.
+      const late = razorpay.pay(checkout.checkout.orderId);
+      await webhook(paymentEvent("payment.captured", late)).expect(200);
+
+      const stored = await paymentModel.findById(checkout.payment.id).lean().exec();
+      expect(stored).toMatchObject({ gateway: "CASH", status: "CAPTURED" });
+      expect((stored as unknown as { duplicateCaptures: unknown[] }).duplicateCaptures).toHaveLength(1);
+      expect(await earningModel.countDocuments({ rideId: second.id })).toBe(1);
+    });
+
+    it("is refused while an online payment is still being confirmed", async () => {
+      const third = await completedRide("customerB", "driverB");
+      const checkout = await createPayment("customerB", third.id);
+      const paid = razorpay.pay(checkout.checkout.orderId);
+      razorpay.unreachable = true;
+      try {
+        await api()
+          .post("/api/v1/payments/verify")
+          .set(as("customerB"))
+          .send({
+            paymentId: checkout.payment.id,
+            razorpayOrderId: checkout.checkout.orderId,
+            razorpayPaymentId: paid.id,
+            razorpaySignature: sign(checkout.checkout.orderId, paid.id),
+          })
+          .expect(200);
+        const blocked = await payCash("customerB", third.id).expect(409);
+        expect(blocked.body.code).toBe("PAYMENT_IN_PROGRESS");
+      } finally {
+        razorpay.unreachable = false;
+      }
+      // Once Razorpay answers, the online payment wins and cash stays refused.
+      const receipt = (await api().get(`/api/v1/payments/${checkout.payment.id}`).set(as("customerB")).expect(200)).body.data;
+      expect(receipt).toMatchObject({ gateway: "RAZORPAY", status: "CAPTURED" });
+      expect((await payCash("customerB", third.id).expect(409)).body.code).toBe("PAYMENT_ALREADY_COMPLETED");
+    });
+
+    it("admin: summary separates cash from online collections; the list filters by gateway", async () => {
+      const summary = (await api().get("/api/v1/admin/payments/summary").set(as("admin")).expect(200)).body.data;
+      expect(summary.cashRidesTotal).toBe(2);
+      expect(summary.cashTotal).toBeGreaterThan(0);
+      expect(summary.capturedTotal).toBe(6); // 5 earlier online rides + the one just confirmed
+      expect(summary.commissionDue).toBeGreaterThan(0);
+
+      const cashOnly = (await api().get("/api/v1/admin/payments?gateway=CASH").set(as("admin")).expect(200)).body.data;
+      expect(cashOnly.total).toBe(2);
+      expect(cashOnly.items.every((item: { gateway: string; method: string }) => item.gateway === "CASH" && item.method === "cash")).toBe(true);
+      await api().get("/api/v1/admin/payments?gateway=PAYTM").set(as("admin")).expect(400);
+
+      const row = (await api().get("/api/v1/admin/earnings").set(as("admin")).expect(200)).body.data.items.find(
+        (item: { driver: { driverId: string } }) => item.driver.driverId === driverProfileIds.driverB,
+      );
+      expect(row.paid).toBe(0);
+      expect(row.available).toBeCloseTo(row.net - row.collected, 2);
+      expect(row.commissionDue).toBeGreaterThan(0);
     });
   });
 });

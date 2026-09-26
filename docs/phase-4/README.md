@@ -163,11 +163,60 @@ and stamps each earning with `status PAID`, `paidAt`, `paidBy`,
 `payoutReference`, `payoutNote`. Only AVAILABLE lines of that driver are
 accepted, and the flip is conditional, so two admins cannot pay a line twice.
 
+## Cash payments
+
+A customer can pay the driver in cash instead of online. The app shows
+**Pay ₹X in cash** under the online Pay button and asks for confirmation,
+because the choice cannot be undone.
+
+`POST /payments/cash {rideId}` makes the same checks as `/payments/create`
+(the ride is the caller's, completed and unpaid; the amount is the server's
+final fare). It then settles the ride's one `payments` record directly:
+`status CAPTURED`, `gateway CASH`, `method cash`, with a `CASH_SELECTED`
+audit event. The ride becomes `paymentStatus SUCCESS` with `payment.method
+"cash"`, and `ride.payment_updated` is pushed as for any payment.
+
+Safety rules:
+
+- **Never twice.** The settle is a compare-and-set on an open payment with no
+  Razorpay payment in flight and no order being raised. While an online
+  payment is still being confirmed, cash is refused with 409
+  `PAYMENT_IN_PROGRESS`. On a paid ride it returns 409
+  `PAYMENT_ALREADY_COMPLETED`, and `/payments/create` refuses a cash-paid ride.
+  Order creation now only writes to a payment that is still open.
+- **An abandoned online order is superseded.** If the customer completes that
+  old checkout after choosing cash, the capture is recorded under
+  `duplicateCaptures` (flagged for a manual refund), exactly like a second
+  online capture. It is never counted as revenue.
+
+### Earnings for a cash ride
+
+The driver already holds the whole fare, so the ledger line is written with
+`paymentMode CASH` and `status COLLECTED`: it is never held, never
+AVAILABLE and can never be in a payout. Tirvona's commission on it is owed
+by the driver. Balances therefore report two more figures, for drivers and
+admins alike:
+
+- `collected`: the driver's share of cash fares, already in hand.
+- `commissionDue`: Tirvona's commission on cash fares, owed by drivers.
+
+V1 does not net `commissionDue` against payouts; ops settles it manually.
+Lines written before cash existed read as `paymentMode ONLINE`.
+
+Admin: `/admin/payments/summary` `collected*` / `captured*` now count
+online money only. `cashToday`, `cashRidesToday`, `cashTotal`,
+`cashRidesTotal` and `commissionDue` cover cash, and the payments list
+takes `?gateway=RAZORPAY|CASH`.
+
+Notifications: for cash, the customer is reminded to hand over ₹X, and the
+driver gets **Collect cash**.
+
 ## API
 
 | Method | Path | Who |
 | ------ | ---- | --- |
 | POST | `/api/v1/payments/create` `{rideId}` | customer |
+| POST | `/api/v1/payments/cash` `{rideId}` (pay the driver in cash) | customer |
 | POST | `/api/v1/payments/verify` `{paymentId, razorpayOrderId, razorpayPaymentId, razorpaySignature}` | customer |
 | POST | `/api/v1/payments/:id/failure` (advisory: checkout failed/closed) | customer |
 | GET | `/api/v1/payments/history` | customer |
@@ -175,7 +224,7 @@ accepted, and the flip is conditional, so two admins cannot pay a line twice.
 | POST | `/api/v1/payments/webhook` | Razorpay (HMAC) |
 | GET | `/api/v1/earnings?period=today\|week\|month\|all&status=` | driver |
 | GET | `/api/v1/earnings/:id` | driver |
-| GET | `/api/v1/admin/payments` `?status&from&to&ride&customer&driver&payment` | admin |
+| GET | `/api/v1/admin/payments` `?status&gateway&from&to&ride&customer&driver&payment` | admin |
 | GET | `/api/v1/admin/payments/summary` | admin |
 | GET | `/api/v1/admin/payments/:id` | admin |
 | POST | `/api/v1/admin/payments/:id/reconcile` | admin |

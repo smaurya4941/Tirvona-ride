@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { SchemaTypes, Types } from "mongoose";
 import type { HydratedDocument } from "mongoose";
-import { CommissionType, EarningStatus } from "../interfaces/earning-status";
+import { CommissionType, EarningStatus, PaymentMode } from "../interfaces/earning-status";
 
 /**
  * One immutable ledger line per paid ride: what the customer paid, what
@@ -73,6 +73,15 @@ export class DriverEarning {
 
   @Prop({ required: true, immutable: true })
   commissionVersion!: number;
+
+  // ── How the customer paid ─────────────────────────────────────────────
+  /** Absent on lines written before cash existed: those are ONLINE. */
+  @Prop({ enum: PaymentMode, default: PaymentMode.ONLINE, immutable: true })
+  paymentMode!: PaymentMode;
+
+  /** "cash", or Razorpay's method: upi | card | netbanking | wallet … */
+  @Prop({ immutable: true })
+  paymentMethod?: string;
 
   // ── Payout lifecycle ──────────────────────────────────────────────────
   @Prop({ required: true, enum: EarningStatus })

@@ -7,6 +7,7 @@ import { ApiException, apiBadRequest, apiNotFound } from "../../common/exception
 import { toPaise, toRupees } from "../../common/utils/money";
 import { DriverProfile } from "../drivers/schemas/driver-profile.schema";
 import { EarningsService } from "../earnings/earnings.service";
+import { PaymentMode } from "../earnings/interfaces/earning-status";
 import { RidePaymentStateService } from "../rides/ride-payment-state.service";
 import {
   PAID_RIDE_PAYMENT_STATUSES,
@@ -19,8 +20,10 @@ import type { RideDocument } from "../rides/schemas/ride.schema";
 import { User } from "../users/schemas/user.schema";
 import type { PaymentFailureDto, PaymentHistoryQueryDto, VerifyPaymentDto } from "./dto/payment.dto";
 import {
+  CASH_METHOD,
   OPEN_PAYMENT_STATUSES,
   PAYMENT_GATEWAY,
+  PaymentGateway,
   PaymentAttemptStatus,
   PaymentEventSource,
   PaymentStatus,
@@ -132,6 +135,86 @@ export class PaymentsService {
       clear: ["failureReason"],
     });
     return this.toCheckout(payment, opened.attempt, customerUserId);
+  }
+
+  // ── Customer: pay the driver in cash ──────────────────────────────────
+
+  /**
+   * "I'll pay the driver in cash." Settles the ride's payment as CASH for
+   * the server-calculated final fare, with the same ownership, completion
+   * and unpaid checks as an online payment, then records the driver's
+   * earning as already collected.
+   *
+   * Refused while Razorpay may hold money for this ride or an order is being
+   * raised (never charge twice). An unpaid Razorpay order is simply
+   * superseded: if the customer completes it later anyway, that capture is
+   * flagged as a duplicate for refund, like any second capture.
+   */
+  async payCash(customerUserId: string, rideId: string): Promise<PaymentView> {
+    const ride = await this.rides.findForCustomer(customerUserId, rideId);
+    const amountPaise = this.payableAmount(ride);
+    let payment = await this.findOrCreateForRide(ride, amountPaise);
+
+    if (SETTLED_PAYMENT_STATUSES.includes(payment.status)) {
+      await this.afterCapture(payment);
+      throw this.alreadyPaid(payment);
+    }
+    if (payment.processingPaymentId || effectivePaymentStatus(ride) === RidePaymentStatus.PROCESSING) {
+      payment = await this.reconcile(payment, PaymentEventSource.SYSTEM);
+      if (SETTLED_PAYMENT_STATUSES.includes(payment.status)) throw this.alreadyPaid(payment);
+      if (payment.processingPaymentId) throw this.onlinePaymentPending(payment);
+    }
+
+    const now = new Date();
+    const settled = await this.paymentModel
+      .findOneAndUpdate(
+        {
+          _id: payment._id,
+          status: { $in: OPEN_PAYMENT_STATUSES },
+          processingPaymentId: { $exists: false },
+          $or: [{ orderLockUntil: { $exists: false } }, { orderLockUntil: { $lte: now } }],
+        },
+        {
+          $set: {
+            status: PaymentStatus.CAPTURED,
+            gateway: PaymentGateway.CASH,
+            method: CASH_METHOD,
+            amountPaise,
+            paidAt: now,
+          },
+          $unset: { methodDetails: 1, failureCode: 1, failureReason: 1, processingSince: 1, orderLockUntil: 1 },
+          $push: {
+            events: {
+              $each: [
+                {
+                  type: "CASH_SELECTED",
+                  source: PaymentEventSource.CUSTOMER,
+                  at: now,
+                  detail: `${amountPaise} paise to the driver`,
+                },
+              ],
+              $slice: -MAX_EVENTS,
+            },
+          },
+        },
+        { returnDocument: "after" },
+      )
+      .exec();
+
+    if (!settled) {
+      // Lost a race: an online payment settled, started or is being raised.
+      const current = await this.paymentModel.findById(payment._id).exec();
+      if (current && SETTLED_PAYMENT_STATUSES.includes(current.status)) {
+        await this.afterCapture(current);
+        throw this.alreadyPaid(current);
+      }
+      throw this.onlinePaymentPending(current ?? payment);
+    }
+
+    this.logger.log(`Payment ${settled._id.toString()} settled in CASH for ride ${settled.rideCode} (${amountPaise}p)`);
+    await this.afterCapture(settled);
+    // The ride's payment status moved to SUCCESS just now: show that one.
+    return this.view(settled, (await this.rides.findById(settled.rideId)) ?? ride);
   }
 
   // ── Customer: verify the checkout result ──────────────────────────────
@@ -561,6 +644,8 @@ export class PaymentsService {
         // The captured amount *is* the final fare (checked against it above).
         grossFarePaise: payment.amountPaise,
         currency: payment.currency,
+        paymentMode: payment.gateway === PaymentGateway.CASH ? PaymentMode.CASH : PaymentMode.ONLINE,
+        paymentMethod: payment.method,
       });
       await this.paymentModel
         .updateOne({ _id: payment._id, earningId: { $exists: false } }, { $set: { earningId: earning._id } })
@@ -812,9 +897,10 @@ export class PaymentsService {
         );
 
       const attempt: PaymentAttempt = { orderId: order.id, amountPaise, status: PaymentAttemptStatus.CREATED };
+      // Only while still open: a cash settlement may have won meanwhile.
       const updated = await this.paymentModel
         .findOneAndUpdate(
-          { _id: payment._id },
+          { _id: payment._id, status: { $in: OPEN_PAYMENT_STATUSES } },
           {
             $push: {
               attempts: attempt,
@@ -836,7 +922,11 @@ export class PaymentsService {
           { returnDocument: "after" },
         )
         .exec();
-      if (!updated) throw apiNotFound("Payment not found", "PAYMENT_NOT_FOUND");
+      if (!updated) {
+        const current = await this.paymentModel.findById(payment._id).exec();
+        if (current && SETTLED_PAYMENT_STATUSES.includes(current.status)) throw this.alreadyPaid(current);
+        throw apiNotFound("Payment not found", "PAYMENT_NOT_FOUND");
+      }
       this.logger.log(`Razorpay order ${order.id} for ride ${payment.rideCode} (${amountPaise}p)`);
       return { payment: updated, attempt: updated.attempts[updated.attempts.length - 1] };
     } finally {
@@ -1183,6 +1273,15 @@ export class PaymentsService {
         "Online payments are not available right now",
         "PAYMENT_GATEWAY_NOT_CONFIGURED",
       );
+  }
+
+  private onlinePaymentPending(payment: PaymentDocument): ApiException {
+    return new ApiException(
+      HttpStatus.CONFLICT,
+      "An online payment for this ride is still being confirmed. Please wait a minute before paying in cash.",
+      "PAYMENT_IN_PROGRESS",
+      { paymentId: payment._id.toString() },
+    );
   }
 
   private alreadyPaid(payment: PaymentDocument): ApiException {

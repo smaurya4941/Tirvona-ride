@@ -42,6 +42,8 @@ export interface RidePaymentUpdatedEvent {
   ride: RideSnapshot;
   paymentStatus: RidePaymentStatus;
   amount?: number;
+  /** "cash", or Razorpay's method (upi, card, …) once paid. */
+  method?: string;
 }
 
 export interface DriverReviewedEvent {

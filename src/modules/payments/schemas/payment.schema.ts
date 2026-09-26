@@ -3,6 +3,7 @@ import { SchemaTypes, Types } from "mongoose";
 import type { HydratedDocument } from "mongoose";
 import {
   PAYMENT_GATEWAY,
+  PaymentGateway,
   PaymentAttemptStatus,
   PaymentEventSource,
   PaymentStatus,
@@ -125,8 +126,9 @@ export class Payment {
   @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "User" })
   driverUserId!: Types.ObjectId;
 
-  @Prop({ required: true, default: PAYMENT_GATEWAY })
-  gateway!: string;
+  /** RAZORPAY, or CASH when the customer paid the driver directly. */
+  @Prop({ required: true, enum: PaymentGateway, default: PAYMENT_GATEWAY })
+  gateway!: PaymentGateway;
 
   // ── Money ─────────────────────────────────────────────────────────────
   @Prop({ required: true, min: 1 })

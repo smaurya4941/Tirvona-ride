@@ -168,15 +168,31 @@ export function planArrivingNotification(
   );
 }
 
-/** Payment outcomes: the customer is told success/failure, the driver that they were paid. */
+/**
+ * Payment outcomes: the customer is told success/failure, the driver that
+ * they were paid — or, for cash, to collect the fare from the customer.
+ */
 export function planPaymentNotifications(
   ride: RideSnapshot,
   status: RidePaymentStatus,
   amount?: number,
+  method?: string,
 ): NotificationDraft[] {
   const customer = { userId: ride.customerId, role: UserRole.CUSTOMER };
   const money = formatRupees(amount ?? ride.finalFare);
   const key = `PAYMENT_${status}:v${ride.stateVersion}`;
+  if (status === RidePaymentStatus.SUCCESS && method === "cash") {
+    const drafts = [
+      draft(ride, customer, NotificationType.PAYMENT_SUCCESS, "Paying in cash",
+        `Please hand ${money} in cash to your driver for ride ${ride.rideCode}. Tap to rate your driver.`, key),
+    ];
+    if (ride.driverUserId)
+      drafts.push(
+        draft(ride, { userId: ride.driverUserId, role: UserRole.DRIVER }, NotificationType.PAYMENT_RECEIVED,
+          "Collect cash", `The customer is paying ${money} in cash for ride ${ride.rideCode}. Please collect it.`, key),
+      );
+    return drafts;
+  }
   if (status === RidePaymentStatus.SUCCESS) {
     const drafts = [
       draft(ride, customer, NotificationType.PAYMENT_SUCCESS, "Payment successful",

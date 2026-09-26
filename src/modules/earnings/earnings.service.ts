@@ -14,7 +14,7 @@ import { DriversService } from "../drivers/drivers.service";
 import { splitFare } from "./commission";
 import { CommissionService } from "./commission.service";
 import type { DriverEarningsQueryDto } from "./dto/earnings-query.dto";
-import { CommissionType, EarningStatus, EarningsPeriod } from "./interfaces/earning-status";
+import { CommissionType, EarningStatus, EarningsPeriod, PaymentMode } from "./interfaces/earning-status";
 import type {
   DriverEarningsResponse,
   EarningView,
@@ -37,7 +37,23 @@ export interface RecordEarningInput {
   rideCompletedAt: Date;
   grossFarePaise: number;
   currency: string;
+  paymentMode: PaymentMode;
+  paymentMethod?: string;
 }
+
+/** Ledger lines grouped by status: the driver's share and Tirvona's commission (paise). */
+export interface StatusTotalsRow {
+  _id: EarningStatus;
+  amount: number;
+  commission: number;
+}
+
+/** `$group` stage producing StatusTotalsRow. */
+export const STATUS_TOTALS = {
+  _id: "$status",
+  amount: { $sum: "$netEarningPaise" },
+  commission: { $sum: "$commissionPaise" },
+} as const;
 
 interface WindowTotals {
   net: number;
@@ -99,7 +115,9 @@ export class EarningsService {
     const commission = await this.commission.effectiveAt(new Date());
     const split = splitFare(input.grossFarePaise, commission.value);
     const now = new Date();
-    const held = this.holdMs > 0;
+    const cash = input.paymentMode === PaymentMode.CASH;
+    // Cash is already in the driver's hand: nothing to hold or pay out.
+    const status = cash ? EarningStatus.COLLECTED : this.holdMs > 0 ? EarningStatus.PENDING : EarningStatus.AVAILABLE;
 
     try {
       const earning = await this.earningModel.create({
@@ -120,11 +138,13 @@ export class EarningsService {
         netEarningPaise: split.netEarningPaise,
         commissionConfigId: commission._id,
         commissionVersion: commission.version,
-        status: held ? EarningStatus.PENDING : EarningStatus.AVAILABLE,
-        availableAt: new Date(now.getTime() + this.holdMs),
+        paymentMode: input.paymentMode,
+        paymentMethod: input.paymentMethod,
+        status,
+        availableAt: cash ? now : new Date(now.getTime() + this.holdMs),
       });
       this.logger.log(
-        `Earning for ride ${input.rideCode}: gross ${split.grossFarePaise}p, ` +
+        `Earning for ride ${input.rideCode} (${input.paymentMode}): gross ${split.grossFarePaise}p, ` +
           `commission ${split.commissionRate}% = ${split.commissionPaise}p, driver ${split.netEarningPaise}p`,
       );
       return { earning, created: true };
@@ -201,7 +221,7 @@ export class EarningsService {
     const now = new Date();
     const [result] = await this.earningModel
       .aggregate<{
-        balances: Array<{ _id: EarningStatus; amount: number }>;
+        balances: StatusTotalsRow[];
         today: WindowTotals[];
         week: WindowTotals[];
         month: WindowTotals[];
@@ -210,7 +230,7 @@ export class EarningsService {
         { $match: { driverId } },
         {
           $facet: {
-            balances: [{ $group: { _id: "$status", amount: { $sum: "$netEarningPaise" } } }],
+            balances: [{ $group: STATUS_TOTALS }],
             today: this.windowStages(startOfDayInTimeZone(now, this.timeZone)),
             week: this.windowStages(startOfWeekInTimeZone(now, this.timeZone)),
             month: this.windowStages(startOfMonthInTimeZone(now, this.timeZone)),
@@ -258,6 +278,8 @@ export class EarningsService {
       commissionRate: earning.commissionRate,
       commissionAmount: toRupees(earning.commissionPaise),
       netEarning: toRupees(earning.netEarningPaise),
+      paymentMode: earning.paymentMode ?? PaymentMode.ONLINE,
+      paymentMethod: earning.paymentMethod,
       status: earning.status,
       availableAt: earning.availableAt,
       payoutId: earning.payoutId?.toString(),
@@ -268,12 +290,15 @@ export class EarningsService {
     };
   }
 
-  balancesFrom(rows: Array<{ _id: EarningStatus; amount: number }>): EarningsBalances {
-    const of = (status: EarningStatus): number => toRupees(rows.find((row) => row._id === status)?.amount ?? 0);
+  balancesFrom(rows: StatusTotalsRow[]): EarningsBalances {
+    const row = (status: EarningStatus) => rows.find((candidate) => candidate._id === status);
+    const of = (status: EarningStatus): number => toRupees(row(status)?.amount ?? 0);
     return {
       pending: of(EarningStatus.PENDING),
       available: of(EarningStatus.AVAILABLE),
       paid: of(EarningStatus.PAID),
+      collected: of(EarningStatus.COLLECTED),
+      commissionDue: toRupees(row(EarningStatus.COLLECTED)?.commission ?? 0),
     };
   }
 

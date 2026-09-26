@@ -12,7 +12,8 @@ import type {
   CreatePayoutDto,
   MarkEarningPaidDto,
 } from "./dto/earnings-query.dto";
-import { EarningsService, LEDGER_TOTALS } from "./earnings.service";
+import { EarningsService, LEDGER_TOTALS, STATUS_TOTALS } from "./earnings.service";
+import type { StatusTotalsRow } from "./earnings.service";
 import { EarningStatus } from "./interfaces/earning-status";
 import type {
   AdminDriverEarningsDetail,
@@ -35,6 +36,8 @@ interface DriverTotals {
   pending: number;
   available: number;
   paid: number;
+  collected: number;
+  commissionDue: number;
   lastEarningAt?: Date;
 }
 
@@ -55,6 +58,8 @@ const DRIVER_TOTALS = {
   pending: netWhen(EarningStatus.PENDING),
   available: netWhen(EarningStatus.AVAILABLE),
   paid: netWhen(EarningStatus.PAID),
+  collected: netWhen(EarningStatus.COLLECTED),
+  commissionDue: { $sum: { $cond: [{ $eq: ["$status", EarningStatus.COLLECTED] }, "$commissionPaise", 0] } },
   lastEarningAt: { $max: "$rideCompletedAt" },
 } as const;
 
@@ -77,9 +82,7 @@ export class EarningsAdminService {
       this.earningModel.aggregate<{ net: number; gross: number; commission: number; rides: number }>([
         { $group: LEDGER_TOTALS },
       ]),
-      this.earningModel.aggregate<{ _id: EarningStatus; amount: number }>([
-        { $group: { _id: "$status", amount: { $sum: "$netEarningPaise" } } },
-      ]),
+      this.earningModel.aggregate<StatusTotalsRow>([{ $group: STATUS_TOTALS }]),
       this.earningModel.distinct("driverId"),
     ]);
     return {
@@ -147,7 +150,18 @@ export class EarningsAdminService {
     return {
       driver,
       summary: this.toRow(
-        totals ?? { _id: id, rides: 0, gross: 0, commission: 0, net: 0, pending: 0, available: 0, paid: 0 },
+        totals ?? {
+          _id: id,
+          rides: 0,
+          gross: 0,
+          commission: 0,
+          net: 0,
+          pending: 0,
+          available: 0,
+          paid: 0,
+          collected: 0,
+          commissionDue: 0,
+        },
         driver,
       ),
       ledger: {
@@ -335,6 +349,8 @@ export class EarningsAdminService {
       pending: toRupees(totals.pending),
       available: toRupees(totals.available),
       paid: toRupees(totals.paid),
+      collected: toRupees(totals.collected),
+      commissionDue: toRupees(totals.commissionDue),
       lastEarningAt: totals.lastEarningAt,
     };
   }

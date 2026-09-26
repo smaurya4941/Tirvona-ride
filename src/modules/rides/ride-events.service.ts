@@ -88,6 +88,7 @@ export class RideEventsService {
         ride: rideSnapshot(committed),
         paymentStatus: committed.paymentStatus,
         amount: committed.payment?.amount,
+        method: committed.payment?.method,
       });
     this.enqueue(rideId, async () => {
       const ride = await this.rideModel.findById(rideId).exec();

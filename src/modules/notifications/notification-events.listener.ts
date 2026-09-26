@@ -49,7 +49,7 @@ export class NotificationEventsListener implements OnModuleInit {
     });
 
     this.events.on("ride.payment_updated", async (event) => {
-      const drafts = planPaymentNotifications(event.ride, event.paymentStatus, event.amount);
+      const drafts = planPaymentNotifications(event.ride, event.paymentStatus, event.amount, event.method);
       if (drafts.length) await this.notifications.notify(drafts);
     });
 

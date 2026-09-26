@@ -13,7 +13,7 @@ import {
   Max,
   Min,
 } from "class-validator";
-import { PaymentStatus } from "../interfaces/payment-status";
+import { PaymentGateway, PaymentStatus } from "../interfaces/payment-status";
 
 /**
  * "Create payment for this ride." Deliberately no amount, currency or
@@ -111,6 +111,11 @@ export class AdminPaymentsQueryDto extends PageQueryDto {
   @IsOptional()
   @IsEnum(PaymentStatus)
   status?: PaymentStatus;
+
+  @ApiPropertyOptional({ enum: PaymentGateway, description: "RAZORPAY (online) or CASH" })
+  @IsOptional()
+  @IsEnum(PaymentGateway)
+  gateway?: PaymentGateway;
 
   @ApiPropertyOptional({ description: "Created on/after (ISO date or date-time)" })
   @IsOptional()

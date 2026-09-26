@@ -17,7 +17,7 @@ import { PaymentWebhookService } from "./payment-webhook.service";
 import type { WebhookResult } from "./payment-webhook.service";
 import { PaymentsService } from "./payments.service";
 
-// Static segments (create, verify, webhook, history) are declared before
+// Static segments (create, cash, verify, webhook, history) are declared before
 // `:id` so Express never treats them as payment ids.
 @ApiTags("Payments")
 @Controller({ path: "payments", version: "1" })
@@ -37,6 +37,23 @@ export class PaymentsController {
     @Body() dto: CreatePaymentDto,
   ): Promise<ApiSuccessBody<CheckoutView>> {
     return ok(await this.payments.create(user.userId, dto.rideId));
+  }
+
+  @Post("cash")
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @Roles(UserRole.CUSTOMER)
+  @ApiOperation({
+    summary: "Pay the driver in cash: marks the completed ride paid (method CASH) for its final fare",
+    description:
+      "Same checks as /payments/create. 409 PAYMENT_ALREADY_COMPLETED when paid, " +
+      "409 PAYMENT_IN_PROGRESS while an online payment is still being confirmed.",
+  })
+  async payCash(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreatePaymentDto,
+  ): Promise<ApiSuccessBody<PaymentView>> {
+    return ok(await this.payments.payCash(user.userId, dto.rideId));
   }
 
   @Post("verify")

@@ -154,6 +154,13 @@ export interface AdminPaymentsSummary {
   capturedToday: number;
   collectedTotal: number;
   capturedTotal: number;
+  /** Paid to drivers in cash (not collected by Tirvona). */
+  cashToday: number;
+  cashRidesToday: number;
+  cashTotal: number;
+  cashRidesTotal: number;
+  /** Commission on cash rides that drivers owe Tirvona. */
+  commissionDue: number;
   commissionTotal: number;
   failedToday: number;
   /** Completed rides still waiting for the customer to pay. */
