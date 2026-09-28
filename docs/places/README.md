@@ -64,13 +64,37 @@ Failed provider calls are never cached.
 
 | `PLACES_PROVIDER` | Notes |
 |---|---|
-| `google` | Places API (New) for autocomplete and details, Geocoding API for reverse. Best autocomplete. Needs `GOOGLE_MAPS_API_KEY` with both APIs enabled; restrict the key to the server's IP. The app's session token makes keystrokes plus the final tap one billed session. |
+| `google` | **Recommended for production.** Places API (New) for autocomplete and details, Geocoding API for reverse. Best autocomplete. Needs `GOOGLE_MAPS_API_KEY`, a server key restricted to *Places API (New)* and *Geocoding API* (plus the server's IP if it has a fixed one; Render's default plans do not). The app's session token makes keystrokes plus the final tap one billed session. With `PLACES_FALLBACK=osm` (default) the free `osm` pair steps in whenever Google fails; see below. |
 | `osm` | **Default, free, no key.** [Photon](https://github.com/komoot/photon) for autocomplete and reverse geocoding, with Nominatim as the fallback when Photon fails (and for resolving `osm:` ids and naming a spot Photon cannot). Photon matches word prefixes ("noida sec" → Noida Sector 18, 62…) and ranks around the rider (zoom 12 bias, tuned with Noida and Vrindavan queries). Uses the public `photon.komoot.io` (fair use, calls spaced `PHOTON_MIN_INTERVAL_MS` apart) unless `PHOTON_BASE_URL` points elsewhere. |
 | `photon` | Photon alone. |
 | `nominatim` | OpenStreetMap, Nominatim alone. Free. Matches whole words only, so it is a poor fit for a search box. The public server allows about 1 request per second for the whole application. The API spaces calls `NOMINATIM_MIN_INTERVAL_MS` apart and refuses (the search then degrades) instead of queueing riders. Set `NOMINATIM_CONTACT_EMAIL`. For real traffic, self-host and point `NOMINATIM_BASE_URL` at it with `NOMINATIM_MIN_INTERVAL_MS=0`. |
 | `none` | Only curated places are searchable. Reverse geocoding returns coordinate labels. |
 
 The default is `google` when `GOOGLE_MAPS_API_KEY` is set, otherwise `osm`.
+The API logs the choice on boot (`Place search: Google Places with
+OpenStreetMap fallback`).
+
+### Google with OSM fallback (`PLACES_PROVIDER=google`)
+
+- **Search / reverse:** Google answers; if it fails (timeout, 429/5xx, quota,
+  key rejected) the same request is answered by Photon → Nominatim instead of
+  dropping to the curated list. An empty Google answer is final (no fallback).
+- **Circuit breaker:** after `PLACES_FAILURE_THRESHOLD` (3) straight failures,
+  or one non-retryable error (403 key not authorised / API disabled), Google is
+  skipped for `PLACES_FAILURE_COOLDOWN_SECONDS` (60 s), logged at ERROR.
+- **Resolve** goes to the provider that issued the id (`google:` → Google,
+  `osm:` → Nominatim), even during a cooldown. A `google:` id while Google is
+  down answers `503 PLACES_UNAVAILABLE`, not 404.
+- `PLACES_FALLBACK=none` keeps rider queries on Google only (search then
+  degrades to the curated list during an outage).
+- Results served by the fallback are cached like any others
+  (`PLACES_CACHE_TTL_SECONDS`).
+
+**Cost (Places API New pricing):** autocomplete requests inside a session
+that ends in a details call are not billed separately; the details call is
+billed per session (the `displayName` field puts it on the Place Details Pro
+SKU). Reverse geocoding is one Geocoding request per lookup, cached per ~11 m
+cell. Set a budget alert and per-API daily quotas in Google Cloud.
 
 **Production without Google:** the public Photon and Nominatim servers are
 shared, best-effort services. Before real traffic, self-host Photon on one

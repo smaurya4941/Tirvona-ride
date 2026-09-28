@@ -106,6 +106,9 @@ export interface Environment {
   shareRideMaxHours: number;
   shareRideGraceMinutes: number;
   placesProvider: PlacesProviderName;
+  placesFallback: PlacesFallbackName;
+  placesFailureThreshold: number;
+  placesFailureCooldownSeconds: number;
   googleMapsApiKey: string;
   nominatimBaseUrl: string;
   nominatimContactEmail: string;
@@ -140,6 +143,8 @@ export interface Environment {
 
 export const PLACES_PROVIDERS = ["osm", "photon", "nominatim", "google", "none"] as const;
 export type PlacesProviderName = (typeof PLACES_PROVIDERS)[number];
+export const PLACES_FALLBACKS = ["osm", "none"] as const;
+export type PlacesFallbackName = (typeof PLACES_FALLBACKS)[number];
 
 export const ROUTES_PROVIDERS = ["google", "haversine"] as const;
 export type RoutesProviderName = (typeof ROUTES_PROVIDERS)[number];
@@ -398,6 +403,14 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
   // GOOGLE_MAPS_API_KEY; "none" leaves only the curated popular places.
   placesProvider: ((env.PLACES_PROVIDER || "").trim().toLowerCase() ||
     (env.GOOGLE_MAPS_API_KEY ? "google" : "osm")) as PlacesProviderName,
+  // PLACES_PROVIDER=google only: when Google fails (outage, quota, key
+  // rejected) search and reverse geocoding use the free OSM pair instead of
+  // dropping to the curated list. "none" keeps rider queries on Google only.
+  placesFallback: ((env.PLACES_FALLBACK || "osm").trim().toLowerCase() as PlacesFallbackName),
+  // After this many straight Google failures (or one key/permission error)…
+  placesFailureThreshold: integer(env.PLACES_FAILURE_THRESHOLD, 3),
+  // …Google is skipped for this long, so an outage adds no latency.
+  placesFailureCooldownSeconds: integer(env.PLACES_FAILURE_COOLDOWN_SECONDS, 60),
   googleMapsApiKey: (env.GOOGLE_MAPS_API_KEY || "").trim(),
   nominatimBaseUrl: stripTrailingSlashes(env.NOMINATIM_BASE_URL || "https://nominatim.openstreetmap.org"),
   nominatimContactEmail: (env.NOMINATIM_CONTACT_EMAIL || "").trim(),
@@ -488,6 +501,8 @@ const POSITIVE_INTEGERS = [
   "SHARE_RIDE_MAX_HOURS",
   "SHARE_RIDE_GRACE_MINUTES",
   "PLACES_TIMEOUT_MS",
+  "PLACES_FAILURE_THRESHOLD",
+  "PLACES_FAILURE_COOLDOWN_SECONDS",
   "PLACES_CACHE_TTL_SECONDS",
   "PLACES_CACHE_MAX_ENTRIES",
   "THROTTLE_AUTH_LIMIT",
@@ -638,6 +653,8 @@ export function validateEnvironment(
     throw new Error(`PLACES_PROVIDER must be one of ${PLACES_PROVIDERS.join(", ")}`);
   if (resolved.placesProvider === "google" && !resolved.googleMapsApiKey)
     throw new Error("GOOGLE_MAPS_API_KEY is required when PLACES_PROVIDER=google");
+  if (!(PLACES_FALLBACKS as readonly string[]).includes(resolved.placesFallback))
+    throw new Error(`PLACES_FALLBACK must be one of ${PLACES_FALLBACKS.join(", ")}`);
   // Road routing: a known provider and travel mode, Google only with its key.
   if (!(ROUTES_PROVIDERS as readonly string[]).includes(resolved.routesProvider))
     throw new Error(`ROUTES_PROVIDER must be one of ${ROUTES_PROVIDERS.join(", ")}`);

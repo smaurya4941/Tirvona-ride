@@ -189,6 +189,18 @@ describe("validateEnvironment", () => {
     expect(() => validateEnvironment({ PLACES_FEATURED_RADIUS_KM: "0" })).toThrow("PLACES_FEATURED_RADIUS_KM");
   });
 
+  it("falls back from Google Places to OSM by default, and validates the fallback", () => {
+    expect(environment_({ GOOGLE_MAPS_API_KEY: "key" })).toMatchObject({
+      placesProvider: "google",
+      placesFallback: "osm",
+      placesFailureThreshold: 3,
+      placesFailureCooldownSeconds: 60,
+    });
+    expect(environment_({ PLACES_FALLBACK: "NONE" }).placesFallback).toBe("none");
+    expect(() => validateEnvironment({ PLACES_FALLBACK: "bing" })).toThrow("PLACES_FALLBACK");
+    expect(() => validateEnvironment({ PLACES_FAILURE_THRESHOLD: "0" })).toThrow("PLACES_FAILURE_THRESHOLD");
+  });
+
   it("picks Google Routes only when its key is set, and validates routing options", () => {
     expect(environment_({}).routesProvider).toBe("haversine");
     expect(environment_({ GOOGLE_ROUTES_API_KEY: " key " })).toMatchObject({
