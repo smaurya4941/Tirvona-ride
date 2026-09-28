@@ -18,7 +18,10 @@ import { RideTypesService } from "../ride-types/ride-types.service";
 import type { RideTypeDocument } from "../ride-types/schemas/ride-type.schema";
 import { UserStatus } from "../users/schemas/user.schema";
 import { UsersService } from "../users/users.service";
-import type { RideRequestDto, TripDto } from "./dto/ride-requests.dto";
+import type { CreateRideDto, RideRequestDto, TripDto } from "./dto/ride-requests.dto";
+import { PromotionsService } from "../promotions/promotions.service";
+import type { AppliedPromo } from "../promotions/promotions.service";
+import { ZonesService } from "../zones/zones.service";
 import { generateRideCode } from "./ride-code";
 import { RideDispatchService } from "./ride-dispatch.service";
 import { RideEventsService } from "./ride-events.service";
@@ -39,6 +42,8 @@ export interface FareEstimateView {
   distanceMeters: number;
   durationSeconds: number;
   routeProvider: string;
+  /** Road path (Google encoded polyline); absent for straight-line estimates. */
+  routePolyline?: string;
   fare: {
     currency: string;
     baseFare: number;
@@ -84,6 +89,8 @@ export class RidesService {
     private readonly transitions: RideTransitionService,
     private readonly views: RideViewService,
     private readonly events: RideEventsService,
+    private readonly zones: ZonesService,
+    private readonly promotions: PromotionsService,
     config: ConfigService,
   ) {
     this.searchTimeoutMs = config.getOrThrow<number>("rideSearchTimeoutSeconds") * 1000;
@@ -92,6 +99,7 @@ export class RidesService {
   // ── Estimates ─────────────────────────────────────────────────────────
 
   async estimate(dto: RideRequestDto): Promise<FareEstimateView> {
+    await this.zones.assertServiceable(dto.pickup);
     const rideType = await this.rideTypes.getBookable(dto.rideType);
     const route = await this.locations.estimateTrip(dto.pickup, dto.destination);
     const fare = await this.pricing.priceTrip(rideType.code, route.distanceMeters, route.durationSeconds);
@@ -100,6 +108,7 @@ export class RidesService {
 
   /** One route calculation, priced for every bookable ride type. */
   async estimateAll(dto: TripDto): Promise<FareEstimateView[]> {
+    await this.zones.assertServiceable(dto.pickup);
     const route = await this.locations.estimateTrip(dto.pickup, dto.destination);
     const rideTypes = await this.rideTypes.listActive();
     const estimates = await Promise.all(
@@ -119,7 +128,7 @@ export class RidesService {
 
   // ── Booking ───────────────────────────────────────────────────────────
 
-  async create(customerUserId: string, dto: RideRequestDto): Promise<CustomerRideView> {
+  async create(customerUserId: string, dto: CreateRideDto): Promise<CustomerRideView> {
     const customerId = new Types.ObjectId(customerUserId);
     const customer = await this.users.findById(customerUserId);
     if (customer.status !== UserStatus.ACTIVE)
@@ -131,40 +140,84 @@ export class RidesService {
     const rideType = await this.rideTypes.getBookable(dto.rideType);
     const route = await this.locations.estimateTrip(dto.pickup, dto.destination);
     const fare = await this.pricing.priceTrip(rideType.code, route.distanceMeters, route.durationSeconds);
+    // Service availability: once zones are defined, pickups must lie in one.
+    const zone = await this.zones.assertServiceable(dto.pickup);
 
-    const ride = await this.insertRide({
-      customerId,
-      rideType: rideType.code,
-      vehicleType: rideType.vehicleType,
-      pickup: dto.pickup,
-      destination: dto.destination,
-      distanceMeters: route.distanceMeters,
-      durationSeconds: route.durationSeconds,
-      routeProvider: route.provider,
-      fare: {
-        currency: fare.currency,
-        baseFare: fare.baseFare,
-        perKmRate: fare.perKmRate,
-        perMinuteRate: fare.perMinuteRate,
-        minimumFare: fare.minimumFare,
-        distanceCharge: fare.distanceCharge,
-        timeCharge: fare.timeCharge,
-        subtotal: fare.subtotal,
-        minimumFareApplied: fare.minimumFareApplied,
-        estimatedFare: fare.total,
-        pricingVersion: fare.pricingVersion,
-      },
-      status: RideStatus.SEARCHING,
-      isActive: true,
-      requestedAt: new Date(),
-      searchExpiresAt: new Date(Date.now() + this.searchTimeoutMs),
-    });
+    // The promo is validated against the server price and one use reserved
+    // for this ride id before the ride exists; released again if the insert
+    // fails, and redeemed/released by the ride outcome afterwards.
+    const rideId = new Types.ObjectId();
+    let promo: AppliedPromo | undefined;
+    if (dto.promoCode)
+      promo = await this.promotions.reserve({
+        userId: customerUserId,
+        code: dto.promoCode,
+        rideId,
+        rideType: rideType.code,
+        fare: fare.total,
+      });
+
+    let ride: RideDocument;
+    try {
+      ride = await this.insertRide({
+        _id: rideId,
+        customerId,
+        rideType: rideType.code,
+        vehicleType: rideType.vehicleType,
+        pickup: dto.pickup,
+        destination: dto.destination,
+        distanceMeters: route.distanceMeters,
+        durationSeconds: route.durationSeconds,
+        routeProvider: route.provider,
+        ...(route.polyline ? { routePolyline: route.polyline } : {}),
+        fare: {
+          currency: fare.currency,
+          baseFare: fare.baseFare,
+          perKmRate: fare.perKmRate,
+          perMinuteRate: fare.perMinuteRate,
+          minimumFare: fare.minimumFare,
+          distanceCharge: fare.distanceCharge,
+          timeCharge: fare.timeCharge,
+          subtotal: fare.subtotal,
+          minimumFareApplied: fare.minimumFareApplied,
+          estimatedFare: fare.total,
+          pricingVersion: fare.pricingVersion,
+          ...(promo ? { discount: promo.estimatedDiscount, payableFare: fare.total - promo.estimatedDiscount } : {}),
+        },
+        ...(promo
+          ? {
+              promo: {
+                promoId: promo.promoId,
+                code: promo.code,
+                title: promo.title,
+                discountType: promo.discountType,
+                discountValue: promo.discountValue,
+                maxDiscount: promo.maxDiscount,
+                estimatedDiscount: promo.estimatedDiscount,
+              },
+            }
+          : {}),
+        ...(zone ? { zoneId: zone.zoneId, zoneName: zone.zoneName } : {}),
+        status: RideStatus.SEARCHING,
+        isActive: true,
+        requestedAt: new Date(),
+        searchExpiresAt: new Date(Date.now() + this.searchTimeoutMs),
+      });
+    } catch (error) {
+      if (promo) await this.promotions.release(rideId);
+      throw error;
+    }
     await this.transitions.record({
       rideId: ride._id,
       toStatus: RideStatus.SEARCHING,
       actor: { type: RideActorType.CUSTOMER, userId: customerId },
       reason: "RIDE_REQUESTED",
-      metadata: { estimatedFare: fare.total, pricingVersion: fare.pricingVersion },
+      metadata: {
+        estimatedFare: fare.total,
+        pricingVersion: fare.pricingVersion,
+        ...(promo ? { promoCode: promo.code, discount: promo.estimatedDiscount } : {}),
+        ...(zone ? { zone: zone.zoneName } : {}),
+      },
     });
     this.events.created(ride);
     this.dispatch.scheduleDeadline(ride._id, "search", ride.searchExpiresAt);
@@ -293,7 +346,7 @@ export class RidesService {
     );
   }
 
-  private async insertRide(fields: Partial<Ride>): Promise<RideDocument> {
+  private async insertRide(fields: Partial<Ride> & { _id?: Types.ObjectId }): Promise<RideDocument> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         return await this.rideModel.create({ ...fields, rideCode: generateRideCode() });
@@ -337,6 +390,7 @@ export class RidesService {
       distanceMeters: route.distanceMeters,
       durationSeconds: route.durationSeconds,
       routeProvider: route.provider,
+      routePolyline: route.polyline,
       fare: {
         currency: fare.currency,
         baseFare: fare.baseFare,

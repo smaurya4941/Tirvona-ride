@@ -50,6 +50,17 @@ export interface Environment {
   appTimeZone: string;
   routeAverageSpeedKmph: number;
   routeDistanceFactor: number;
+  routesProvider: RoutesProviderName;
+  googleRoutesApiKey: string;
+  routesTravelMode: "DRIVE" | "TWO_WHEELER";
+  routesTrafficAware: boolean;
+  routesTimeoutMs: number;
+  routesCacheTtlSeconds: number;
+  routesCacheMaxEntries: number;
+  routesFailureThreshold: number;
+  routesFailureCooldownSeconds: number;
+  routesLiveRefreshSeconds: number;
+  routesLiveRefreshMeters: number;
   rideMinDistanceMeters: number;
   rideMaxDistanceKm: number;
   rideSearchTimeoutSeconds: number;
@@ -109,10 +120,30 @@ export interface Environment {
   placesTimeoutMs: number;
   placesCacheTtlSeconds: number;
   placesCacheMaxEntries: number;
+  // Phase 7
+  throttleAuthLimit: number;
+  throttleAuthTtlMs: number;
+  throttleOtpSendLimit: number;
+  throttleOtpSendTtlMs: number;
+  throttleOtpVerifyLimit: number;
+  throttleOtpVerifyTtlMs: number;
+  throttleRefreshLimit: number;
+  throttleRefreshTtlMs: number;
+  throttleAdminLoginLimit: number;
+  throttleAdminLoginTtlMs: number;
+  throttlePromoLimit: number;
+  throttlePromoTtlMs: number;
+  broadcastWorkerIntervalMs: number;
+  broadcastBatchSize: number;
+  reportMaxRangeDays: number;
 }
 
 export const PLACES_PROVIDERS = ["osm", "photon", "nominatim", "google", "none"] as const;
 export type PlacesProviderName = (typeof PLACES_PROVIDERS)[number];
+
+export const ROUTES_PROVIDERS = ["google", "haversine"] as const;
+export type RoutesProviderName = (typeof ROUTES_PROVIDERS)[number];
+const ROUTES_TRAVEL_MODES = ["DRIVE", "TWO_WHEELER"] as const;
 
 type RawEnvironment = Record<string, string | undefined>;
 
@@ -185,9 +216,32 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
   jwtAudience: env.JWT_AUDIENCE || "tirvona-ride-clients",
   // "Today" on driver dashboards and admin counts is a local business day.
   appTimeZone: env.APP_TIME_ZONE || "Asia/Kolkata",
-  // Phase 2 routing is straight-line (Haversine) — see LocationsModule.
+  // Straight-line (Haversine) estimate: the fallback whenever Google Routes
+  // is off or failing, and the only estimate with ROUTES_PROVIDER=haversine.
   routeAverageSpeedKmph: decimal(env.ROUTE_AVERAGE_SPEED_KMPH, 22),
   routeDistanceFactor: decimal(env.ROUTE_DISTANCE_FACTOR, 1),
+
+  // ── Road routing (Google Routes API, server-side key) ─────────────────
+  // "google" whenever GOOGLE_ROUTES_API_KEY is set, unless overridden.
+  routesProvider: ((env.ROUTES_PROVIDER || "").trim().toLowerCase() ||
+    (env.GOOGLE_ROUTES_API_KEY?.trim() ? "google" : "haversine")) as RoutesProviderName,
+  googleRoutesApiKey: (env.GOOGLE_ROUTES_API_KEY || "").trim(),
+  // TWO_WHEELER routes suit bikes/autos in India; DRIVE is the safe default.
+  routesTravelMode: ((env.ROUTES_TRAVEL_MODE || "DRIVE").trim().toUpperCase() as "DRIVE" | "TWO_WHEELER"),
+  // Live-traffic durations cost the Routes "Advanced" SKU; off by default.
+  routesTrafficAware: boolean(env.ROUTES_TRAFFIC_AWARE, false),
+  routesTimeoutMs: integer(env.ROUTES_TIMEOUT_MS, 4_000),
+  // Same trip within this window = one Google call (estimate → book).
+  routesCacheTtlSeconds: integer(env.ROUTES_CACHE_TTL_SECONDS, 900),
+  routesCacheMaxEntries: integer(env.ROUTES_CACHE_MAX_ENTRIES, 5_000),
+  // Circuit breaker: skip Google after this many straight failures…
+  routesFailureThreshold: integer(env.ROUTES_FAILURE_THRESHOLD, 3),
+  // …for this long, answering with straight-line estimates meanwhile.
+  routesFailureCooldownSeconds: integer(env.ROUTES_FAILURE_COOLDOWN_SECONDS, 60),
+  // Live driver → pickup/destination route: recomputed at most this often,
+  // or sooner once the driver has moved this far from where it was computed.
+  routesLiveRefreshSeconds: integer(env.ROUTES_LIVE_REFRESH_SECONDS, 90),
+  routesLiveRefreshMeters: integer(env.ROUTES_LIVE_REFRESH_METERS, 300),
   rideMinDistanceMeters: integer(env.RIDE_MIN_DISTANCE_METERS, 200),
   rideMaxDistanceKm: integer(env.RIDE_MAX_DISTANCE_KM, 80),
   rideSearchTimeoutSeconds: integer(
@@ -365,6 +419,27 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
   placesTimeoutMs: integer(env.PLACES_TIMEOUT_MS, 5_000),
   placesCacheTtlSeconds: integer(env.PLACES_CACHE_TTL_SECONDS, 21_600),
   placesCacheMaxEntries: integer(env.PLACES_CACHE_MAX_ENTRIES, 5_000),
+
+  // ── Phase 7: abuse-prone endpoint limits (per client IP, per route) ───
+  // Stricter than THROTTLE_LIMIT, which covers ordinary authenticated calls.
+  throttleAuthLimit: integer(env.THROTTLE_AUTH_LIMIT, 10),
+  throttleAuthTtlMs: integer(env.THROTTLE_AUTH_TTL_MS, 60_000),
+  // SMS costs money and can be used to harass a number: 3 codes / 10 min.
+  throttleOtpSendLimit: integer(env.THROTTLE_OTP_SEND_LIMIT, 3),
+  throttleOtpSendTtlMs: integer(env.THROTTLE_OTP_SEND_TTL_MS, 600_000),
+  throttleOtpVerifyLimit: integer(env.THROTTLE_OTP_VERIFY_LIMIT, 10),
+  throttleOtpVerifyTtlMs: integer(env.THROTTLE_OTP_VERIFY_TTL_MS, 600_000),
+  throttleRefreshLimit: integer(env.THROTTLE_REFRESH_LIMIT, 30),
+  throttleRefreshTtlMs: integer(env.THROTTLE_REFRESH_TTL_MS, 60_000),
+  throttleAdminLoginLimit: integer(env.THROTTLE_ADMIN_LOGIN_LIMIT, 5),
+  throttleAdminLoginTtlMs: integer(env.THROTTLE_ADMIN_LOGIN_TTL_MS, 300_000),
+  // Promo codes are guessable strings: limit how fast one client can try them.
+  throttlePromoLimit: integer(env.THROTTLE_PROMO_LIMIT, 20),
+  throttlePromoTtlMs: integer(env.THROTTLE_PROMO_TTL_MS, 60_000),
+  // Admin broadcasts: scheduled-send poll (0 = off) and users per batch.
+  broadcastWorkerIntervalMs: integer(env.BROADCAST_WORKER_INTERVAL_MS, 30_000),
+  broadcastBatchSize: integer(env.BROADCAST_BATCH_SIZE, 500),
+  reportMaxRangeDays: integer(env.REPORT_MAX_RANGE_DAYS, 366),
 });
 
 export const environment = (): Environment => environmentFrom(process.env);
@@ -377,6 +452,13 @@ const POSITIVE_INTEGERS = [
   "MONGODB_MAX_POOL_SIZE",
   "MONGODB_SERVER_SELECTION_TIMEOUT_MS",
   "MONGODB_SOCKET_TIMEOUT_MS",
+  "ROUTES_TIMEOUT_MS",
+  "ROUTES_CACHE_TTL_SECONDS",
+  "ROUTES_CACHE_MAX_ENTRIES",
+  "ROUTES_FAILURE_THRESHOLD",
+  "ROUTES_FAILURE_COOLDOWN_SECONDS",
+  "ROUTES_LIVE_REFRESH_SECONDS",
+  "ROUTES_LIVE_REFRESH_METERS",
   "RIDE_MIN_DISTANCE_METERS",
   "RIDE_MAX_DISTANCE_KM",
   "RIDE_SEARCH_TIMEOUT_SECONDS",
@@ -408,6 +490,20 @@ const POSITIVE_INTEGERS = [
   "PLACES_TIMEOUT_MS",
   "PLACES_CACHE_TTL_SECONDS",
   "PLACES_CACHE_MAX_ENTRIES",
+  "THROTTLE_AUTH_LIMIT",
+  "THROTTLE_AUTH_TTL_MS",
+  "THROTTLE_OTP_SEND_LIMIT",
+  "THROTTLE_OTP_SEND_TTL_MS",
+  "THROTTLE_OTP_VERIFY_LIMIT",
+  "THROTTLE_OTP_VERIFY_TTL_MS",
+  "THROTTLE_REFRESH_LIMIT",
+  "THROTTLE_REFRESH_TTL_MS",
+  "THROTTLE_ADMIN_LOGIN_LIMIT",
+  "THROTTLE_ADMIN_LOGIN_TTL_MS",
+  "THROTTLE_PROMO_LIMIT",
+  "THROTTLE_PROMO_TTL_MS",
+  "BROADCAST_BATCH_SIZE",
+  "REPORT_MAX_RANGE_DAYS",
 ];
 
 const POSITIVE_DECIMALS = [
@@ -463,7 +559,7 @@ export function validateEnvironment(
       "DRIVER_LOCATION_STALE_SECONDS must be at least twice DRIVER_LOCATION_PERSIST_INTERVAL_SECONDS",
     );
 
-  for (const name of ["PAYMENT_RECONCILE_INTERVAL_MS"]) {
+  for (const name of ["PAYMENT_RECONCILE_INTERVAL_MS", "BROADCAST_WORKER_INTERVAL_MS"]) {
     if (
       isSet(input[name]) &&
       (!Number.isInteger(Number(input[name])) || Number(input[name]) < 0)
@@ -542,6 +638,13 @@ export function validateEnvironment(
     throw new Error(`PLACES_PROVIDER must be one of ${PLACES_PROVIDERS.join(", ")}`);
   if (resolved.placesProvider === "google" && !resolved.googleMapsApiKey)
     throw new Error("GOOGLE_MAPS_API_KEY is required when PLACES_PROVIDER=google");
+  // Road routing: a known provider and travel mode, Google only with its key.
+  if (!(ROUTES_PROVIDERS as readonly string[]).includes(resolved.routesProvider))
+    throw new Error(`ROUTES_PROVIDER must be one of ${ROUTES_PROVIDERS.join(", ")}`);
+  if (resolved.routesProvider === "google" && !resolved.googleRoutesApiKey)
+    throw new Error("GOOGLE_ROUTES_API_KEY is required when ROUTES_PROVIDER=google");
+  if (!(ROUTES_TRAVEL_MODES as readonly string[]).includes(resolved.routesTravelMode))
+    throw new Error(`ROUTES_TRAVEL_MODE must be one of ${ROUTES_TRAVEL_MODES.join(", ")}`);
   if (
     isSet(input.NOMINATIM_MIN_INTERVAL_MS) &&
     (!Number.isInteger(Number(input.NOMINATIM_MIN_INTERVAL_MS)) || Number(input.NOMINATIM_MIN_INTERVAL_MS) < 0)

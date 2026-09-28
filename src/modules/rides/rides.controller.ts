@@ -9,13 +9,17 @@ import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
 import {
   CancelRideDto,
+  CreateRideDto,
   ListRidesQueryDto,
   RejectRideDto,
   RideRequestDto,
   StartRideDto,
   TripDto,
 } from "./dto/ride-requests.dto";
+import type { CancellationPreview } from "../cancellations/cancellations.service";
 import { RideLifecycleService } from "./ride-lifecycle.service";
+import { RideRouteService } from "./ride-route.service";
+import type { LiveRouteView } from "./ride-route.service";
 import type { CustomerRideView, DriverRideView, RideView } from "./ride-view.service";
 import { RidesService } from "./rides.service";
 import type { FareEstimateView, Page } from "./rides.service";
@@ -31,6 +35,7 @@ export class RidesController {
   constructor(
     private readonly rides: RidesService,
     private readonly lifecycle: RideLifecycleService,
+    private readonly routes: RideRouteService,
   ) {}
 
   // ── Customer ──────────────────────────────────────────────────────────
@@ -53,10 +58,10 @@ export class RidesController {
 
   @Post()
   @Roles(UserRole.CUSTOMER)
-  @ApiOperation({ summary: "Book a ride; the server re-prices and starts matching" })
+  @ApiOperation({ summary: "Book a ride (optionally with a promo code); the server re-prices and starts matching" })
   async create(
     @CurrentUser() user: AuthenticatedUser,
-    @Body() dto: RideRequestDto,
+    @Body() dto: CreateRideDto,
   ): Promise<ApiSuccessBody<CustomerRideView>> {
     return ok(await this.rides.create(user.userId, dto));
   }
@@ -97,16 +102,38 @@ export class RidesController {
     return ok(await this.rides.getForUser(user, id));
   }
 
+  @Get(":id/route")
+  @Roles(UserRole.CUSTOMER, UserRole.DRIVER)
+  @ApiOperation({
+    summary: "Live road route: driver → pickup (APPROACH) or driver → destination (TRIP); null when none (poll)",
+  })
+  async route(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", ParseObjectIdPipe) id: string,
+  ): Promise<ApiSuccessBody<LiveRouteView | null>> {
+    return ok(await this.routes.forUser(user, id));
+  }
+
+  @Get(":id/cancellation")
+  @Roles(UserRole.CUSTOMER, UserRole.DRIVER)
+  @ApiOperation({ summary: "Before cancelling: whether it is allowed, the reasons to pick from, and any fee" })
+  async cancellationPreview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", ParseObjectIdPipe) id: string,
+  ): Promise<ApiSuccessBody<CancellationPreview>> {
+    return ok(await this.lifecycle.cancellationPreview(user, id));
+  }
+
   @Post(":id/cancel")
   @HttpCode(HttpStatus.OK)
   @Roles(UserRole.CUSTOMER, UserRole.DRIVER)
-  @ApiOperation({ summary: "Cancel a ride (customer: before start; driver: after accept)" })
+  @ApiOperation({ summary: "Cancel a ride with a reason (customer: before start; driver: after accept). Fees per policy." })
   async cancel(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id", ParseObjectIdPipe) id: string,
     @Body() dto: CancelRideDto,
   ): Promise<ApiSuccessBody<AnyRideView>> {
-    return ok(await this.lifecycle.cancel(user, id, dto.reason));
+    return ok(await this.lifecycle.cancel(user, id, { reasonCode: dto.reasonCode, note: dto.reason }));
   }
 
   // ── Driver actions ────────────────────────────────────────────────────

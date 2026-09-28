@@ -36,6 +36,9 @@ export interface DriverSummary {
   isAvailable: boolean;
   approvedAt?: Date;
   rejectionReason?: string;
+  suspensionReason?: string;
+  suspendedAt?: Date;
+  createdAt?: Date;
 }
 
 // Documents a driver must have on file (any status) before KYC can be
@@ -81,6 +84,9 @@ export class DriversService {
       isAvailable: driver.isAvailable,
       approvedAt: driver.approvedAt,
       rejectionReason: driver.rejectionReason,
+      suspensionReason: driver.suspensionReason,
+      suspendedAt: driver.suspendedAt,
+      createdAt: driver.get("createdAt") as Date | undefined,
     };
   }
 
@@ -255,6 +261,78 @@ export class DriversService {
   async listForAdmin(status?: DriverStatus): Promise<DriverProfileDocument[]> {
     const filter = status ? { driverStatus: status } : {};
     return this.driverModel.find(filter).sort({ createdAt: -1 }).exec();
+  }
+
+  /** Admin list: filter, search (driver code / matching user ids), paginate. */
+  async pageForAdmin(query: {
+    page: number;
+    limit: number;
+    status?: DriverStatus;
+    search?: string;
+    userIds?: Types.ObjectId[];
+    online?: boolean;
+  }): Promise<{ drivers: DriverProfileDocument[]; total: number }> {
+    const filter: Record<string, unknown> = {};
+    if (query.status) filter.driverStatus = query.status;
+    if (query.online !== undefined) filter.isOnline = query.online;
+    if (query.search) {
+      const code = query.search.trim().toUpperCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.$or = [{ driverCode: { $regex: `^${code}` } }, { userId: { $in: query.userIds ?? [] } }];
+    }
+    const [drivers, total] = await Promise.all([
+      this.driverModel
+        .find(filter)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip((query.page - 1) * query.limit)
+        .limit(query.limit)
+        .exec(),
+      this.driverModel.countDocuments(filter).exec(),
+    ]);
+    return { drivers, total };
+  }
+
+  /**
+   * APPROVED → SUSPENDED. The driver is taken offline at once and can no
+   * longer be matched (matching and every ride action require APPROVED).
+   * Refused while the driver is committed to a ride — cancel or finish it
+   * first, so a customer is never stranded mid-trip.
+   */
+  async suspend(driverId: string, adminUserId: string, reason: string): Promise<DriverProfileDocument> {
+    const updated = await this.driverModel
+      .findOneAndUpdate(
+        { _id: driverId, driverStatus: DriverStatus.APPROVED, currentRideId: null },
+        {
+          $set: {
+            driverStatus: DriverStatus.SUSPENDED,
+            isOnline: false,
+            isAvailable: false,
+            suspensionReason: reason,
+            suspendedAt: new Date(),
+            suspendedBy: new Types.ObjectId(adminUserId),
+          },
+        },
+        { returnDocument: "after" },
+      )
+      .exec();
+    if (updated) return updated;
+    const driver = await this.getById(driverId);
+    if (driver.driverStatus !== DriverStatus.APPROVED)
+      throw apiBadRequest(`Cannot suspend a driver in ${driver.driverStatus} status`, "INVALID_STATUS_TRANSITION");
+    throw apiConflict("This driver is on a ride. Cancel or complete it before suspending.", "DRIVER_HAS_ACTIVE_RIDE");
+  }
+
+  /** SUSPENDED → APPROVED. The driver goes online again themselves. */
+  async reinstate(driverId: string): Promise<DriverProfileDocument> {
+    const updated = await this.driverModel
+      .findOneAndUpdate(
+        { _id: driverId, driverStatus: DriverStatus.SUSPENDED },
+        { $set: { driverStatus: DriverStatus.APPROVED }, $unset: { suspensionReason: 1, suspendedAt: 1, suspendedBy: 1 } },
+        { returnDocument: "after" },
+      )
+      .exec();
+    if (updated) return updated;
+    const driver = await this.getById(driverId);
+    throw apiBadRequest(`Cannot reinstate a driver in ${driver.driverStatus} status`, "INVALID_STATUS_TRANSITION");
   }
 
   async countByStatus(): Promise<Record<DriverStatus, number>> {

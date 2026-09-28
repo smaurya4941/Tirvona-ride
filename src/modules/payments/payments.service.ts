@@ -641,8 +641,10 @@ export class PaymentsService {
         pickupAddress: ride.pickup.address,
         destinationAddress: ride.destination.address,
         rideCompletedAt: ride.completedAt,
-        // The captured amount *is* the final fare (checked against it above).
-        grossFarePaise: payment.amountPaise,
+        // The driver earns on the full trip fare. With a promo the captured
+        // amount is fare − discount; the platform funds the difference.
+        grossFarePaise: ride.fare.finalFare !== undefined ? toPaise(ride.fare.finalFare) : payment.amountPaise,
+        promoDiscountPaise: ride.fare.discount ? toPaise(ride.fare.discount) : 0,
         currency: payment.currency,
         paymentMode: payment.gateway === PaymentGateway.CASH ? PaymentMode.CASH : PaymentMode.ONLINE,
         paymentMethod: payment.method,
@@ -773,7 +775,9 @@ export class PaymentsService {
       throw new ApiException(HttpStatus.CONFLICT, "This ride has nothing to pay", "PAYMENT_NOT_PAYABLE", {
         paymentStatus: status,
       });
-    const fare = ride.fare.finalFare;
+    // With a promo the customer owes the discounted amount (Phase 7); the
+    // driver is still credited on the full fare (see ensureEarning).
+    const fare = ride.fare.payableFare ?? ride.fare.finalFare;
     if (fare === undefined || toPaise(fare) < MIN_AMOUNT_PAISE)
       throw new ApiException(
         HttpStatus.CONFLICT,

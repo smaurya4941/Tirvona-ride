@@ -9,6 +9,9 @@ import { PricingModule } from "../pricing/pricing.module";
 import { RideTypesModule } from "../ride-types/ride-types.module";
 import { UsersModule } from "../users/users.module";
 import { VehiclesModule } from "../vehicles/vehicles.module";
+import { CancellationsModule } from "../cancellations/cancellations.module";
+import { PromotionsModule } from "../promotions/promotions.module";
+import { ZonesModule } from "../zones/zones.module";
 import { DriverAvailabilityController } from "./driver-availability.controller";
 import { DriverAvailabilityService } from "./driver-availability.service";
 import { RideDispatchScheduler } from "./ride-dispatch.scheduler";
@@ -16,6 +19,7 @@ import { RideDispatchService } from "./ride-dispatch.service";
 import { RideEventsService } from "./ride-events.service";
 import { RideLifecycleService } from "./ride-lifecycle.service";
 import { RidePaymentStateService } from "./ride-payment-state.service";
+import { RideRouteService } from "./ride-route.service";
 import { RideTransitionService } from "./ride-transition.service";
 import { RideViewService } from "./ride-view.service";
 import { RidesAdminService } from "./rides-admin.service";
@@ -29,6 +33,8 @@ import { RideStatusHistory, RideStatusHistorySchema } from "./schemas/ride-statu
 //   Rides → Pricing, RideTypes, Locations, Users, Drivers, Vehicles
 //   Rides → Realtime → Locations   (events are pushed into Realtime)
 //   Rides → Earnings(read-only, dashboard totals)
+//   Rides → Zones, Promotions, Cancellations (Phase 7 leaves; outcomes flow
+//           back to Promotions as ride.transitioned events)
 //   Payments → Rides (RidePaymentStateService), Earnings
 @Module({
   imports: [
@@ -45,6 +51,10 @@ import { RideStatusHistory, RideStatusHistorySchema } from "./schemas/ride-statu
     MatchingModule,
     RealtimeModule,
     EarningsModule,
+    // Phase 7 — service areas, promo reservation, cancellation policy/records
+    ZonesModule,
+    PromotionsModule,
+    CancellationsModule,
   ],
   controllers: [RidesController, DriverAvailabilityController],
   providers: [
@@ -58,7 +68,8 @@ import { RideStatusHistory, RideStatusHistorySchema } from "./schemas/ride-statu
     DriverAvailabilityService,
     RidesAdminService,
     RidePaymentStateService,
+    RideRouteService,
   ],
-  exports: [RidesAdminService, RideDispatchService, RidePaymentStateService],
+  exports: [RidesAdminService, RideDispatchService, RidePaymentStateService, RideViewService],
 })
 export class RidesModule {}

@@ -94,10 +94,10 @@ describe("Phase 1 — done tests (e2e)", () => {
   }
 
   beforeAll(async () => {
-    // Capture dev OTPs from OtpService's log line: "[DEV OTP] <phone> (...) → 123456".
+    // Capture dev OTPs from OtpService's log line: "[DEV OTP] >>> 123456 <<< for <phone> (...)".
     jest.spyOn(Logger.prototype, "log").mockImplementation((message: unknown) => {
-      const match = /\[DEV OTP\] (\+\d+) \(.*\) → (\d{6})/.exec(String(message));
-      if (match) otps.set(match[1], match[2]);
+      const match = /\[DEV OTP\] >>> (\d{6}) <<< for (\+\d+)/.exec(String(message));
+      if (match) otps.set(match[2], match[1]);
     });
 
     mongo = await MongoMemoryServer.create();
@@ -111,6 +111,14 @@ describe("Phase 1 — done tests (e2e)", () => {
       MONGODB_DB_NAME: "tirvona_ride_phase1",
       REDIS_URL: "",
       THROTTLE_LIMIT: "1000",
+      // Per-route auth/OTP limits are exercised by phase7.e2e-spec.ts.
+      THROTTLE_AUTH_LIMIT: "1000",
+      THROTTLE_OTP_SEND_LIMIT: "1000",
+      THROTTLE_OTP_VERIFY_LIMIT: "1000",
+      THROTTLE_REFRESH_LIMIT: "1000",
+      THROTTLE_ADMIN_LOGIN_LIMIT: "1000",
+      THROTTLE_PROMO_LIMIT: "1000",
+      BROADCAST_WORKER_INTERVAL_MS: "0",
       JWT_ACCESS_SECRET: randomBytes(48).toString("base64url"),
       JWT_REFRESH_SECRET: randomBytes(48).toString("base64url"),
     });
@@ -307,8 +315,10 @@ describe("Phase 1 — done tests (e2e)", () => {
         .query({ status: "UNDER_REVIEW" })
         .set(bearer(adminToken))
         .expect(200);
-      expect(list.body.data).toHaveLength(1);
-      expect(list.body.data[0]).toMatchObject({
+      // Paginated since Phase 7.
+      expect(list.body.data.items).toHaveLength(1);
+      expect(list.body.data.total).toBe(1);
+      expect(list.body.data.items[0]).toMatchObject({
         driver: { id: driverAProfileId, driverStatus: "UNDER_REVIEW" },
         user: { phone: PHONES.driverA, firstName: "Rahul" },
       });

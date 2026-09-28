@@ -232,6 +232,8 @@ PaymentSchema.index({ "attempts.orderId": 1 });
 PaymentSchema.index({ customerId: 1, createdAt: -1 });
 PaymentSchema.index({ driverId: 1, createdAt: -1 });
 PaymentSchema.index({ status: 1, createdAt: -1 });
+// Revenue reports: money received per day (Phase 7).
+PaymentSchema.index({ paidAt: -1, status: 1 });
 PaymentSchema.index({ createdAt: -1 });
 // Reconciler scans.
 PaymentSchema.index({ status: 1, processingSince: 1 });

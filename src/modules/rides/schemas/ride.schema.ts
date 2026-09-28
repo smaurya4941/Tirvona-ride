@@ -1,10 +1,10 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { SchemaTypes, Types } from "mongoose";
 import type { HydratedDocument } from "mongoose";
-import { RideTypeCode } from "../../ride-types/schemas/ride-type.schema";
 import { VehicleType } from "../../vehicles/schemas/vehicle.schema";
 import { RidePaymentStatus } from "../ride-payment-status";
 import { RideActorType, RideStatus } from "../ride-state-machine";
+import { PromoDiscountType } from "../../promotions/promo-rules";
 
 @Schema({ _id: false })
 export class RideLocation {
@@ -59,6 +59,17 @@ export class RideFare {
   @Prop()
   finalFare?: number;
 
+  /**
+   * Promo discount (Phase 7), rupees: the estimate at booking, replaced by
+   * the discount on the final fare at completion. Platform-funded.
+   */
+  @Prop({ min: 0 })
+  discount?: number;
+
+  /** What the customer pays: finalFare − discount (set on completion when a promo applies). */
+  @Prop({ min: 0 })
+  payableFare?: number;
+
   @Prop({ required: true })
   pricingVersion!: number;
 }
@@ -87,6 +98,32 @@ export class RideVehicle {
 }
 const RideVehicleSchema = SchemaFactory.createForClass(RideVehicle);
 
+/** The promo applied at booking — its rules are frozen here (Phase 7). */
+@Schema({ _id: false })
+export class RidePromo {
+  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "PromoCode" })
+  promoId!: Types.ObjectId;
+
+  @Prop({ required: true })
+  code!: string;
+
+  @Prop({ required: true })
+  title!: string;
+
+  @Prop({ required: true, enum: PromoDiscountType })
+  discountType!: PromoDiscountType;
+
+  @Prop({ required: true })
+  discountValue!: number;
+
+  @Prop()
+  maxDiscount?: number;
+
+  @Prop({ required: true, min: 0 })
+  estimatedDiscount!: number;
+}
+const RidePromoSchema = SchemaFactory.createForClass(RidePromo);
+
 @Schema({ _id: false })
 export class RideCancellation {
   @Prop({ required: true, enum: RideActorType })
@@ -95,8 +132,24 @@ export class RideCancellation {
   @Prop({ type: SchemaTypes.ObjectId, ref: "User" })
   cancelledByUserId?: Types.ObjectId;
 
+  /** Free text (legacy) or the chosen reason label. */
   @Prop({ trim: true })
   reason?: string;
+
+  /** Controlled reason code (Phase 7). */
+  @Prop()
+  reasonCode?: string;
+
+  @Prop({ trim: true })
+  note?: string;
+
+  /** Cancellation fee assessed, rupees (Phase 7). */
+  @Prop({ min: 0 })
+  feeAmount?: number;
+
+  /** NOT_APPLICABLE | DUE | WAIVED | COLLECTED — mirrors the cancellations record. */
+  @Prop()
+  feeStatus?: string;
 }
 const RideCancellationSchema = SchemaFactory.createForClass(RideCancellation);
 
@@ -139,8 +192,9 @@ export class Ride {
   @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "User" })
   customerId!: Types.ObjectId;
 
-  @Prop({ required: true, enum: RideTypeCode })
-  rideType!: RideTypeCode;
+  /** Ride type code at booking; historical codes stay valid even if retired. */
+  @Prop({ required: true })
+  rideType!: string;
 
   /** Resolved from the ride type at booking; what matching filters on. */
   @Prop({ required: true, enum: VehicleType })
@@ -161,8 +215,25 @@ export class Ride {
   @Prop({ required: true })
   routeProvider!: string;
 
+  /**
+   * Pickup → destination road path at booking (Google encoded polyline,
+   * overview quality). Absent for straight-line (HAVERSINE) estimates.
+   */
+  @Prop()
+  routePolyline?: string;
+
   @Prop({ required: true, type: RideFareSchema })
   fare!: RideFare;
+
+  @Prop({ type: RidePromoSchema })
+  promo?: RidePromo;
+
+  // ── Zone (Phase 7): the active service zone containing the pickup ──────
+  @Prop({ type: SchemaTypes.ObjectId, ref: "Zone" })
+  zoneId?: Types.ObjectId;
+
+  @Prop()
+  zoneName?: string;
 
   @Prop({ required: true, enum: RideStatus, default: RideStatus.SEARCHING })
   status!: RideStatus;
@@ -286,6 +357,12 @@ RideSchema.index({ driverId: 1, requestedAt: -1 });
 RideSchema.index({ status: 1, requestedAt: -1 });
 // Unpaid completed rides (ops follow-up, customer "pay now").
 RideSchema.index({ paymentStatus: 1, completedAt: -1 });
+// Reports (Phase 7): date-range scans by lifecycle timestamp and by zone.
+RideSchema.index({ requestedAt: -1 });
+RideSchema.index({ status: 1, completedAt: -1 });
+RideSchema.index({ status: 1, cancelledAt: -1 });
+RideSchema.index({ zoneId: 1, requestedAt: -1 }, { partialFilterExpression: { zoneId: { $exists: true } } });
+RideSchema.index({ "promo.promoId": 1 }, { partialFilterExpression: { "promo.promoId": { $exists: true } } });
 // Sweeper scans.
 RideSchema.index({ status: 1, assignmentExpiresAt: 1 });
 RideSchema.index({ status: 1, searchExpiresAt: 1 });

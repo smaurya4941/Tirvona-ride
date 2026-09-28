@@ -62,4 +62,35 @@ describe("calculateFare", () => {
   it("rejects negative inputs", () => {
     expect(() => calculateFare(AUTO, -1, 0)).toThrow(RangeError);
   });
+
+  // ── Phase 7 ─────────────────────────────────────────────────────────────
+
+  it("is deterministic for the same inputs", () => {
+    const runs = Array.from({ length: 20 }, () => calculateFare(AUTO, 7_345, 1_234));
+    for (const run of runs) expect(run).toEqual(runs[0]);
+  });
+
+  it("charges only the minimum fare for a zero-length, zero-time trip", () => {
+    const fare = calculateFare(AUTO, 0, 0);
+    expect(fare).toMatchObject({ distanceCharge: 0, timeCharge: 0, subtotal: 30, minimumFareApplied: true, total: 40 });
+  });
+
+  it("prices a short and a long trip on the same tariff", () => {
+    // 1 km, 3 min: 30 + 10 + 4.5 = 44.5 → ₹45 (above the ₹40 minimum)
+    expect(calculateFare(AUTO, 1_000, 180).total).toBe(45);
+    // 60 km, 120 min: 30 + 600 + 180 = ₹810
+    expect(calculateFare(AUTO, 60_000, 7_200).total).toBe(810);
+  });
+
+  it.each([
+    ["BIKE", { currency: "INR", baseFare: 20, perKmRate: 6, perMinuteRate: 1, minimumFare: 30 }, 65],
+    ["AUTO", AUTO, 103],
+    ["CAB", { currency: "INR", baseFare: 50, perKmRate: 14, perMinuteRate: 2, minimumFare: 80 }, 150],
+  ])("prices each ride type with its own tariff (%s, 5 km / 15 min)", (_type, rates, expected) => {
+    expect(calculateFare(rates, 5_000, 900).total).toBe(expected);
+  });
+
+  it("rejects non-finite distances", () => {
+    expect(() => calculateFare(AUTO, 0, -60)).toThrow(RangeError);
+  });
 });

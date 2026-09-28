@@ -53,6 +53,32 @@ export class NotificationEventsListener implements OnModuleInit {
       if (drafts.length) await this.notifications.notify(drafts);
     });
 
+    this.events.on("driver.status_changed", async (event) => {
+      await this.notifications.notify([
+        event.suspended
+          ? {
+              userId: event.userId,
+              recipientRole: UserRole.DRIVER,
+              type: NotificationType.DRIVER_SUSPENDED,
+              title: "Account suspended",
+              message: event.reason
+                ? `Your driver account is suspended: ${event.reason}. Contact support for help.`
+                : "Your driver account is suspended. Contact support for help.",
+              referenceId: event.driverId,
+              data: { driverId: event.driverId },
+            }
+          : {
+              userId: event.userId,
+              recipientRole: UserRole.DRIVER,
+              type: NotificationType.DRIVER_REINSTATED,
+              title: "Account reinstated",
+              message: "Your driver account is active again. Go online to receive rides.",
+              referenceId: event.driverId,
+              data: { driverId: event.driverId },
+            },
+      ]);
+    });
+
     this.events.on("driver.reviewed", async (event) => {
       await this.notifications.notify([
         event.approved

@@ -8,7 +8,9 @@ import { DriverProfile } from "../drivers/schemas/driver-profile.schema";
 import { DriverLocationService } from "../locations/driver-location.service";
 import type { CheckpointKind, CheckpointSource } from "../locations/schemas/driver-location-checkpoint.schema";
 import { MatchingService } from "../matching/matching.service";
-import type { RideTypeCode } from "../ride-types/schemas/ride-type.schema";
+import { CancellationsService } from "../cancellations/cancellations.service";
+import type { CancellationView } from "../cancellations/cancellations.service";
+import { CancellationFeeStatus } from "../cancellations/schemas/cancellation.schemas";
 import { User } from "../users/schemas/user.schema";
 import { RideDispatchService } from "./ride-dispatch.service";
 import { rideConflict, rideNotFound } from "./ride-errors";
@@ -64,6 +66,8 @@ export interface AdminRideDetail {
     createdAt: Date;
   }>;
   /** Coarse location checkpoints (lifecycle points + sparse trail), never every ping. */
+  /** Phase 7: the cancellation record (reason, fee, fee status), if cancelled. */
+  cancellation: CancellationView | null;
   checkpoints: Array<{
     kind: CheckpointKind;
     latitude: number;
@@ -90,7 +94,7 @@ export interface AdminRideListQuery {
   page: number;
   limit: number;
   status?: RideStatus;
-  rideType?: RideTypeCode;
+  rideType?: string;
   search?: string;
 }
 
@@ -111,6 +115,7 @@ export class RidesAdminService {
     private readonly views: RideViewService,
     private readonly locations: DriverLocationService,
     private readonly dispatch: RideDispatchService,
+    private readonly cancellations: CancellationsService,
     config: ConfigService,
   ) {
     this.timeZone = config.getOrThrow<string>("appTimeZone");
@@ -202,11 +207,12 @@ export class RidesAdminService {
     const ride = await this.rideModel.findById(rideId).exec();
     if (!ride) throw rideNotFound();
 
-    const [history, customer, driverProfile, checkpoints] = await Promise.all([
+    const [history, customer, driverProfile, checkpoints, cancellation] = await Promise.all([
       this.transitions.history(ride._id),
       this.userModel.findById(ride.customerId).select("firstName lastName phone").lean().exec(),
       ride.driverId ? this.driverModel.findById(ride.driverId).lean().exec() : null,
       this.locations.checkpoints(ride._id),
+      ride.status === RideStatus.CANCELLED ? this.cancellations.findByRide(ride._id) : Promise.resolve(null),
     ]);
     const driverUser = driverProfile
       ? await this.userModel.findById(driverProfile.userId).select("firstName lastName phone").lean().exec()
@@ -278,11 +284,15 @@ export class RidesAdminService {
         createdAt: entry.get("createdAt") as Date,
       })),
       checkpoints,
+      cancellation,
     };
   }
 
-  /** Ops escape hatch for a stuck ride; same rules as a customer cancel. */
-  async cancel(rideId: string, adminUserId: string, reason: string): Promise<AdminRideDetail> {
+  /**
+   * Ops escape hatch for a stuck ride; same state rules as a customer
+   * cancel. Admin cancellations never carry a fee.
+   */
+  async cancel(rideId: string, adminUserId: string, note: string, reasonCode?: string): Promise<AdminRideDetail> {
     const ride = await this.rideModel.findById(rideId).exec();
     if (!ride) throw rideNotFound();
     if (!CUSTOMER_CANCELLABLE_STATUSES.includes(ride.status))
@@ -292,6 +302,8 @@ export class RidesAdminService {
         "RIDE_NOT_CANCELLABLE",
       );
 
+    const reason = await this.cancellations.resolveReason(RideActorType.ADMIN, reasonCode, note);
+    const reasonText = reason.note ? `${reason.label}: ${reason.note}` : reason.label;
     const adminId = new Types.ObjectId(adminUserId);
     const cancelled = await this.transitions.apply({
       rideId: ride._id,
@@ -299,14 +311,30 @@ export class RidesAdminService {
       to: RideStatus.CANCELLED,
       set: {
         cancelledAt: new Date(),
-        cancellation: { cancelledBy: RideActorType.ADMIN, cancelledByUserId: adminId, reason },
+        cancellation: {
+          cancelledBy: RideActorType.ADMIN,
+          cancelledByUserId: adminId,
+          reason: reasonText,
+          reasonCode: reason.code,
+          note: reason.note,
+          feeAmount: 0,
+          feeStatus: CancellationFeeStatus.NOT_APPLICABLE,
+        },
       },
       unset: ["otpCode", "otpExpiresAt", "assignmentExpiresAt"],
       actor: { type: RideActorType.ADMIN, userId: adminId },
-      reason,
+      reason: reasonText,
+      metadata: { reasonCode: reason.code },
     });
     if (!cancelled)
       throw rideConflict("The ride changed while cancelling. Reload and retry.", ride.status, "RIDE_STATE_CONFLICT");
+    await this.cancellations.record(cancelled, {
+      cancelledBy: RideActorType.ADMIN,
+      cancelledByUserId: adminId,
+      reason,
+      statusAtCancellation: ride.status,
+      feeAmount: 0,
+    });
     if (ride.driverId) {
       await this.matching.release(ride.driverId, ride._id);
       this.dispatch.kick();

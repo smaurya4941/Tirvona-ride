@@ -43,6 +43,14 @@ export class LocationsService {
     return this.estimator.estimate(pickup, destination);
   }
 
+  /**
+   * Road route for a leg that is not a booking (driver → pickup, driver →
+   * destination): no trip-range checks, same provider, cache and fallback.
+   */
+  routeBetween(origin: GeoCoordinates, destination: GeoCoordinates): Promise<RouteEstimate> {
+    return this.estimator.estimate(origin, destination);
+  }
+
   /** Approximate straight-line distance, e.g. driver → pickup for a request card. */
   approximateDistanceMeters(from: GeoCoordinates, to: GeoCoordinates): number {
     return Math.round(haversineMeters(from, to));

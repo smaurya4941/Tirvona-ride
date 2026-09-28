@@ -8,8 +8,8 @@ interface Entry<V> {
  * coalescing: concurrent `getOrLoad` calls for one key share a single
  * loader call. Failed loads are never cached.
  *
- * Per-process by design — geocoding answers are public, cheap to recompute
- * and fine to differ briefly between nodes.
+ * Per-process by design — geocoding and routing answers are public, cheap to
+ * recompute and fine to differ briefly between nodes.
  */
 export class TtlCache<V> {
   private readonly entries = new Map<string, Entry<V>>();

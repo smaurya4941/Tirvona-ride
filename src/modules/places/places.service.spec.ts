@@ -6,7 +6,7 @@ import type { PlaceSuggestion, ResolvedPlace } from "./places.types";
 import { PlacesService } from "./places.service";
 import { GeocodingProvider, GeocodingProviderError } from "./providers/geocoding.provider";
 import type { ProviderSearchRequest } from "./providers/geocoding.provider";
-import { TtlCache } from "./ttl-cache";
+import { TtlCache } from "../../common/cache/ttl-cache";
 
 const settings: Record<string, unknown> = {
   placesBiasLatitude: 27.5406,

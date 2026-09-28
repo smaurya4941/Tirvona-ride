@@ -5,6 +5,7 @@ import type { HydratedDocument } from "mongoose";
 export enum VehicleType {
   BIKE = "BIKE",
   AUTO = "AUTO",
+  E_RICKSHAW = "E_RICKSHAW",
   CAB = "CAB",
 }
 

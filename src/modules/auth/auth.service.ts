@@ -70,6 +70,19 @@ export class AuthService {
   }
 
   async login(dto: LoginDto, device: DeviceMetadata): Promise<AuthSession> {
+    return this.authenticate(dto, device);
+  }
+
+  /**
+   * Admin panel sign-in. Only ADMIN accounts get a session; any other
+   * account receives the same generic error as a wrong password, so this
+   * endpoint cannot be used to learn which phone numbers are admins.
+   */
+  async loginAdmin(dto: LoginDto, device: DeviceMetadata): Promise<AuthSession> {
+    return this.authenticate(dto, device, UserRole.ADMIN);
+  }
+
+  private async authenticate(dto: LoginDto, device: DeviceMetadata, requiredRole?: UserRole): Promise<AuthSession> {
     const user = await this.users.findByPhoneWithPassword(dto.phone);
     // Same generic error whether the phone is unknown or the password is
     // wrong — distinguishing the two lets an attacker enumerate accounts.
@@ -80,6 +93,7 @@ export class AuthService {
     if (!user) throw invalidCredentials;
     if (!(await this.users.verifyPassword(user, dto.password)))
       throw invalidCredentials;
+    if (requiredRole && user.role !== requiredRole) throw invalidCredentials;
     if (user.status === UserStatus.BLOCKED)
       throw apiForbidden("This account has been blocked", "USER_BLOCKED");
 

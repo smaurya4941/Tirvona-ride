@@ -3,20 +3,33 @@ import type { HydratedDocument } from "mongoose";
 import { VehicleType } from "../../vehicles/schemas/vehicle.schema";
 
 /**
- * The products a customer can book. Deliberately separate from VehicleType:
- * today each ride type maps 1:1 onto a vehicle type, but products such as
- * "Cab XL" or "E-Rickshaw" can later map onto the same or new vehicles.
+ * The V1 products seeded on first boot (locked blueprint: BIKE, AUTO,
+ * E_RICKSHAW, CAB). Since Phase 7 a ride type's code is data, not an enum:
+ * admins can create further products (e.g. "CAB_XL" served by CAB drivers)
+ * without a deploy. These constants remain for seeds, tests and defaults.
  */
 export enum RideTypeCode {
   BIKE = "BIKE",
   AUTO = "AUTO",
+  E_RICKSHAW = "E_RICKSHAW",
   CAB = "CAB",
 }
 
+/** Upper-case letters, digits and underscores, starting with a letter. */
+export const RIDE_TYPE_CODE_PATTERN = /^[A-Z][A-Z0-9_]{1,23}$/;
+
+/**
+ * Products are deliberately separate from VehicleType: each ride type maps
+ * onto exactly one vehicle type (what matching filters on), and several
+ * products may share one (Cab and Cab XL).
+ *
+ * Never deleted: historical rides reference the code, so a retired product
+ * is switched off (isActive=false) and stays readable.
+ */
 @Schema({ timestamps: true, collection: "ride_types" })
 export class RideType {
-  @Prop({ required: true, enum: RideTypeCode })
-  code!: RideTypeCode;
+  @Prop({ required: true, match: RIDE_TYPE_CODE_PATTERN, immutable: true })
+  code!: string;
 
   @Prop({ required: true, trim: true })
   displayName!: string;
@@ -24,7 +37,7 @@ export class RideType {
   @Prop({ trim: true })
   description?: string;
 
-  /** Stable icon key the mobile apps map to a bundled asset/icon. */
+  /** Stable icon key the mobile apps map to a bundled icon (bike, auto, e_rickshaw, cab). */
   @Prop({ required: true, trim: true })
   icon!: string;
 
@@ -38,6 +51,7 @@ export class RideType {
   @Prop({ required: true, default: 0 })
   sortOrder!: number;
 
+  /** ACTIVE = customers can book it; INACTIVE = hidden from booking, history kept. */
   @Prop({ required: true, default: true })
   isActive!: boolean;
 }

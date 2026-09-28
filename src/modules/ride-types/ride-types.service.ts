@@ -2,16 +2,16 @@ import { Injectable, Logger } from "@nestjs/common";
 import type { OnModuleInit } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
-import { apiBadRequest, apiNotFound } from "../../common/exceptions/api.exception";
+import { apiBadRequest, apiConflict, apiNotFound } from "../../common/exceptions/api.exception";
 import type { VehicleType } from "../vehicles/schemas/vehicle.schema";
-import type { UpdateRideTypeDto } from "./dto/update-ride-type.dto";
+import type { CreateRideTypeDto, UpdateRideTypeDto } from "./dto/update-ride-type.dto";
 import { DEFAULT_RIDE_TYPES } from "./ride-types.seed";
-import { RideType, RideTypeCode } from "./schemas/ride-type.schema";
+import { RideType } from "./schemas/ride-type.schema";
 import type { RideTypeDocument } from "./schemas/ride-type.schema";
 
 export interface RideTypeSummary {
   id: string;
-  code: RideTypeCode;
+  code: string;
   displayName: string;
   description?: string;
   icon: string;
@@ -73,14 +73,18 @@ export class RideTypesService implements OnModuleInit {
     return this.rideTypeModel.find().sort({ sortOrder: 1 }).exec();
   }
 
-  async getByCode(code: RideTypeCode): Promise<RideTypeDocument> {
+  async findByCode(code: string): Promise<RideTypeDocument | null> {
+    return this.rideTypeModel.findOne({ code }).exec();
+  }
+
+  async getByCode(code: string): Promise<RideTypeDocument> {
     const rideType = await this.rideTypeModel.findOne({ code }).exec();
     if (!rideType) throw apiNotFound("Ride type not found", "RIDE_TYPE_NOT_FOUND");
     return rideType;
   }
 
   /** For booking: the ride type must exist and be switched on. */
-  async getBookable(code: RideTypeCode): Promise<RideTypeDocument> {
+  async getBookable(code: string): Promise<RideTypeDocument> {
     const rideType = await this.getByCode(code);
     if (!rideType.isActive)
       throw apiBadRequest(
@@ -90,10 +94,37 @@ export class RideTypesService implements OnModuleInit {
     return rideType;
   }
 
-  async update(code: RideTypeCode, dto: UpdateRideTypeDto): Promise<RideTypeDocument> {
+  async create(dto: Omit<CreateRideTypeDto, "pricing">): Promise<RideTypeDocument> {
+    try {
+      return await this.rideTypeModel.create({
+        code: dto.code,
+        displayName: dto.displayName,
+        description: dto.description,
+        icon: dto.icon,
+        vehicleType: dto.vehicleType,
+        seatCapacity: dto.seatCapacity,
+        sortOrder: dto.sortOrder ?? 50,
+        isActive: dto.isActive ?? false,
+      });
+    } catch (error) {
+      if (isDuplicateKey(error))
+        throw apiConflict(`A ride type with code ${dto.code} already exists`, "RIDE_TYPE_ALREADY_EXISTS");
+      throw error;
+    }
+  }
+
+  /**
+   * Edits never touch rides already booked: each ride snapshots its ride
+   * type code, vehicle type and fare at booking. There is no delete — a
+   * retired product is deactivated so historical rides stay readable.
+   */
+  async update(code: string, dto: UpdateRideTypeDto): Promise<RideTypeDocument> {
     const rideType = await this.getByCode(code);
     if (dto.displayName !== undefined) rideType.displayName = dto.displayName;
     if (dto.description !== undefined) rideType.description = dto.description;
+    if (dto.icon !== undefined) rideType.icon = dto.icon;
+    if (dto.vehicleType !== undefined) rideType.vehicleType = dto.vehicleType;
+    if (dto.seatCapacity !== undefined) rideType.seatCapacity = dto.seatCapacity;
     if (dto.isActive !== undefined) rideType.isActive = dto.isActive;
     if (dto.sortOrder !== undefined) rideType.sortOrder = dto.sortOrder;
     await rideType.save();

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   IsEnum,
   IsInt,
@@ -12,7 +12,7 @@ import {
   ValidateNested,
 } from "class-validator";
 import { LocationPointDto } from "../../locations/dto/location-point.dto";
-import { RideTypeCode } from "../../ride-types/schemas/ride-type.schema";
+import { RIDE_TYPE_CODE_PATTERN } from "../../ride-types/schemas/ride-type.schema";
 import { RideStatus } from "../ride-state-machine";
 
 export class TripDto {
@@ -32,13 +32,28 @@ export class TripDto {
  * no fare field: the server always re-prices, whatever the client displayed.
  */
 export class RideRequestDto extends TripDto {
-  @ApiProperty({ enum: RideTypeCode })
-  @IsEnum(RideTypeCode)
-  rideType!: RideTypeCode;
+  @ApiProperty({ example: "AUTO", description: "Ride type code (GET /ride-types)" })
+  @Matches(RIDE_TYPE_CODE_PATTERN, { message: "rideType must be a ride type code such as AUTO" })
+  rideType!: string;
+}
+
+/** POST /rides — a booking may carry a promo code; the server validates and reserves it. */
+export class CreateRideDto extends RideRequestDto {
+  @ApiPropertyOptional({ example: "BRAJ50" })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.trim().toUpperCase() : value))
+  @IsString()
+  @Length(3, 20)
+  promoCode?: string;
 }
 
 export class CancelRideDto {
-  @ApiPropertyOptional({ example: "Plans changed" })
+  @ApiPropertyOptional({ example: "DRIVER_TOO_LONG", description: "Code from GET /rides/:id/cancellation" })
+  @IsOptional()
+  @Matches(/^[A-Z][A-Z0-9_]{1,39}$/)
+  reasonCode?: string;
+
+  @ApiPropertyOptional({ example: "Plans changed", description: "Note (required for reasons such as OTHER); legacy free-text reason" })
   @IsOptional()
   @IsString()
   @Length(1, 240)

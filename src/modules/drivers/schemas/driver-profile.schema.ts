@@ -69,6 +69,16 @@ export class DriverProfile {
   @Prop()
   rejectionReason?: string;
 
+  // ── Suspension (Phase 7) ──────────────────────────────────────────────
+  @Prop({ trim: true })
+  suspensionReason?: string;
+
+  @Prop()
+  suspendedAt?: Date;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: "User" })
+  suspendedBy?: Types.ObjectId;
+
   // ── Duty / matching state (Phase 2) ──────────────────────────────────
   // Written only by DriverAvailabilityService and the matching/ride
   // services, never from a client payload.
@@ -112,7 +122,7 @@ export const DriverProfileSchema = SchemaFactory.createForClass(DriverProfile);
 
 DriverProfileSchema.index({ userId: 1 }, { unique: true });
 DriverProfileSchema.index({ driverCode: 1 }, { unique: true });
-DriverProfileSchema.index({ driverStatus: 1 });
+DriverProfileSchema.index({ driverStatus: 1, createdAt: -1 });
 // Matching: $geoNear over online+available drivers of one vehicle type.
 DriverProfileSchema.index({
   currentLocation: "2dsphere",

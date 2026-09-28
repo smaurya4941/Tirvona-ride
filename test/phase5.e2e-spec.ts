@@ -231,6 +231,14 @@ describe("Phase 5 — ratings, notifications, safety, complaints (e2e)", () => {
       MONGODB_DB_NAME: "tirvona_ride_phase5",
       REDIS_URL: "",
       THROTTLE_LIMIT: "5000",
+      // Per-route auth/OTP limits are exercised by phase7.e2e-spec.ts.
+      THROTTLE_AUTH_LIMIT: "1000",
+      THROTTLE_OTP_SEND_LIMIT: "1000",
+      THROTTLE_OTP_VERIFY_LIMIT: "1000",
+      THROTTLE_REFRESH_LIMIT: "1000",
+      THROTTLE_ADMIN_LOGIN_LIMIT: "1000",
+      THROTTLE_PROMO_LIMIT: "1000",
+      BROADCAST_WORKER_INTERVAL_MS: "0",
       JWT_ACCESS_SECRET: randomBytes(48).toString("base64url"),
       JWT_REFRESH_SECRET: randomBytes(48).toString("base64url"),
       MATCHING_SWEEP_INTERVAL_MS: "0",
@@ -565,7 +573,7 @@ describe("Phase 5 — ratings, notifications, safety, complaints (e2e)", () => {
     });
 
     it("driver approval notifies the driver", async () => {
-      const drivers = (await api().get("/api/v1/admin/drivers?status=UNDER_REVIEW").set(as("admin")).expect(200)).body.data;
+      const drivers = (await api().get("/api/v1/admin/drivers?status=UNDER_REVIEW").set(as("admin")).expect(200)).body.data.items;
       const pending = drivers.find((item: { user: { phone: string } }) => item.user.phone === PHONES.driverC);
       await api().patch(`/api/v1/admin/drivers/${pending.driver.id}/approve`).set(as("admin")).expect(200);
       const inbox = await notificationsOf("driverC");

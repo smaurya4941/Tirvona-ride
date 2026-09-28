@@ -11,6 +11,9 @@ import { FcmHttpGateway } from "./push/fcm-http.gateway";
 import { PushGateway } from "./push/push.gateway";
 import { DeviceToken, DeviceTokenSchema } from "./schemas/device-token.schema";
 import { Notification, NotificationSchema } from "./schemas/notification.schema";
+import { Broadcast, BroadcastSchema } from "./broadcasts/broadcast.schema";
+import { BroadcastsService } from "./broadcasts/broadcasts.service";
+import { DriverProfile, DriverProfileSchema } from "../drivers/schemas/driver-profile.schema";
 
 // Dependency direction (no cycles):
 //   Notifications → Realtime, Users(model), Rides(schema only)
@@ -23,6 +26,8 @@ import { Notification, NotificationSchema } from "./schemas/notification.schema"
       { name: Notification.name, schema: NotificationSchema },
       { name: DeviceToken.name, schema: DeviceTokenSchema },
       { name: Ride.name, schema: RideSchema },
+      { name: Broadcast.name, schema: BroadcastSchema },
+      { name: DriverProfile.name, schema: DriverProfileSchema },
     ]),
     UsersModule,
     RealtimeModule,
@@ -33,7 +38,8 @@ import { Notification, NotificationSchema } from "./schemas/notification.schema"
     NotificationsService,
     DeviceTokensService,
     NotificationEventsListener,
+    BroadcastsService,
   ],
-  exports: [NotificationsService, DeviceTokensService],
+  exports: [NotificationsService, DeviceTokensService, BroadcastsService],
 })
 export class NotificationsModule {}

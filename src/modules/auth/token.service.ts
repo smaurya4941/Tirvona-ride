@@ -132,6 +132,14 @@ export class TokenService {
       .exec();
   }
 
+  /** Ends every session of a user (blocked account, suspended driver). */
+  async revokeAllForUser(userId: string): Promise<number> {
+    const result = await this.sessionModel
+      .updateMany({ userId: new Types.ObjectId(userId), isActive: true }, { $set: { isActive: false } })
+      .exec();
+    return result.modifiedCount;
+  }
+
   private expiryDate(duration: string): Date {
     const match = /^(\d+)([smhd])$/.exec(duration);
     const amount = match ? Number(match[1]) : 30;

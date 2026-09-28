@@ -21,9 +21,13 @@ export enum NotificationType {
   SOS_UPDATED = "SOS_UPDATED",
   DRIVER_APPROVED = "DRIVER_APPROVED",
   DRIVER_REJECTED = "DRIVER_REJECTED",
+  DRIVER_SUSPENDED = "DRIVER_SUSPENDED",
+  DRIVER_REINSTATED = "DRIVER_REINSTATED",
   COMPLAINT_CREATED = "COMPLAINT_CREATED",
   COMPLAINT_UPDATED = "COMPLAINT_UPDATED",
   GENERAL = "GENERAL",
+  /** Admin broadcast (Phase 7): service announcements, maintenance, offers. */
+  ANNOUNCEMENT = "ANNOUNCEMENT",
 }
 
 /** Push delivery outcome, recorded on the in-app notification. */

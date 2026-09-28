@@ -15,6 +15,8 @@ import { VehiclesService } from "../vehicles/vehicles.service";
 import type { VehicleSummary } from "../vehicles/vehicles.service";
 import { RidesAdminService } from "../rides/rides-admin.service";
 import type { AdminRideStats } from "../rides/rides-admin.service";
+import { ReportsService } from "../reports/reports.service";
+import { ReportPreset } from "../reports/report-range";
 
 export interface DashboardReport {
   pendingDrivers: number;
@@ -27,6 +29,23 @@ export interface DashboardReport {
   /** Phase 5: the dashboard's safety and support cards. */
   safety: SosSummary;
   support: ComplaintSummary;
+  /** The selected period (default: today in APP_TIME_ZONE). */
+  period: {
+    preset: ReportPreset;
+    from: Date;
+    to: Date;
+    days: number;
+    requested: number;
+    completed: number;
+    cancelled: number;
+    completedRideValue: number;
+    collected: number;
+    platformCommission: number;
+    newCustomers: number;
+  };
+  totals: { customers: number; approvedDrivers: number };
+  /** One row per day of the period; a 1-day period shows the last 7 days for context. */
+  trend: Array<{ date: string; requested: number; completed: number; cancelled: number; revenue: number }>;
 }
 
 export interface DriverListItem {
@@ -68,19 +87,40 @@ export class AdminService {
     private readonly sos: SosService,
     private readonly complaints: ComplaintsService,
     private readonly config: ConfigService,
+    private readonly reports: ReportsService,
   ) {}
 
-  async dashboard(): Promise<DashboardReport> {
-    const [counts, rides, safety, support] = await Promise.all([
+  async dashboard(query: { preset?: ReportPreset; from?: string; to?: string } = {}): Promise<DashboardReport> {
+    const custom = Boolean(query.from || query.to);
+    const range = this.reports.range({ preset: custom ? undefined : (query.preset ?? ReportPreset.TODAY), from: query.from, to: query.to });
+    const trendRange = range.days.length > 1 ? range : this.reports.range({ preset: ReportPreset.LAST_7_DAYS });
+    const [counts, rides, safety, support, today, trend] = await Promise.all([
       this.drivers.countByStatus(),
       this.rides.stats(),
       this.sos.summary(),
       this.complaints.summary(startOfDayInTimeZone(new Date(), this.config.getOrThrow<string>("appTimeZone"))),
+      this.reports.overview(range),
+      this.reports.trend(trendRange),
     ]);
     return {
       rides,
       safety,
       support,
+      period: {
+        preset: range.preset,
+        from: range.from,
+        to: range.to,
+        days: range.days.length,
+        requested: today.rides.requested,
+        completed: today.rides.completed,
+        cancelled: today.rides.cancelled,
+        completedRideValue: today.money.completedRideValue,
+        collected: today.money.collected,
+        platformCommission: today.money.platformCommission,
+        newCustomers: today.customers.new,
+      },
+      totals: { customers: today.customers.total, approvedDrivers: today.drivers.approved },
+      trend,
       pendingDrivers: counts[DriverStatus.PENDING],
       underReviewDrivers: counts[DriverStatus.UNDER_REVIEW],
       approvedDrivers: counts[DriverStatus.APPROVED],
@@ -163,6 +203,27 @@ export class AdminService {
       userId: driver.userId.toString(),
       approved: false,
       reason,
+    });
+    return this.drivers.toSummary(driver);
+  }
+
+  async suspendDriver(driverId: string, adminUserId: string, reason: string): Promise<DriverSummary> {
+    const driver = await this.drivers.suspend(driverId, adminUserId, reason);
+    this.domainEvents.emit("driver.status_changed", {
+      driverId: driver._id.toString(),
+      userId: driver.userId.toString(),
+      suspended: true,
+      reason,
+    });
+    return this.drivers.toSummary(driver);
+  }
+
+  async reinstateDriver(driverId: string): Promise<DriverSummary> {
+    const driver = await this.drivers.reinstate(driverId);
+    this.domainEvents.emit("driver.status_changed", {
+      driverId: driver._id.toString(),
+      userId: driver.userId.toString(),
+      suspended: false,
     });
     return this.drivers.toSummary(driver);
   }

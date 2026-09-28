@@ -58,4 +58,44 @@ describe("ride state machine", () => {
       expect(canTransition(status, RideStatus.CANCELLED)).toBe(true);
     expect(CUSTOMER_CANCELLABLE_STATUSES).not.toContain(RideStatus.RIDE_STARTED);
   });
+
+  // ── Phase 7: exhaustive coverage of the transition table ────────────────
+
+  const ALLOWED = new Set<string>([
+    `${RideStatus.SEARCHING}>${RideStatus.DRIVER_ASSIGNED}`,
+    `${RideStatus.SEARCHING}>${RideStatus.CANCELLED}`,
+    `${RideStatus.SEARCHING}>${RideStatus.NO_DRIVER_AVAILABLE}`,
+    `${RideStatus.DRIVER_ASSIGNED}>${RideStatus.DRIVER_ACCEPTED}`,
+    `${RideStatus.DRIVER_ASSIGNED}>${RideStatus.SEARCHING}`,
+    `${RideStatus.DRIVER_ASSIGNED}>${RideStatus.CANCELLED}`,
+    `${RideStatus.DRIVER_ACCEPTED}>${RideStatus.DRIVER_ARRIVED}`,
+    `${RideStatus.DRIVER_ACCEPTED}>${RideStatus.CANCELLED}`,
+    `${RideStatus.DRIVER_ARRIVED}>${RideStatus.RIDE_STARTED}`,
+    `${RideStatus.DRIVER_ARRIVED}>${RideStatus.CANCELLED}`,
+    `${RideStatus.RIDE_STARTED}>${RideStatus.COMPLETED}`,
+  ]);
+  const ALL_PAIRS = Object.values(RideStatus).flatMap((from) => Object.values(RideStatus).map((to) => [from, to] as const));
+
+  it.each(ALL_PAIRS)("%s → %s matches the locked transition table", (from, to) => {
+    expect(canTransition(from, to)).toBe(ALLOWED.has(`${from}>${to}`));
+  });
+
+  it.each([
+    ["complete a ride that was only requested", RideStatus.SEARCHING, RideStatus.COMPLETED],
+    ["start a completed ride", RideStatus.COMPLETED, RideStatus.RIDE_STARTED],
+    ["cancel a completed ride", RideStatus.COMPLETED, RideStatus.CANCELLED],
+    ["start a cancelled ride", RideStatus.CANCELLED, RideStatus.RIDE_STARTED],
+    ["complete a cancelled ride", RideStatus.CANCELLED, RideStatus.COMPLETED],
+    ["cancel an already cancelled ride", RideStatus.CANCELLED, RideStatus.CANCELLED],
+    ["cancel a ride in progress", RideStatus.RIDE_STARTED, RideStatus.CANCELLED],
+    ["revive an unmatched ride", RideStatus.NO_DRIVER_AVAILABLE, RideStatus.DRIVER_ASSIGNED],
+  ])("refuses to %s", (_label, from, to) => {
+    expect(() => assertTransition(from, to)).toThrow(`Illegal ride transition ${from} → ${to}`);
+  });
+
+  it("never lets a driver cancel before accepting (they reject instead)", () => {
+    expect(DRIVER_CANCELLABLE_STATUSES).not.toContain(RideStatus.SEARCHING);
+    expect(DRIVER_CANCELLABLE_STATUSES).not.toContain(RideStatus.DRIVER_ASSIGNED);
+    expect(DRIVER_CANCELLABLE_STATUSES).not.toContain(RideStatus.RIDE_STARTED);
+  });
 });

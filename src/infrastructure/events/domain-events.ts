@@ -21,6 +21,13 @@ export interface RideSnapshot {
   currency: string;
   cancelledBy?: RideActorType;
   cancellationReason?: string;
+  /** Phase 7: promo applied at booking, and its (final, once completed) discount. */
+  promoCode?: string;
+  promoDiscount?: number;
+  /** What the customer pays when it differs from the fare (promo). */
+  payableFare?: number;
+  cancellationFee?: number;
+  zoneId?: string;
 }
 
 export interface RideTransitionedEvent {
@@ -53,6 +60,14 @@ export interface DriverReviewedEvent {
   reason?: string;
 }
 
+/** An admin suspended an approved driver, or reinstated a suspended one (Phase 7). */
+export interface DriverStatusChangedEvent {
+  driverId: string;
+  userId: string;
+  suspended: boolean;
+  reason?: string;
+}
+
 export interface UserLoggedOutEvent {
   userId: string;
   deviceId?: string;
@@ -68,6 +83,7 @@ export interface DomainEventMap {
   "ride.driver_arriving": RideDriverArrivingEvent;
   "ride.payment_updated": RidePaymentUpdatedEvent;
   "driver.reviewed": DriverReviewedEvent;
+  "driver.status_changed": DriverStatusChangedEvent;
   "auth.logged_out": UserLoggedOutEvent;
 }
 

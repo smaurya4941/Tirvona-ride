@@ -99,6 +99,14 @@ describe("Phase 2 — basic ride booking (e2e)", () => {
       MONGODB_DB_NAME: "tirvona_ride_phase2",
       REDIS_URL: "",
       THROTTLE_LIMIT: "5000",
+      // Per-route auth/OTP limits are exercised by phase7.e2e-spec.ts.
+      THROTTLE_AUTH_LIMIT: "1000",
+      THROTTLE_OTP_SEND_LIMIT: "1000",
+      THROTTLE_OTP_VERIFY_LIMIT: "1000",
+      THROTTLE_REFRESH_LIMIT: "1000",
+      THROTTLE_ADMIN_LOGIN_LIMIT: "1000",
+      THROTTLE_PROMO_LIMIT: "1000",
+      BROADCAST_WORKER_INTERVAL_MS: "0",
       JWT_ACCESS_SECRET: randomBytes(48).toString("base64url"),
       JWT_REFRESH_SECRET: randomBytes(48).toString("base64url"),
       MATCHING_SWEEP_INTERVAL_MS: "0",
@@ -166,7 +174,7 @@ describe("Phase 2 — basic ride booking (e2e)", () => {
   let rideOneEstimate: number;
 
   describe("Ride types, pricing and estimates", () => {
-    it("seeds Bike, Auto and Cab", async () => {
+    it("seeds Bike, Auto and Cab as bookable (E-Rickshaw waits for a tariff)", async () => {
       const response = await api().get("/api/v1/ride-types").set(as("customerA")).expect(200);
       expect(response.body.data.map((type: { code: string }) => type.code)).toEqual(["BIKE", "AUTO", "CAB"]);
     });
@@ -211,7 +219,10 @@ describe("Phase 2 — basic ride booking (e2e)", () => {
       const same = await api().post("/api/v1/rides/estimate").set(as("customerA")).send(trip("AUTO", PREM_MANDIR, PREM_MANDIR)).expect(400);
       expect(same.body.code).toBe("RIDE_TOO_SHORT");
       await api().post("/api/v1/rides/estimate").set(as("customerA")).send(trip("AUTO", { ...PREM_MANDIR, latitude: 123 })).expect(400);
-      await api().post("/api/v1/rides/estimate").set(as("customerA")).send(trip("TRUCK")).expect(400);
+      // Ride type codes are data since Phase 7: malformed → 400, unknown → 404.
+    await api().post("/api/v1/rides/estimate").set(as("customerA")).send(trip("truck!")).expect(400);
+    const unknown = await api().post("/api/v1/rides/estimate").set(as("customerA")).send(trip("TRUCK")).expect(404);
+    expect(unknown.body.code).toBe("RIDE_TYPE_NOT_FOUND");
       await api().post("/api/v1/rides/estimate").set(as("autoNear")).send(trip("AUTO")).expect(403);
       await api().post("/api/v1/rides/estimate").send(trip("AUTO")).expect(401);
     });
@@ -321,7 +332,8 @@ describe("Phase 2 — basic ride booking (e2e)", () => {
         .expect(200);
       expect(cancelled.body.data).toMatchObject({
         status: "CANCELLED",
-        cancellation: { cancelledBy: "CUSTOMER", reason: "Plans changed" },
+        // Free text from older app builds is recorded under the OTHER reason.
+        cancellation: { cancelledBy: "CUSTOMER", reason: "Other: Plans changed", reasonCode: "OTHER" },
       });
       expect((await dashboardOf("autoNear")).isAvailable).toBe(true);
     });
@@ -470,7 +482,7 @@ describe("Phase 2 — basic ride booking (e2e)", () => {
 
     it("changes pricing for new estimates only", async () => {
       const rows = (await api().get("/api/v1/admin/pricing").set(as("admin")).expect(200)).body.data;
-      expect(rows.map((row: { rideType: { code: string } }) => row.rideType.code)).toEqual(["BIKE", "AUTO", "CAB"]);
+      expect(rows.map((row: { rideType: { code: string } }) => row.rideType.code)).toEqual(["BIKE", "AUTO", "E_RICKSHAW", "CAB"]);
 
       await api().patch("/api/v1/admin/pricing/AUTO").set(as("admin")).send({ baseFare: -5 }).expect(400);
       await api().patch("/api/v1/admin/pricing/AUTO").set(as("admin")).send({ perKmRate: 10.555 }).expect(400);

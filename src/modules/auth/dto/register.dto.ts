@@ -39,11 +39,13 @@ export class RegisterDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsEmail()
+  @Length(3, 254)
   email?: string;
 
   @ApiProperty()
   @IsString()
   @MinLength(8)
+  @Length(8, 128)
   @Matches(STRONG_PASSWORD, {
     message:
       "password must contain an uppercase letter, a lowercase letter, a number and a symbol",
@@ -57,15 +59,18 @@ export class RegisterDto {
   @ApiPropertyOptional({ description: "Opaque client-generated device id" })
   @IsOptional()
   @IsString()
+  @Length(1, 200)
   deviceId?: string;
 
   @ApiPropertyOptional({ example: "android" })
   @IsOptional()
   @IsString()
+  @Length(1, 200)
   deviceType?: string;
 
   @ApiPropertyOptional({ example: "Pixel 8" })
   @IsOptional()
   @IsString()
+  @Length(1, 200)
   deviceName?: string;
 }

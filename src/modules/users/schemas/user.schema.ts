@@ -1,4 +1,5 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
+import { SchemaTypes, Types } from "mongoose";
 import type { HydratedDocument } from "mongoose";
 import { UserRole } from "../../../common/types/user-role.enum";
 
@@ -50,6 +51,16 @@ export class User {
 
   @Prop()
   lastLoginAt?: Date;
+
+  // ── Admin account actions (Phase 7) ───────────────────────────────────
+  @Prop({ trim: true })
+  statusReason?: string;
+
+  @Prop()
+  statusChangedAt?: Date;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: "User" })
+  statusChangedBy?: Types.ObjectId;
 }
 
 export type UserDocument = HydratedDocument<User>;
@@ -59,3 +70,5 @@ UserSchema.index({ phone: 1 }, { unique: true });
 UserSchema.index({ email: 1 }, { unique: true, sparse: true });
 UserSchema.index({ role: 1 });
 UserSchema.index({ status: 1 });
+// Admin customer/driver lists and "new customers" reports.
+UserSchema.index({ role: 1, createdAt: -1 });

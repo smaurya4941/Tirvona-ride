@@ -1,9 +1,9 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Ip, Post } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
-import { Throttle } from "@nestjs/throttler";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Public } from "../../common/decorators/public.decorator";
 import { ok } from "../../common/http/api-response";
+import { ThrottlePolicy } from "../../common/throttle/throttle-policies";
 import type { ApiSuccessBody } from "../../common/http/api-response";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import type { AuthSession, AuthUserView } from "./auth.service";
@@ -20,6 +20,7 @@ export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
   @Public()
+  @ThrottlePolicy("auth")
   @Post("register")
   @ApiOperation({ summary: "Register a customer or driver account" })
   async register(
@@ -36,7 +37,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ThrottlePolicy("auth")
   @Post("login")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Log in with phone and password" })
@@ -54,6 +55,7 @@ export class AuthController {
   }
 
   @Public()
+  @ThrottlePolicy("refresh")
   @Post("refresh")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Exchange a refresh token for a new token pair" })
@@ -68,6 +70,7 @@ export class AuthController {
   }
 
   @Public()
+  @ThrottlePolicy("refresh")
   @Post("logout")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Revoke a refresh token / end a session" })
@@ -79,7 +82,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ThrottlePolicy("otpSend")
   @Post("send-otp")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Send a verification code (logged in dev)" })
@@ -91,7 +94,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ThrottlePolicy("otpVerify")
   @Post("verify-otp")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Verify a phone number with its OTP" })

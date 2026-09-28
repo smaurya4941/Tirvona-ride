@@ -54,6 +54,13 @@ export class DriverEarning {
   @Prop({ required: true, min: 0, immutable: true })
   grossFarePaise!: number;
 
+  /**
+   * Promo discount the customer received on this ride (Phase 7). Funded by
+   * the platform: gross/commission/net are on the full fare regardless.
+   */
+  @Prop({ min: 0, default: 0, immutable: true })
+  promoDiscountPaise?: number;
+
   @Prop({ required: true, enum: CommissionType, immutable: true })
   commissionType!: CommissionType;
 
@@ -116,4 +123,6 @@ DriverEarningSchema.index({ driverId: 1, rideCompletedAt: -1 });
 DriverEarningSchema.index({ driverId: 1, status: 1 });
 // Settlement-window promotion sweep.
 DriverEarningSchema.index({ status: 1, availableAt: 1 });
+// Reports: ledger totals for rides completed in a date range (Phase 7).
+DriverEarningSchema.index({ rideCompletedAt: -1 });
 DriverEarningSchema.index({ payoutId: 1 }, { sparse: true });

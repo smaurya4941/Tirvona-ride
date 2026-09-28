@@ -11,6 +11,10 @@ import { DriverLocationService } from "../locations/driver-location.service";
 import { CheckpointKind } from "../locations/schemas/driver-location-checkpoint.schema";
 import { MatchingService } from "../matching/matching.service";
 import { calculateFare } from "../pricing/fare-calculator";
+import { CancellationsService } from "../cancellations/cancellations.service";
+import type { CancellationPreview, ResolvedReason } from "../cancellations/cancellations.service";
+import { CancellationFeeStatus } from "../cancellations/schemas/cancellation.schemas";
+import { computeDiscount } from "../promotions/promo-rules";
 import { RideDispatchService } from "./ride-dispatch.service";
 import { rideConflict, rideNotFound } from "./ride-errors";
 import { RideEventsService } from "./ride-events.service";
@@ -51,6 +55,7 @@ export class RideLifecycleService {
     private readonly views: RideViewService,
     private readonly locations: DriverLocationService,
     private readonly events: RideEventsService,
+    private readonly cancellations: CancellationsService,
     config: ConfigService,
   ) {
     this.otpTtlMs = config.getOrThrow<number>("rideOtpTtlMinutes") * 60_000;
@@ -202,6 +207,10 @@ export class RideLifecycleService {
     // Phase 2 has no trip tracking, so the booked distance/duration stand in
     // for actuals; Phase 3 feeds real telemetry into the same calculation.
     const finalFare = calculateFare(ride.fare, ride.distanceMeters, ride.durationSeconds).total;
+    // A promo applied at booking is priced again on the final fare with the
+    // rules frozen on the ride (the admin may have edited the promo since).
+    const discount = ride.promo ? computeDiscount(ride.promo, finalFare) : 0;
+    const payableFare = finalFare - discount;
 
     const completed = await this.transitions.apply({
       rideId: ride._id,
@@ -213,10 +222,11 @@ export class RideLifecycleService {
       set: {
         completedAt: new Date(),
         "fare.finalFare": finalFare,
-        paymentStatus: finalFare > 0 ? RidePaymentStatus.PENDING : RidePaymentStatus.NOT_REQUIRED,
+        ...(ride.promo ? { "fare.discount": discount, "fare.payableFare": payableFare } : {}),
+        paymentStatus: payableFare > 0 ? RidePaymentStatus.PENDING : RidePaymentStatus.NOT_REQUIRED,
       },
       actor: this.actorFor(driverUserId, RideActorType.DRIVER),
-      metadata: { finalFare },
+      metadata: ride.promo ? { finalFare, discount, payableFare, promoCode: ride.promo.code } : { finalFare },
     });
     if (!completed) throw await this.explainDriverActionFailure(rideId, driver, "complete");
 
@@ -228,10 +238,34 @@ export class RideLifecycleService {
 
   // ── Cancellation ──────────────────────────────────────────────────────
 
+  /** What the cancel sheet shows: allowed?, reasons for this actor, and any fee right now. */
+  async cancellationPreview(user: AuthenticatedUser, rideId: string): Promise<CancellationPreview> {
+    const isDriver = user.role === UserRole.DRIVER;
+    const driver = isDriver ? await this.driverFor(user.userId) : undefined;
+    const owner: QueryFilter<Ride> = driver ? { driverId: driver._id } : { customerId: new Types.ObjectId(user.userId) };
+    const ride = await this.rideModel.findOne({ ...owner, _id: rideId }).exec();
+    if (!ride) throw rideNotFound();
+    const cancellable = (isDriver ? DRIVER_CANCELLABLE_STATUSES : CUSTOMER_CANCELLABLE_STATUSES).includes(ride.status);
+    return this.cancellations.preview({
+      actor: isDriver ? RideActorType.DRIVER : RideActorType.CUSTOMER,
+      status: ride.status,
+      cancellable,
+      acceptedAt: ride.acceptedAt,
+      fare: ride.fare.estimatedFare,
+      currency: ride.fare.currency,
+    });
+  }
+
+  /**
+   * Cancellation: identify the actor → check the ride state → validate the
+   * reason → assess the fee (server policy) → compare-and-set to CANCELLED
+   * with the fee on the ride → record the cancellation → free the driver.
+   * Notifications and promo release follow from the ride.transitioned event.
+   */
   async cancel(
     user: AuthenticatedUser,
     rideId: string,
-    reason?: string,
+    input: { reasonCode?: string; note?: string } = {},
   ): Promise<CustomerRideView | DriverRideView> {
     const isDriver = user.role === UserRole.DRIVER;
     const driver = isDriver ? await this.driverFor(user.userId) : undefined;
@@ -240,6 +274,7 @@ export class RideLifecycleService {
       : { customerId: new Types.ObjectId(user.userId) };
     const cancellable = isDriver ? DRIVER_CANCELLABLE_STATUSES : CUSTOMER_CANCELLABLE_STATUSES;
     const actor = this.actorFor(user.userId, isDriver ? RideActorType.DRIVER : RideActorType.CUSTOMER);
+    let reason: ResolvedReason | undefined;
 
     // Optimistic loop: the status can move under us (driver accepts while the
     // customer taps cancel). Re-read and re-check rather than guess.
@@ -255,6 +290,20 @@ export class RideLifecycleService {
           "RIDE_NOT_CANCELLABLE",
         );
 
+      // Validated only once the ride is known to be cancellable, so a wrong
+      // state is reported as such rather than as a bad reason.
+      reason ??= await this.cancellations.resolveReason(actor.type, input.reasonCode, input.note);
+      // Assessed against the status we are about to leave; the transition is
+      // conditional on that same status, so the fee cannot go stale.
+      const fee = await this.cancellations.assess({
+        actor: actor.type,
+        status: ride.status,
+        acceptedAt: ride.acceptedAt,
+        fare: ride.fare.estimatedFare,
+      });
+      const feeAmount = fee.applies ? fee.amount : 0;
+      const reasonText = reason.note ? `${reason.label}: ${reason.note}` : reason.label;
+
       const cancelled = await this.transitions.apply({
         rideId: ride._id,
         from: ride.status,
@@ -262,13 +311,31 @@ export class RideLifecycleService {
         where: owner,
         set: {
           cancelledAt: new Date(),
-          cancellation: { cancelledBy: actor.type, cancelledByUserId: actor.userId, reason },
+          cancellation: {
+            cancelledBy: actor.type,
+            cancelledByUserId: actor.userId,
+            reason: reasonText,
+            reasonCode: reason.code,
+            note: reason.note,
+            feeAmount,
+            feeStatus: feeAmount > 0 ? CancellationFeeStatus.DUE : CancellationFeeStatus.NOT_APPLICABLE,
+          },
         },
         unset: ["otpCode", "otpExpiresAt", "assignmentExpiresAt"],
         actor,
-        reason,
+        reason: reasonText,
+        metadata: { reasonCode: reason.code, ...(feeAmount > 0 ? { cancellationFee: feeAmount, policyVersion: fee.policyVersion } : {}) },
       });
       if (!cancelled) continue;
+
+      await this.cancellations.record(cancelled, {
+        cancelledBy: actor.type,
+        cancelledByUserId: actor.userId as Types.ObjectId,
+        reason,
+        statusAtCancellation: ride.status,
+        feeAmount,
+        policyVersion: fee.policyVersion,
+      });
 
       if (ride.driverId) {
         await this.matching.release(ride.driverId, ride._id);

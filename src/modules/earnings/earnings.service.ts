@@ -36,6 +36,8 @@ export interface RecordEarningInput {
   destinationAddress?: string;
   rideCompletedAt: Date;
   grossFarePaise: number;
+  /** Platform-funded promo discount on this ride (Phase 7), paise. */
+  promoDiscountPaise?: number;
   currency: string;
   paymentMode: PaymentMode;
   paymentMethod?: string;
@@ -46,6 +48,8 @@ export interface StatusTotalsRow {
   _id: EarningStatus;
   amount: number;
   commission: number;
+  /** Promo discounts on these lines (paise). */
+  discount?: number;
 }
 
 /** `$group` stage producing StatusTotalsRow. */
@@ -53,6 +57,7 @@ export const STATUS_TOTALS = {
   _id: "$status",
   amount: { $sum: "$netEarningPaise" },
   commission: { $sum: "$commissionPaise" },
+  discount: { $sum: { $ifNull: ["$promoDiscountPaise", 0] } },
 } as const;
 
 interface WindowTotals {
@@ -132,6 +137,7 @@ export class EarningsService {
         rideCompletedAt: input.rideCompletedAt,
         currency: input.currency,
         grossFarePaise: split.grossFarePaise,
+        promoDiscountPaise: input.promoDiscountPaise ?? 0,
         commissionType: CommissionType.PERCENTAGE,
         commissionRate: split.commissionRate,
         commissionPaise: split.commissionPaise,
@@ -274,6 +280,7 @@ export class EarningsService {
       rideCompletedAt: earning.rideCompletedAt,
       currency: earning.currency,
       grossFare: toRupees(earning.grossFarePaise),
+      promoDiscount: toRupees(earning.promoDiscountPaise ?? 0),
       commissionType: earning.commissionType,
       commissionRate: earning.commissionRate,
       commissionAmount: toRupees(earning.commissionPaise),
@@ -298,7 +305,10 @@ export class EarningsService {
       available: of(EarningStatus.AVAILABLE),
       paid: of(EarningStatus.PAID),
       collected: of(EarningStatus.COLLECTED),
-      commissionDue: toRupees(row(EarningStatus.COLLECTED)?.commission ?? 0),
+      // On a cash ride with a promo the driver collected fare − discount, so
+      // the platform owes the discount back: it is netted against commission
+      // (negative = Tirvona owes the driver).
+      commissionDue: toRupees((row(EarningStatus.COLLECTED)?.commission ?? 0) - (row(EarningStatus.COLLECTED)?.discount ?? 0)),
     };
   }
 

@@ -3,7 +3,7 @@ import type { OnModuleInit } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
 import { Types } from "mongoose";
-import { apiBadRequest, apiNotFound } from "../../common/exceptions/api.exception";
+import { apiBadRequest, apiConflict, apiNotFound } from "../../common/exceptions/api.exception";
 import { RideTypeCode } from "../ride-types/schemas/ride-type.schema";
 import type { UpdatePricingDto } from "./dto/update-pricing.dto";
 import { calculateFare } from "./fare-calculator";
@@ -13,7 +13,7 @@ import type { PricingConfigDocument } from "./schemas/pricing-config.schema";
 
 export interface PricingSummary extends PricingRates {
   id: string;
-  rideType: RideTypeCode;
+  rideType: string;
   version: number;
   updatedAt: Date;
 }
@@ -23,7 +23,9 @@ export interface PricedFare extends FareBreakdown {
 }
 
 // Launch tariffs — seeded once, then owned by admins through the panel.
-const DEFAULT_PRICING: Record<RideTypeCode, Omit<PricingRates, "currency">> = {
+// E_RICKSHAW deliberately has none: its tariff is a business decision that
+// an admin enters before activating the ride type.
+const DEFAULT_PRICING: Partial<Record<RideTypeCode, Omit<PricingRates, "currency">>> = {
   [RideTypeCode.BIKE]: { baseFare: 20, perKmRate: 6, perMinuteRate: 1, minimumFare: 30 },
   [RideTypeCode.AUTO]: { baseFare: 30, perKmRate: 10, perMinuteRate: 1.5, minimumFare: 40 },
   [RideTypeCode.CAB]: { baseFare: 50, perKmRate: 14, perMinuteRate: 2, minimumFare: 80 },
@@ -46,7 +48,7 @@ export class PricingService implements OnModuleInit {
 
   async seedDefaults(): Promise<void> {
     for (const [rideType, rates] of Object.entries(DEFAULT_PRICING) as Array<
-      [RideTypeCode, (typeof DEFAULT_PRICING)[RideTypeCode]]
+      [RideTypeCode, Omit<PricingRates, "currency">]
     >) {
       try {
         const result = await this.pricingModel
@@ -78,12 +80,14 @@ export class PricingService implements OnModuleInit {
   }
 
   async listAll(): Promise<PricingConfigDocument[]> {
-    const configs = await this.pricingModel.find().exec();
-    const order = Object.values(RideTypeCode);
-    return configs.sort((a, b) => order.indexOf(a.rideType) - order.indexOf(b.rideType));
+    return this.pricingModel.find().sort({ rideType: 1 }).exec();
   }
 
-  async getConfig(rideType: RideTypeCode): Promise<PricingConfigDocument> {
+  async findConfig(rideType: string): Promise<PricingConfigDocument | null> {
+    return this.pricingModel.findOne({ rideType }).exec();
+  }
+
+  async getConfig(rideType: string): Promise<PricingConfigDocument> {
     const config = await this.pricingModel.findOne({ rideType }).exec();
     if (!config)
       throw apiNotFound(`Pricing is not configured for ${rideType}`, "PRICING_NOT_CONFIGURED");
@@ -92,7 +96,7 @@ export class PricingService implements OnModuleInit {
 
   /** Prices a trip with the tariff that is active right now. */
   async priceTrip(
-    rideType: RideTypeCode,
+    rideType: string,
     distanceMeters: number,
     durationSeconds: number,
   ): Promise<PricedFare> {
@@ -103,8 +107,32 @@ export class PricingService implements OnModuleInit {
     };
   }
 
+  /** First tariff of a new ride type (every rate required). */
+  async create(
+    rideType: string,
+    rates: Omit<PricingRates, "currency">,
+    adminUserId: string,
+  ): Promise<PricingConfigDocument> {
+    try {
+      return await this.pricingModel.create({
+        rideType,
+        currency: "INR",
+        version: 1,
+        baseFare: rates.baseFare,
+        perKmRate: rates.perKmRate,
+        perMinuteRate: rates.perMinuteRate,
+        minimumFare: rates.minimumFare,
+        updatedBy: new Types.ObjectId(adminUserId),
+      });
+    } catch (error) {
+      if (isDuplicateKey(error))
+        throw apiConflict(`A tariff for ${rideType} already exists`, "VALIDATION_FAILED");
+      throw error;
+    }
+  }
+
   async update(
-    rideType: RideTypeCode,
+    rideType: string,
     dto: UpdatePricingDto,
     adminUserId: string,
   ): Promise<PricingConfigDocument> {

@@ -35,6 +35,8 @@ export interface EarningView {
   rideCompletedAt: Date;
   currency: string;
   grossFare: number;
+  /** Platform-funded promo discount the customer received (rupees). */
+  promoDiscount: number;
   commissionType: CommissionType;
   /** Percent captured when the earning was recorded. */
   commissionRate: number;

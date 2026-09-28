@@ -26,6 +26,10 @@ export interface RideFareView {
   minimumFareApplied: boolean;
   estimatedFare: number;
   finalFare?: number;
+  /** Promo discount (estimate until completion), rupees. */
+  discount?: number;
+  /** What the customer pays after the discount; absent when no promo. */
+  payableFare?: number;
 }
 
 export interface RidePaymentView {
@@ -50,6 +54,8 @@ export interface RideView {
   distanceMeters: number;
   durationSeconds: number;
   routeProvider: string;
+  /** Pickup → destination road path (Google encoded polyline); absent for straight-line routes. */
+  routePolyline?: string;
   fare: RideFareView;
   requestedAt: Date;
   assignedAt?: Date;
@@ -61,7 +67,16 @@ export interface RideView {
   expiredAt?: Date;
   /** Only while SEARCHING — lets the app show how long it will keep trying. */
   searchExpiresAt?: Date;
-  cancellation?: { cancelledBy: RideActorType; reason?: string };
+  cancellation?: {
+    cancelledBy: RideActorType;
+    reason?: string;
+    reasonCode?: string;
+    feeAmount?: number;
+    /** NOT_APPLICABLE | DUE | WAIVED | COLLECTED */
+    feeStatus?: string;
+  };
+  promo?: { code: string; title: string; discount: number };
+  zone?: { id: string; name: string };
   /** Money state (Phase 4). COMPLETED + PENDING/FAILED means "pay now". */
   paymentStatus: RidePaymentStatus;
   payment?: RidePaymentView;
@@ -132,6 +147,7 @@ export class RideViewService {
       distanceMeters: ride.distanceMeters,
       durationSeconds: ride.durationSeconds,
       routeProvider: ride.routeProvider,
+      routePolyline: ride.routePolyline,
       fare: {
         currency: ride.fare.currency,
         baseFare: ride.fare.baseFare,
@@ -144,6 +160,8 @@ export class RideViewService {
         minimumFareApplied: ride.fare.minimumFareApplied,
         estimatedFare: ride.fare.estimatedFare,
         finalFare: ride.fare.finalFare,
+        discount: ride.fare.discount,
+        payableFare: ride.fare.payableFare,
       },
       requestedAt: ride.requestedAt,
       assignedAt: ride.assignedAt,
@@ -155,8 +173,18 @@ export class RideViewService {
       expiredAt: ride.expiredAt,
       searchExpiresAt: ride.status === RideStatus.SEARCHING ? ride.searchExpiresAt : undefined,
       cancellation: ride.cancellation
-        ? { cancelledBy: ride.cancellation.cancelledBy, reason: ride.cancellation.reason }
+        ? {
+            cancelledBy: ride.cancellation.cancelledBy,
+            reason: ride.cancellation.reason,
+            reasonCode: ride.cancellation.reasonCode,
+            feeAmount: ride.cancellation.feeAmount,
+            feeStatus: ride.cancellation.feeStatus,
+          }
         : undefined,
+      promo: ride.promo
+        ? { code: ride.promo.code, title: ride.promo.title, discount: ride.fare.discount ?? ride.promo.estimatedDiscount }
+        : undefined,
+      zone: ride.zoneId && ride.zoneName ? { id: ride.zoneId.toString(), name: ride.zoneName } : undefined,
       paymentStatus: effectivePaymentStatus(ride),
       payment: ride.payment
         ? {

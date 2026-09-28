@@ -6,6 +6,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { DriversModule } from "../drivers/drivers.module";
 import { UsersModule } from "../users/users.module";
+import { AdminAuthController } from "./admin-auth.controller";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { OtpService } from "./otp.service";
@@ -28,7 +29,7 @@ import { TokenService } from "./token.service";
     UsersModule,
     DriversModule,
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, AdminAuthController],
   providers: [
     AuthService,
     TokenService,

@@ -20,7 +20,7 @@ import type {
   ReverseGeocodedPlace,
 } from "./places.types";
 import { GeocodingProvider } from "./providers/geocoding.provider";
-import { TtlCache } from "./ttl-cache";
+import { TtlCache } from "../../common/cache/ttl-cache";
 
 type ProviderSuggestion = Omit<PlaceSuggestion, "featured">;
 

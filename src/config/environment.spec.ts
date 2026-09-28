@@ -188,6 +188,26 @@ describe("validateEnvironment", () => {
     expect(() => validateEnvironment({ PHOTON_MIN_INTERVAL_MS: "-5" })).toThrow("PHOTON_MIN_INTERVAL_MS");
     expect(() => validateEnvironment({ PLACES_FEATURED_RADIUS_KM: "0" })).toThrow("PLACES_FEATURED_RADIUS_KM");
   });
+
+  it("picks Google Routes only when its key is set, and validates routing options", () => {
+    expect(environment_({}).routesProvider).toBe("haversine");
+    expect(environment_({ GOOGLE_ROUTES_API_KEY: " key " })).toMatchObject({
+      routesProvider: "google",
+      googleRoutesApiKey: "key",
+      routesTravelMode: "DRIVE",
+      routesTrafficAware: false,
+    });
+    expect(environment_({ GOOGLE_ROUTES_API_KEY: "key", ROUTES_PROVIDER: "haversine" }).routesProvider).toBe(
+      "haversine",
+    );
+    expect(() => validateEnvironment({ ROUTES_PROVIDER: "osrm" })).toThrow("ROUTES_PROVIDER");
+    expect(() => validateEnvironment({ ROUTES_PROVIDER: "google" })).toThrow("GOOGLE_ROUTES_API_KEY");
+    expect(() => validateEnvironment({ ROUTES_PROVIDER: "google", GOOGLE_ROUTES_API_KEY: "key" })).not.toThrow();
+    expect(() => validateEnvironment({ ROUTES_TRAVEL_MODE: "walk" })).toThrow("ROUTES_TRAVEL_MODE");
+    expect(() => validateEnvironment({ ROUTES_TRAVEL_MODE: "two_wheeler" })).not.toThrow();
+    expect(() => validateEnvironment({ ROUTES_TIMEOUT_MS: "0" })).toThrow("ROUTES_TIMEOUT_MS");
+    expect(() => validateEnvironment({ ROUTES_LIVE_REFRESH_METERS: "-1" })).toThrow("ROUTES_LIVE_REFRESH_METERS");
+  });
 });
 
 describe("environment", () => {

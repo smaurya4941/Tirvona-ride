@@ -7,6 +7,7 @@ import type { ApiSuccessBody } from "../../common/http/api-response";
 import { ParseObjectIdPipe } from "../../common/pipes/parse-object-id.pipe";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
+import { AuditLogService } from "../audit/audit-log.service";
 import { RidesAdminService } from "../rides/rides-admin.service";
 import type { AdminRideDetail, AdminRideListItem } from "../rides/rides-admin.service";
 import type { Page } from "../rides/rides.service";
@@ -17,7 +18,10 @@ import { AdminCancelRideDto, AdminListRidesQueryDto } from "./dto/admin-rides.dt
 @Roles(UserRole.ADMIN)
 @Controller({ path: "admin/rides", version: "1" })
 export class AdminRidesController {
-  constructor(private readonly rides: RidesAdminService) {}
+  constructor(
+    private readonly rides: RidesAdminService,
+    private readonly audit: AuditLogService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: "List rides with filters and pagination" })
@@ -39,6 +43,16 @@ export class AdminRidesController {
     @CurrentUser() admin: AuthenticatedUser,
     @Body() dto: AdminCancelRideDto,
   ): Promise<ApiSuccessBody<AdminRideDetail>> {
-    return ok(await this.rides.cancel(id, admin.userId, dto.reason));
+    const detail = await this.rides.cancel(id, admin.userId, dto.reason, dto.reasonCode);
+    await this.audit.record({
+      adminId: admin.userId,
+      action: "ride.cancel",
+      targetType: "RIDE",
+      targetId: id,
+      targetLabel: detail.ride.rideCode,
+      reason: dto.reason,
+      metadata: { reasonCode: dto.reasonCode ?? "OTHER" },
+    });
+    return ok(detail);
   }
 }

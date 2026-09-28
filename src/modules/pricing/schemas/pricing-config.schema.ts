@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { SchemaTypes, Types } from "mongoose";
 import type { HydratedDocument } from "mongoose";
-import { RideTypeCode } from "../../ride-types/schemas/ride-type.schema";
+import { RIDE_TYPE_CODE_PATTERN } from "../../ride-types/schemas/ride-type.schema";
 
 /**
  * One active tariff per ride type. Amounts are rupees with at most two
@@ -11,8 +11,8 @@ import { RideTypeCode } from "../../ride-types/schemas/ride-type.schema";
  */
 @Schema({ timestamps: true, collection: "pricing_configs" })
 export class PricingConfig {
-  @Prop({ required: true, enum: RideTypeCode })
-  rideType!: RideTypeCode;
+  @Prop({ required: true, match: RIDE_TYPE_CODE_PATTERN })
+  rideType!: string;
 
   @Prop({ required: true, default: "INR" })
   currency!: string;

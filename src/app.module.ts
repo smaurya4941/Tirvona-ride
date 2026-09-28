@@ -6,12 +6,19 @@ import { LoggerModule } from "nestjs-pino";
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { HttpThrottlerGuard } from "./common/guards/http-throttler.guard";
+import { configureThrottlePolicies } from "./common/throttle/throttle-policies";
 import { environment, validateEnvironment } from "./config/environment";
+import type { Environment } from "./config/environment";
 import { DatabaseModule } from "./infrastructure/database/database.module";
 import { DomainEventsModule } from "./infrastructure/events/domain-events.module";
 import { RedisModule } from "./infrastructure/redis/redis.module";
 import { AdminModule } from "./modules/admin/admin.module";
+import { AuditModule } from "./modules/audit/audit.module";
 import { AuthModule } from "./modules/auth/auth.module";
+import { CancellationsModule } from "./modules/cancellations/cancellations.module";
+import { PromotionsModule } from "./modules/promotions/promotions.module";
+import { ReportsModule } from "./modules/reports/reports.module";
+import { ZonesModule } from "./modules/zones/zones.module";
 import { ComplaintsModule } from "./modules/complaints/complaints.module";
 import { DriversModule } from "./modules/drivers/drivers.module";
 import { EarningsModule } from "./modules/earnings/earnings.module";
@@ -93,13 +100,30 @@ const ENV_FILES: Record<string, string[]> = {
     }),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => [
-        {
-          name: "default",
-          ttl: config.getOrThrow<number>("throttleTtlMs"),
-          limit: config.getOrThrow<number>("throttleLimit"),
-        },
-      ],
+      useFactory: (config: ConfigService<Environment, true>) => {
+        // Stricter per-route policies (login, OTP, refresh, admin login, promo).
+        configureThrottlePolicies({
+          throttleAuthLimit: config.get("throttleAuthLimit", { infer: true }),
+          throttleAuthTtlMs: config.get("throttleAuthTtlMs", { infer: true }),
+          throttleOtpSendLimit: config.get("throttleOtpSendLimit", { infer: true }),
+          throttleOtpSendTtlMs: config.get("throttleOtpSendTtlMs", { infer: true }),
+          throttleOtpVerifyLimit: config.get("throttleOtpVerifyLimit", { infer: true }),
+          throttleOtpVerifyTtlMs: config.get("throttleOtpVerifyTtlMs", { infer: true }),
+          throttleRefreshLimit: config.get("throttleRefreshLimit", { infer: true }),
+          throttleRefreshTtlMs: config.get("throttleRefreshTtlMs", { infer: true }),
+          throttleAdminLoginLimit: config.get("throttleAdminLoginLimit", { infer: true }),
+          throttleAdminLoginTtlMs: config.get("throttleAdminLoginTtlMs", { infer: true }),
+          throttlePromoLimit: config.get("throttlePromoLimit", { infer: true }),
+          throttlePromoTtlMs: config.get("throttlePromoTtlMs", { infer: true }),
+        });
+        return [
+          {
+            name: "default",
+            ttl: config.get("throttleTtlMs", { infer: true }),
+            limit: config.get("throttleLimit", { infer: true }),
+          },
+        ];
+      },
     }),
     DatabaseModule,
     RedisModule,
@@ -127,6 +151,12 @@ const ENV_FILES: Record<string, string[]> = {
     ComplaintsModule,
     // Place search for the booking flow (autocomplete, reverse geocoding)
     PlacesModule,
+    // Phase 7 — zones, promotions, cancellations, reports, admin audit trail
+    AuditModule,
+    ZonesModule,
+    PromotionsModule,
+    CancellationsModule,
+    ReportsModule,
     AdminModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: HttpThrottlerGuard }],

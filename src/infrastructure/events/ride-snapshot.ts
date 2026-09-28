@@ -17,5 +17,10 @@ export function rideSnapshot(ride: RideDocument): RideSnapshot {
     currency: ride.fare.currency,
     cancelledBy: ride.cancellation?.cancelledBy,
     cancellationReason: ride.cancellation?.reason,
+    promoCode: ride.promo?.code,
+    promoDiscount: ride.fare.discount,
+    payableFare: ride.fare.payableFare,
+    cancellationFee: ride.cancellation?.feeAmount,
+    zoneId: ride.zoneId?.toString(),
   };
 }

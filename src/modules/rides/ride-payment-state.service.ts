@@ -83,7 +83,7 @@ export class RidePaymentStateService {
             },
           },
         },
-        { $group: { _id: null, rides: { $sum: 1 }, amount: { $sum: "$fare.finalFare" } } },
+        { $group: { _id: null, rides: { $sum: 1 }, amount: { $sum: { $ifNull: ["$fare.payableFare", "$fare.finalFare"] } } } },
       ])
       .exec();
     return { rides: row?.rides ?? 0, amount: row?.amount ?? 0 };

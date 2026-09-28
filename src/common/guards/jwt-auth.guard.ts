@@ -4,7 +4,8 @@ import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
-import { apiUnauthorized } from "../exceptions/api.exception";
+import { apiForbidden, apiUnauthorized } from "../exceptions/api.exception";
+import { AccountStatusService } from "../../modules/users/account-status.service";
 import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
 import type { AuthenticatedRequest } from "../types/authenticated-request";
 import type { JwtAccessPayload } from "../types/jwt-payload";
@@ -18,6 +19,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
     private readonly reflector: Reflector,
+    private readonly accounts: AccountStatusService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -35,8 +37,9 @@ export class JwtAuthGuard implements CanActivate {
     if (!token)
       throw apiUnauthorized("Authentication required", "AUTH_UNAUTHORIZED");
 
+    let payload: JwtAccessPayload;
     try {
-      const payload = await this.jwtService.verifyAsync<JwtAccessPayload>(
+      payload = await this.jwtService.verifyAsync<JwtAccessPayload>(
         token,
         {
           secret: this.config.getOrThrow<string>("jwtAccessSecret"),
@@ -44,17 +47,22 @@ export class JwtAuthGuard implements CanActivate {
           audience: this.config.get<string>("jwtAudience"),
         },
       );
-      (request as AuthenticatedRequest).user = {
-        userId: payload.sub,
-        role: payload.role,
-      };
-      return true;
     } catch {
       throw apiUnauthorized(
         "Your session has expired. Please sign in again.",
         "AUTH_TOKEN_EXPIRED",
       );
     }
+    // A valid token is not enough: a blocked (or deleted) account is locked
+    // out at once rather than when its access token expires.
+    if (!(await this.accounts.isAllowed(payload.sub)))
+      throw apiForbidden("This account has been blocked", "USER_BLOCKED");
+
+    (request as AuthenticatedRequest).user = {
+      userId: payload.sub,
+      role: payload.role,
+    };
+    return true;
   }
 
   private extractToken(request: Request): string | undefined {

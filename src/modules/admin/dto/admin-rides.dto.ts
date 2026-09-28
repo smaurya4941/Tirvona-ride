@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsEnum, IsInt, IsOptional, IsString, Length, Max, Min } from "class-validator";
-import { RideTypeCode } from "../../ride-types/schemas/ride-type.schema";
+import { IsEnum, IsInt, IsOptional, IsString, Length, Matches, Max, Min } from "class-validator";
+import { RIDE_TYPE_CODE_PATTERN } from "../../ride-types/schemas/ride-type.schema";
 import { RideStatus } from "../../rides/ride-state-machine";
 
 export class AdminListRidesQueryDto {
@@ -26,10 +26,10 @@ export class AdminListRidesQueryDto {
   @IsEnum(RideStatus)
   status?: RideStatus;
 
-  @ApiPropertyOptional({ enum: RideTypeCode })
+  @ApiPropertyOptional({ example: "AUTO" })
   @IsOptional()
-  @IsEnum(RideTypeCode)
-  rideType?: RideTypeCode;
+  @Matches(RIDE_TYPE_CODE_PATTERN)
+  rideType?: string;
 
   @ApiPropertyOptional({ description: "Ride code prefix, ride id, or customer phone" })
   @IsOptional()
@@ -39,6 +39,11 @@ export class AdminListRidesQueryDto {
 }
 
 export class AdminCancelRideDto {
+  @ApiPropertyOptional({ example: "CUSTOMER_REQUEST", description: "ADMIN cancellation reason code (defaults to OTHER)" })
+  @IsOptional()
+  @Matches(/^[A-Z][A-Z0-9_]{1,39}$/)
+  reasonCode?: string;
+
   @ApiProperty({ example: "Customer called support to cancel" })
   @IsString()
   @Length(3, 240)
