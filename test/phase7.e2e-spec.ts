@@ -55,8 +55,8 @@ const EXPECTED_PUBLIC_ROUTES = [
   "POST /auth/login",
   "POST /auth/refresh",
   "POST /auth/logout",
-  "POST /auth/send-otp",
   "POST /auth/verify-otp",
+  "POST /auth/resend-otp",
   "POST /admin/auth/login",
   "POST /payments/webhook",
   "POST /payments/webhook/razorpay",
@@ -379,10 +379,13 @@ describe("Phase 7 — admin completion & hardening (e2e)", () => {
 
   describe("Rate limiting", () => {
     it("limits OTP sends per client (THROTTLE_OTP_SEND_LIMIT)", async () => {
-      // Distinct numbers: OtpService also enforces its own per-phone resend cooldown.
-      await api().post("/api/v1/auth/send-otp").send({ phone: "+919870000091" }).expect(200);
-      await api().post("/api/v1/auth/send-otp").send({ phone: "+919870000092" }).expect(200);
-      await api().post("/api/v1/auth/send-otp").send({ phone: "+919870000093" }).expect(429);
+      // The per-IP throttle runs before the handler: unknown sign-ups still
+      // spend the budget (OtpService adds its own per-number limits).
+      const resend = (phone: string) =>
+        api().post("/api/v1/auth/resend-otp").send({ phone, verificationId: "x".repeat(43) });
+      await resend("+919870000091").expect(400);
+      await resend("+919870000092").expect(400);
+      await resend("+919870000093").expect(429);
       // Other routes have their own budget.
       await api().post("/api/v1/auth/login").send({ phone: PHONES.customerA, password: PASSWORD }).expect(200);
     });

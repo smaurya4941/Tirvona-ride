@@ -5,17 +5,8 @@ import { UserStatus } from "../users/schemas/user.schema";
 import type { UserSummary } from "../users/users.service";
 import { UsersService } from "../users/users.service";
 import { DriversService } from "../drivers/drivers.service";
-import {
-  apiConflict,
-  apiForbidden,
-  apiUnauthorized,
-} from "../../common/exceptions/api.exception";
+import { apiForbidden, apiUnauthorized } from "../../common/exceptions/api.exception";
 import { LoginDto } from "./dto/login.dto";
-import { RegisterDto } from "./dto/register.dto";
-import { SendOtpDto } from "./dto/send-otp.dto";
-import { VerifyOtpDto } from "./dto/verify-otp.dto";
-import { OtpPurpose } from "./schemas/otp-verification.schema";
-import { OtpService } from "./otp.service";
 import type { DeviceMetadata } from "./token.service";
 import { TokenService } from "./token.service";
 
@@ -38,35 +29,13 @@ export class AuthService {
     private readonly users: UsersService,
     private readonly drivers: DriversService,
     private readonly tokens: TokenService,
-    private readonly otp: OtpService,
     private readonly domainEvents: DomainEventsService,
   ) {}
 
-  async register(dto: RegisterDto, device: DeviceMetadata): Promise<AuthSession> {
-    if (await this.users.existsByPhoneOrEmail(dto.phone, dto.email))
-      throw apiConflict(
-        "An account with this phone or email already exists",
-        "USER_ALREADY_EXISTS",
-      );
-
-    const user = await this.users.create({
-      phone: dto.phone,
-      email: dto.email,
-      password: dto.password,
-      role: dto.role,
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-    });
-
-    if (dto.role === UserRole.DRIVER)
-      await this.drivers.createProfileForUser(user._id.toString());
-
-    const tokens = await this.tokens.issueTokenPair(
-      user._id.toString(),
-      user.role,
-      device,
-    );
-    return { user: await this.buildUserView(user._id.toString()), ...tokens };
+  /** Issues a token pair for a user who just proved who they are. */
+  async startSession(userId: string, role: UserRole, device: DeviceMetadata): Promise<AuthSession> {
+    const tokens = await this.tokens.issueTokenPair(userId, role, device);
+    return { user: await this.buildUserView(userId), ...tokens };
   }
 
   async login(dto: LoginDto, device: DeviceMetadata): Promise<AuthSession> {
@@ -138,21 +107,11 @@ export class AuthService {
     }
   }
 
-  async sendOtp(dto: SendOtpDto): Promise<void> {
-    await this.otp.send(dto.phone, OtpPurpose.PHONE_VERIFICATION);
-  }
-
-  async verifyOtp(dto: VerifyOtpDto): Promise<void> {
-    await this.otp.verify(dto.phone, OtpPurpose.PHONE_VERIFICATION, dto.otp);
-    const user = await this.users.findByPhoneWithPassword(dto.phone);
-    if (user) await this.users.markPhoneVerified(user._id.toString());
-  }
-
   async me(userId: string): Promise<AuthUserView> {
     return this.buildUserView(userId);
   }
 
-  private async buildUserView(userId: string): Promise<AuthUserView> {
+  async buildUserView(userId: string): Promise<AuthUserView> {
     const user = await this.users.findById(userId);
     const summary = this.users.toSummary(user);
     if (summary.role !== UserRole.DRIVER) return summary;

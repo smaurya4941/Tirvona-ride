@@ -73,8 +73,20 @@ export class UsersService {
     return (await this.userModel.exists(query)) !== null;
   }
 
+  async existsByPhone(phone: string): Promise<boolean> {
+    return (await this.userModel.exists({ phone })) !== null;
+  }
+
+  async existsByEmail(email: string): Promise<boolean> {
+    return (await this.userModel.exists({ email: email.trim().toLowerCase() })) !== null;
+  }
+
+  async hashPassword(password: string): Promise<string> {
+    return argon2.hash(password);
+  }
+
   async create(input: CreateUserInput): Promise<UserDocument> {
-    const passwordHash = await argon2.hash(input.password);
+    const passwordHash = await this.hashPassword(input.password);
     return this.userModel.create({
       phone: input.phone,
       email: input.email,
@@ -84,6 +96,29 @@ export class UsersService {
       lastName: input.lastName,
       status: UserStatus.ACTIVE,
     });
+  }
+
+  /**
+   * Creates the account of a signup whose WhatsApp code was just verified:
+   * the password was hashed when the form was submitted, and the phone is
+   * verified from the first moment the user exists.
+   */
+  async createVerified(input: Omit<CreateUserInput, "password"> & { passwordHash: string }): Promise<UserDocument> {
+    return this.userModel.create({
+      phone: input.phone,
+      email: input.email,
+      passwordHash: input.passwordHash,
+      role: input.role,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      status: UserStatus.ACTIVE,
+      isPhoneVerified: true,
+    });
+  }
+
+  /** Compensation only: undoes an account whose signup could not finish. */
+  async deleteById(userId: string): Promise<void> {
+    await this.userModel.deleteOne({ _id: userId }).exec();
   }
 
   async verifyPassword(user: UserDocument, password: string): Promise<boolean> {

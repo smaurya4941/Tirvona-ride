@@ -45,16 +45,16 @@ describe("Phase 1 — done tests (e2e)", () => {
     phone: string,
     firstName: string,
   ): Promise<{ accessToken: string; refreshToken: string }> {
+    // Signup = register (WhatsApp code sent) + verify-otp (account created, signed in).
     const registered = await api()
       .post("/api/v1/auth/register")
       .send({ firstName, lastName: "Test", phone, password: PASSWORD, role })
-      .expect(201);
-    await api().post("/api/v1/auth/send-otp").send({ phone }).expect(200);
-    await api()
+      .expect(202);
+    const verified = await api()
       .post("/api/v1/auth/verify-otp")
-      .send({ phone, otp: otps.get(phone) })
+      .send({ phone, otp: otps.get(phone), verificationId: registered.body.data.verificationId })
       .expect(200);
-    return registered.body.data;
+    return verified.body.data;
   }
 
   async function login(phone: string): Promise<{ accessToken: string; refreshToken: string; user: Record<string, unknown> }> {
@@ -94,7 +94,7 @@ describe("Phase 1 — done tests (e2e)", () => {
   }
 
   beforeAll(async () => {
-    // Capture dev OTPs from OtpService's log line: "[DEV OTP] >>> 123456 <<< for <phone> (...)".
+    // Capture dev OTPs from LogWhatsAppGateway's line: "[DEV OTP] >>> 123456 <<< for <phone> (...)".
     jest.spyOn(Logger.prototype, "log").mockImplementation((message: unknown) => {
       const match = /\[DEV OTP\] >>> (\d{6}) <<< for (\+\d+)/.exec(String(message));
       if (match) otps.set(match[2], match[1]);
@@ -180,12 +180,12 @@ describe("Phase 1 — done tests (e2e)", () => {
         .expect(400);
     });
 
-    it("rejects a duplicate phone with USER_ALREADY_EXISTS", async () => {
+    it("rejects a duplicate phone with PHONE_ALREADY_REGISTERED", async () => {
       const response = await api()
         .post("/api/v1/auth/register")
         .send({ firstName: "Dup", phone: PHONES.customer, password: PASSWORD, role: "CUSTOMER" })
         .expect(409);
-      expect(response.body).toMatchObject({ success: false, code: "USER_ALREADY_EXISTS" });
+      expect(response.body).toMatchObject({ success: false, code: "PHONE_ALREADY_REGISTERED" });
     });
 
     it("answers a wrong password with the generic AUTH_INVALID_CREDENTIALS", async () => {
@@ -202,10 +202,17 @@ describe("Phase 1 — done tests (e2e)", () => {
     });
 
     it("rejects an incorrect OTP", async () => {
-      await api().post("/api/v1/auth/send-otp").send({ phone: "+919822222222" }).expect(200);
+      const registered = await api()
+        .post("/api/v1/auth/register")
+        .send({ firstName: "Wrong", phone: "+919822222222", password: PASSWORD, role: "CUSTOMER" })
+        .expect(202);
       const response = await api()
         .post("/api/v1/auth/verify-otp")
-        .send({ phone: "+919822222222", otp: otps.get("+919822222222") === "000000" ? "111111" : "000000" })
+        .send({
+          phone: "+919822222222",
+          otp: otps.get("+919822222222") === "000000" ? "111111" : "000000",
+          verificationId: registered.body.data.verificationId,
+        })
         .expect(400);
       expect(response.body.code).toBe("OTP_INVALID");
     });

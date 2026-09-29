@@ -11,6 +11,9 @@ const productionInput = (): Record<string, unknown> => ({
   RAZORPAY_KEY_SECRET: "live-secret-value",
   RAZORPAY_WEBHOOK_SECRET: "webhook-secret-value",
   PUBLIC_BASE_URL: "https://ride-api.tirvona.com",
+  WHATSAPP_PHONE_NUMBER_ID: "123456789012345",
+  WHATSAPP_ACCESS_TOKEN: "EAAG-permanent-system-user-token",
+  OTP_HASH_SECRET: "c".repeat(32),
 });
 
 describe("validateEnvironment", () => {
@@ -65,6 +68,40 @@ describe("validateEnvironment", () => {
     expect(
       environment_({ MATCHING_DRIVER_HEARTBEAT_SECONDS: "90" }).driverLocationStaleSeconds,
     ).toBe(90);
+  });
+
+  it("requires a real WhatsApp sender and an OTP hash secret in production", () => {
+    const withoutToken = productionInput();
+    delete withoutToken.WHATSAPP_ACCESS_TOKEN;
+    expect(() => validateEnvironment(withoutToken)).toThrow("WHATSAPP_PROVIDER must be meta");
+    expect(() => validateEnvironment({ ...productionInput(), WHATSAPP_PROVIDER: "log" })).toThrow(
+      "WHATSAPP_PROVIDER must be meta",
+    );
+    expect(() => validateEnvironment({ ...productionInput(), OTP_HASH_SECRET: "short" })).toThrow("OTP_HASH_SECRET");
+  });
+
+  it("validates the WhatsApp and OTP settings", () => {
+    expect(() => validateEnvironment({ WHATSAPP_PROVIDER: "sms" })).toThrow("WHATSAPP_PROVIDER");
+    expect(() => validateEnvironment({ WHATSAPP_PROVIDER: "meta", WHATSAPP_ACCESS_TOKEN: "t" })).toThrow(
+      "WHATSAPP_PHONE_NUMBER_ID is required",
+    );
+    expect(() =>
+      validateEnvironment({ WHATSAPP_ACCESS_TOKEN: "t", WHATSAPP_PHONE_NUMBER_ID: "+919876543210" }),
+    ).toThrow("numeric Phone Number ID");
+    expect(() => validateEnvironment({ WHATSAPP_API_VERSION: "23" })).toThrow("WHATSAPP_API_VERSION");
+    expect(() => validateEnvironment({ WHATSAPP_OTP_TEMPLATE_NAME: "Signup OTP" })).toThrow("WHATSAPP_OTP_TEMPLATE_NAME");
+    expect(() => validateEnvironment({ WHATSAPP_OTP_TEMPLATE_LANGUAGE: "english" })).toThrow("LANGUAGE");
+    expect(() => validateEnvironment({ OTP_TTL_SECONDS: "30" })).toThrow("OTP_TTL_SECONDS");
+    expect(() => validateEnvironment({ OTP_RESEND_COOLDOWN_SECONDS: "300" })).toThrow("shorter than OTP_TTL_SECONDS");
+    expect(() => validateEnvironment({ OTP_SEND_WINDOW_MINUTES: "1" })).toThrow("OTP_SEND_WINDOW_MINUTES");
+    expect(() => validateEnvironment({ SIGNUP_PENDING_TTL_MINUTES: "1" })).toThrow("SIGNUP_PENDING_TTL_MINUTES");
+  });
+
+  it("uses Meta only when an access token is configured", () => {
+    expect(environment_({}).whatsappProvider).toBe("log");
+    expect(environment_({ WHATSAPP_ACCESS_TOKEN: "t" }).whatsappProvider).toBe("meta");
+    expect(environment_({}).otpTtlSeconds).toBe(300);
+    expect(environment_({}).otpResendCooldownSeconds).toBe(60);
   });
 
   it("accepts a complete production environment", () => {

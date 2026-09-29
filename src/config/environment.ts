@@ -136,6 +136,8 @@ export interface Environment {
   // Phase 7
   throttleAuthLimit: number;
   throttleAuthTtlMs: number;
+  throttleSignupLimit: number;
+  throttleSignupTtlMs: number;
   throttleOtpSendLimit: number;
   throttleOtpSendTtlMs: number;
   throttleOtpVerifyLimit: number;
@@ -149,7 +151,28 @@ export interface Environment {
   broadcastWorkerIntervalMs: number;
   broadcastBatchSize: number;
   reportMaxRangeDays: number;
+  // Signup OTP over WhatsApp (docs/auth/whatsapp-otp.md)
+  whatsappProvider: WhatsAppProviderName;
+  whatsappApiBaseUrl: string;
+  whatsappApiVersion: string;
+  whatsappPhoneNumberId: string;
+  whatsappBusinessAccountId: string;
+  whatsappAccessToken: string;
+  whatsappOtpTemplateName: string;
+  whatsappOtpTemplateLanguage: string;
+  whatsappOtpTemplateCodeButton: boolean;
+  whatsappTimeoutMs: number;
+  otpTtlSeconds: number;
+  otpMaxAttempts: number;
+  otpResendCooldownSeconds: number;
+  otpMaxSendsPerWindow: number;
+  otpSendWindowMinutes: number;
+  otpHashSecret: string;
+  signupPendingTtlMinutes: number;
 }
+
+export const WHATSAPP_PROVIDERS = ["meta", "log"] as const;
+export type WhatsAppProviderName = (typeof WHATSAPP_PROVIDERS)[number];
 
 export const PLACES_PROVIDERS = ["osm", "photon", "nominatim", "google", "none"] as const;
 export type PlacesProviderName = (typeof PLACES_PROVIDERS)[number];
@@ -465,7 +488,11 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
   // Stricter than THROTTLE_LIMIT, which covers ordinary authenticated calls.
   throttleAuthLimit: integer(env.THROTTLE_AUTH_LIMIT, 10),
   throttleAuthTtlMs: integer(env.THROTTLE_AUTH_TTL_MS, 60_000),
-  // SMS costs money and can be used to harass a number: 3 codes / 10 min.
+  // Every signup sends a paid WhatsApp message: per-IP budget on top of the
+  // per-number OTP quota.
+  throttleSignupLimit: integer(env.THROTTLE_SIGNUP_LIMIT, 10),
+  throttleSignupTtlMs: integer(env.THROTTLE_SIGNUP_TTL_MS, 600_000),
+  // WhatsApp messages cost money and can be used to harass a number.
   throttleOtpSendLimit: integer(env.THROTTLE_OTP_SEND_LIMIT, 3),
   throttleOtpSendTtlMs: integer(env.THROTTLE_OTP_SEND_TTL_MS, 600_000),
   throttleOtpVerifyLimit: integer(env.THROTTLE_OTP_VERIFY_LIMIT, 10),
@@ -481,6 +508,35 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
   broadcastWorkerIntervalMs: integer(env.BROADCAST_WORKER_INTERVAL_MS, 30_000),
   broadcastBatchSize: integer(env.BROADCAST_BATCH_SIZE, 500),
   reportMaxRangeDays: integer(env.REPORT_MAX_RANGE_DAYS, 366),
+
+  // ── Signup OTP over WhatsApp (Meta Cloud API) ─────────────────────────
+  // "meta" whenever an access token is set; "log" prints codes to the
+  // server log and is refused in production.
+  whatsappProvider: ((env.WHATSAPP_PROVIDER || "").trim().toLowerCase() ||
+    (env.WHATSAPP_ACCESS_TOKEN?.trim() ? "meta" : "log")) as WhatsAppProviderName,
+  whatsappApiBaseUrl: stripTrailingSlashes((env.WHATSAPP_API_BASE_URL || "https://graph.facebook.com").trim()),
+  whatsappApiVersion: (env.WHATSAPP_API_VERSION || "v23.0").trim(),
+  whatsappPhoneNumberId: (env.WHATSAPP_PHONE_NUMBER_ID || "").trim(),
+  whatsappBusinessAccountId: (env.WHATSAPP_BUSINESS_ACCOUNT_ID || "").trim(),
+  whatsappAccessToken: (env.WHATSAPP_ACCESS_TOKEN || "").trim(),
+  whatsappOtpTemplateName: (env.WHATSAPP_OTP_TEMPLATE_NAME || "tirvona_signup_otp").trim(),
+  whatsappOtpTemplateLanguage: (env.WHATSAPP_OTP_TEMPLATE_LANGUAGE || "en").trim(),
+  // Authentication templates with a copy-code / one-tap button need the
+  // code repeated as the button parameter.
+  whatsappOtpTemplateCodeButton: boolean(env.WHATSAPP_OTP_TEMPLATE_CODE_BUTTON, true),
+  whatsappTimeoutMs: integer(env.WHATSAPP_TIMEOUT_MS, 10_000),
+  // Must match the template's "code expires in N minutes" setting in Meta.
+  otpTtlSeconds: integer(env.OTP_TTL_SECONDS, 300),
+  otpMaxAttempts: integer(env.OTP_MAX_ATTEMPTS, 5),
+  otpResendCooldownSeconds: integer(env.OTP_RESEND_COOLDOWN_SECONDS, 60),
+  // Per phone number: at most this many codes per rolling window.
+  otpMaxSendsPerWindow: integer(env.OTP_MAX_SENDS_PER_WINDOW, 5),
+  otpSendWindowMinutes: integer(env.OTP_SEND_WINDOW_MINUTES, 60),
+  // HMAC key for stored OTP hashes (a bare hash of a 6-digit code is
+  // reversible from a DB dump in milliseconds). Required in production.
+  otpHashSecret: (env.OTP_HASH_SECRET || env.JWT_ACCESS_SECRET || "tirvona-dev-otp-hash-secret").trim(),
+  // How long a submitted sign-up form waits for its OTP (resends included).
+  signupPendingTtlMinutes: integer(env.SIGNUP_PENDING_TTL_MINUTES, 30),
 });
 
 export const environment = (): Environment => environmentFrom(process.env);
@@ -535,6 +591,8 @@ const POSITIVE_INTEGERS = [
   "PLACES_CACHE_MAX_ENTRIES",
   "THROTTLE_AUTH_LIMIT",
   "THROTTLE_AUTH_TTL_MS",
+  "THROTTLE_SIGNUP_LIMIT",
+  "THROTTLE_SIGNUP_TTL_MS",
   "THROTTLE_OTP_SEND_LIMIT",
   "THROTTLE_OTP_SEND_TTL_MS",
   "THROTTLE_OTP_VERIFY_LIMIT",
@@ -549,6 +607,13 @@ const POSITIVE_INTEGERS = [
   "REPORT_MAX_RANGE_DAYS",
   "TRIP_METER_MAX_GAP_SECONDS",
   "PAYMENT_RECONCILIATION_MAX_DAYS",
+  "WHATSAPP_TIMEOUT_MS",
+  "OTP_TTL_SECONDS",
+  "OTP_MAX_ATTEMPTS",
+  "OTP_RESEND_COOLDOWN_SECONDS",
+  "OTP_MAX_SENDS_PER_WINDOW",
+  "OTP_SEND_WINDOW_MINUTES",
+  "SIGNUP_PENDING_TTL_MINUTES",
 ];
 
 const POSITIVE_DECIMALS = [
@@ -774,7 +839,53 @@ export function validateEnvironment(
       throw new Error(`${name} must be a valid ${protocols.join(" or ")} URL`);
   }
 
+  // Signup OTP: a known WhatsApp provider, complete Meta credentials when it
+  // is used, and OTP windows that fit inside each other.
+  if (!(WHATSAPP_PROVIDERS as readonly string[]).includes(resolved.whatsappProvider))
+    throw new Error(`WHATSAPP_PROVIDER must be one of ${WHATSAPP_PROVIDERS.join(", ")}`);
+  if (resolved.whatsappProvider === "meta") {
+    for (const name of ["WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_ACCESS_TOKEN"]) {
+      if (!isSet(input[name])) throw new Error(`${name} is required when WHATSAPP_PROVIDER=meta`);
+    }
+  }
+  if (isSet(input.WHATSAPP_PHONE_NUMBER_ID) && !/^\d{5,32}$/.test(resolved.whatsappPhoneNumberId))
+    throw new Error("WHATSAPP_PHONE_NUMBER_ID must be the numeric Phone Number ID from Meta (not the phone number)");
+  if (isSet(input.WHATSAPP_BUSINESS_ACCOUNT_ID) && !/^\d{5,32}$/.test(resolved.whatsappBusinessAccountId))
+    throw new Error("WHATSAPP_BUSINESS_ACCOUNT_ID must be numeric");
+  if (!/^v\d+\.\d+$/.test(resolved.whatsappApiVersion))
+    throw new Error("WHATSAPP_API_VERSION must look like v23.0");
+  if (!/^[a-z0-9_]{1,512}$/.test(resolved.whatsappOtpTemplateName))
+    throw new Error("WHATSAPP_OTP_TEMPLATE_NAME must contain only lowercase letters, digits and underscores");
+  if (!/^[a-z]{2,3}(_[A-Z]{2})?$/.test(resolved.whatsappOtpTemplateLanguage))
+    throw new Error("WHATSAPP_OTP_TEMPLATE_LANGUAGE must be a Meta language code such as en or en_US");
+  if (isSet(input.WHATSAPP_API_BASE_URL)) {
+    let protocol = "";
+    try {
+      protocol = new URL(resolved.whatsappApiBaseUrl).protocol;
+    } catch {
+      protocol = "";
+    }
+    if (!["http:", "https:"].includes(protocol)) throw new Error("WHATSAPP_API_BASE_URL must be a valid HTTP(S) URL");
+    if (nodeEnv === "production" && protocol !== "https:")
+      throw new Error("WHATSAPP_API_BASE_URL must be an HTTPS URL in production");
+  }
+  if (resolved.otpTtlSeconds < 60 || resolved.otpTtlSeconds > 1_800)
+    throw new Error("OTP_TTL_SECONDS must be between 60 and 1800");
+  if (resolved.otpMaxAttempts > 10) throw new Error("OTP_MAX_ATTEMPTS must be at most 10");
+  if (resolved.otpResendCooldownSeconds >= resolved.otpTtlSeconds)
+    throw new Error("OTP_RESEND_COOLDOWN_SECONDS must be shorter than OTP_TTL_SECONDS");
+  if (resolved.otpSendWindowMinutes * 60 < resolved.otpResendCooldownSeconds * resolved.otpMaxSendsPerWindow)
+    throw new Error("OTP_SEND_WINDOW_MINUTES is too short for OTP_MAX_SENDS_PER_WINDOW resends at the cooldown");
+  if (resolved.signupPendingTtlMinutes * 60 < resolved.otpTtlSeconds)
+    throw new Error("SIGNUP_PENDING_TTL_MINUTES must cover at least one OTP lifetime (OTP_TTL_SECONDS)");
+
   if (nodeEnv === "production") {
+    // Signup cannot work without a real WhatsApp sender, and dev codes in
+    // the server log must never reach production.
+    if (resolved.whatsappProvider !== "meta")
+      throw new Error("WHATSAPP_PROVIDER must be meta in production");
+    if (String(input.OTP_HASH_SECRET ?? "").trim().length < 32)
+      throw new Error("OTP_HASH_SECRET must contain at least 32 characters in production");
     // Redis is deliberately not required: Phase 3 runs realtime on MongoDB +
     // a single Socket.IO node. It becomes required with the Redis adapter.
     // PAYMENTS_ENABLED=false is an explicit opt-out for deployments without a

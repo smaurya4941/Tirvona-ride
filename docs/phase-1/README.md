@@ -50,8 +50,9 @@ All under `/api/v1`. Every route requires a bearer token unless marked public.
 
 | Method | Path                                             | Access           |
 | ------ | ------------------------------------------------ | ---------------- |
-| POST   | `/auth/register` · `/auth/login` · `/auth/refresh` · `/auth/logout` | public |
-| POST   | `/auth/send-otp` · `/auth/verify-otp`           | public, throttled |
+| POST   | `/auth/register` · `/auth/verify-otp` · `/auth/resend-otp` | public, throttled — WhatsApp signup OTP, see `docs/auth/whatsapp-otp.md` |
+| POST   | `/auth/login` · `/auth/refresh` · `/auth/logout` | public |
+| POST   | `/auth/phone/send-otp` · `/auth/phone/verify-otp` | signed in (accounts created before signup OTP) |
 | GET    | `/auth/me`                                       | any role         |
 | GET/PATCH | `/users/me` · PATCH `/users/me/password`      | any role         |
 | GET/PATCH | `/drivers/me`                                 | DRIVER           |

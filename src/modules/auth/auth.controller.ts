@@ -11,29 +11,60 @@ import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
 import { RefreshTokenDto } from "./dto/refresh-token.dto";
 import { RegisterDto } from "./dto/register.dto";
-import { SendOtpDto } from "./dto/send-otp.dto";
+import { PhoneOtpDto } from "./dto/otp-code.dto";
+import { ResendOtpDto } from "./dto/resend-otp.dto";
 import { VerifyOtpDto } from "./dto/verify-otp.dto";
+import type { OtpChallengeView, SignupChallengeView } from "./signup.service";
+import { SignupService } from "./signup.service";
 
 @ApiTags("Auth")
 @Controller({ path: "auth", version: "1" })
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly signup: SignupService,
+  ) {}
 
   @Public()
-  @ThrottlePolicy("auth")
+  @ThrottlePolicy("signup")
   @Post("register")
-  @ApiOperation({ summary: "Register a customer or driver account" })
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({
+    summary: "Start a customer or driver signup: sends a 6-digit code to the number on WhatsApp",
+    description: "No account exists until POST /auth/verify-otp succeeds with the returned verificationId.",
+  })
   async register(
     @Body() dto: RegisterDto,
     @Ip() ip: string,
+  ): Promise<ApiSuccessBody<SignupChallengeView>> {
+    return ok(await this.signup.register(dto, ip));
+  }
+
+  @Public()
+  @ThrottlePolicy("otpVerify")
+  @Post("verify-otp")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Verify the signup code: creates the account and signs the user in" })
+  async verifyOtp(
+    @Body() dto: VerifyOtpDto,
+    @Ip() ip: string,
   ): Promise<ApiSuccessBody<AuthSession>> {
-    const session = await this.auth.register(dto, {
+    const session = await this.signup.verify(dto, {
       deviceId: dto.deviceId,
       deviceType: dto.deviceType,
       deviceName: dto.deviceName,
       ipAddress: ip,
     });
     return ok(session);
+  }
+
+  @Public()
+  @ThrottlePolicy("otpSend")
+  @Post("resend-otp")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Send a new signup code on WhatsApp (earlier codes stop working)" })
+  async resendOtp(@Body() dto: ResendOtpDto): Promise<ApiSuccessBody<SignupChallengeView>> {
+    return ok(await this.signup.resend(dto));
   }
 
   @Public()
@@ -81,28 +112,25 @@ export class AuthController {
     return ok({ loggedOut: true });
   }
 
-  @Public()
   @ThrottlePolicy("otpSend")
-  @Post("send-otp")
+  @Post("phone/send-otp")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Send a verification code (logged in dev)" })
-  async sendOtp(
-    @Body() dto: SendOtpDto,
-  ): Promise<ApiSuccessBody<{ sent: true }>> {
-    await this.auth.sendOtp(dto);
-    return ok({ sent: true });
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Send a WhatsApp code to verify the signed-in account's own number (accounts created before signup OTP)" })
+  async sendPhoneOtp(@CurrentUser() user: AuthenticatedUser): Promise<ApiSuccessBody<OtpChallengeView>> {
+    return ok(await this.signup.sendExistingAccountCode(user.userId));
   }
 
-  @Public()
   @ThrottlePolicy("otpVerify")
-  @Post("verify-otp")
+  @Post("phone/verify-otp")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Verify a phone number with its OTP" })
-  async verifyOtp(
-    @Body() dto: VerifyOtpDto,
-  ): Promise<ApiSuccessBody<{ verified: true }>> {
-    await this.auth.verifyOtp(dto);
-    return ok({ verified: true });
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Verify the signed-in account's own number" })
+  async verifyPhoneOtp(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: PhoneOtpDto,
+  ): Promise<ApiSuccessBody<AuthUserView>> {
+    return ok(await this.signup.verifyExistingAccount(user.userId, dto.otp));
   }
 
   @Get("me")

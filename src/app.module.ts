@@ -102,10 +102,12 @@ const ENV_FILES: Record<string, string[]> = {
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<Environment, true>) => {
-        // Stricter per-route policies (login, OTP, refresh, admin login, promo).
+        // Stricter per-route policies (login, signup, OTP, refresh, admin login, promo).
         configureThrottlePolicies({
           throttleAuthLimit: config.get("throttleAuthLimit", { infer: true }),
           throttleAuthTtlMs: config.get("throttleAuthTtlMs", { infer: true }),
+          throttleSignupLimit: config.get("throttleSignupLimit", { infer: true }),
+          throttleSignupTtlMs: config.get("throttleSignupTtlMs", { infer: true }),
           throttleOtpSendLimit: config.get("throttleOtpSendLimit", { infer: true }),
           throttleOtpSendTtlMs: config.get("throttleOtpSendTtlMs", { infer: true }),
           throttleOtpVerifyLimit: config.get("throttleOtpVerifyLimit", { infer: true }),
