@@ -1,4 +1,11 @@
-import type { CreateOrderInput, RazorpayOrder, RazorpayPayment } from "./razorpay.types";
+import type {
+  CreateOrderInput,
+  CreateRefundInput,
+  ListPaymentsInput,
+  RazorpayOrder,
+  RazorpayPayment,
+  RazorpayRefund,
+} from "./razorpay.types";
 
 /** A Razorpay API call that did not succeed. */
 export class RazorpayGatewayError extends Error {
@@ -40,4 +47,15 @@ export abstract class RazorpayGateway {
 
   /** Every payment attempted against an order (newest first as Razorpay returns them). */
   abstract fetchOrderPayments(orderId: string): Promise<RazorpayPayment[]>;
+
+  /** Refunds (part of) a captured payment to its original method, at normal speed. */
+  abstract createRefund(input: CreateRefundInput): Promise<RazorpayRefund>;
+
+  abstract fetchRefund(razorpayPaymentId: string, refundId: string): Promise<RazorpayRefund>;
+
+  /** Every refund of a payment (reconciliation, lost create responses). */
+  abstract fetchPaymentRefunds(razorpayPaymentId: string): Promise<RazorpayRefund[]>;
+
+  /** One page of the account's payments created in [from, to] (reconciliation runs). */
+  abstract listPayments(input: ListPaymentsInput): Promise<RazorpayPayment[]>;
 }

@@ -1,6 +1,9 @@
 const NODE_ENVIRONMENTS = ["development", "test", "production"] as const;
 export type NodeEnvironment = (typeof NODE_ENVIRONMENTS)[number];
 
+const FINAL_FARE_MODES = ["actual", "booked"] as const;
+export type FinalFareMode = (typeof FINAL_FARE_MODES)[number];
+
 const integer = (value: string | undefined, fallback: number): number => {
   const parsed = Number(value ?? fallback);
   return Number.isInteger(parsed) ? parsed : fallback;
@@ -81,6 +84,9 @@ export interface Environment {
   driverLocationMaxFixAgeSeconds: number;
   driverArrivingRadiusMeters: number;
   rideCheckpointIntervalSeconds: number;
+  finalFareMode: FinalFareMode;
+  finalFareMaxEstimateMultiplier: number;
+  tripMeterMaxGapSeconds: number;
   razorpayKeyId: string;
   razorpayKeySecret: string;
   razorpayWebhookSecret: string;
@@ -90,6 +96,10 @@ export interface Environment {
   paymentOrderReuseMinutes: number;
   paymentReconcileIntervalMs: number;
   paymentProcessingStaleSeconds: number;
+  paymentRefundWindowDays: number;
+  paymentDailyReconciliation: boolean;
+  paymentDailyReconciliationHour: number;
+  paymentReconciliationMaxDays: number;
   defaultCommissionPercent: number;
   earningsHoldHours: number;
   publicBaseUrl: string;
@@ -322,11 +332,21 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
     env.DRIVER_ARRIVING_RADIUS_METERS,
     500,
   ),
-  // Coarse trip-trail checkpoints — never every GPS ping.
+  // Trip-trail checkpoints — never every GPS ping. The trail is also the
+  // trip meter for the final fare, so it must be dense enough to follow roads.
   rideCheckpointIntervalSeconds: integer(
     env.RIDE_CHECKPOINT_INTERVAL_SECONDS,
-    60,
+    15,
   ),
+
+  // ── Final fare (Razorpay integration v2) ──────────────────────────────
+  // actual = actual trip time + GPS-trail distance (booked distance when the
+  // trail is unreliable); booked = the booked route's distance and time.
+  finalFareMode: (env.FINAL_FARE_MODE || "actual").toLowerCase() as FinalFareMode,
+  // Customer protection: the final fare never exceeds estimate × this. 0 = no cap.
+  finalFareMaxEstimateMultiplier: decimal(env.FINAL_FARE_MAX_ESTIMATE_MULTIPLIER, 1.5),
+  // A trail with a longer gap between two fixes is not trusted for distance.
+  tripMeterMaxGapSeconds: integer(env.TRIP_METER_MAX_GAP_SECONDS, 120),
 
   // ── Payments (Phase 4, Razorpay Standard Checkout) ────────────────────
   // Test-mode keys (rzp_test_…) everywhere except production.
@@ -353,6 +373,14 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
     env.PAYMENT_PROCESSING_STALE_SECONDS,
     60,
   ),
+  // Razorpay accepts refunds for 6 months after capture.
+  paymentRefundWindowDays: integer(env.PAYMENT_REFUND_WINDOW_DAYS, 180),
+  // Automatic Razorpay-vs-MongoDB reconciliation of the previous business day.
+  paymentDailyReconciliation: boolean(env.PAYMENT_DAILY_RECONCILIATION, true),
+  // Local hour after which yesterday's run starts (Razorpay settles overnight).
+  paymentDailyReconciliationHour: integer(env.PAYMENT_DAILY_RECONCILIATION_HOUR, 3),
+  // Longest range an admin reconciliation run may cover.
+  paymentReconciliationMaxDays: integer(env.PAYMENT_RECONCILIATION_MAX_DAYS, 31),
 
   // ── Earnings (Phase 4) ────────────────────────────────────────────────
   // Seeds the first commission version only; admins own it afterwards.
@@ -519,6 +547,8 @@ const POSITIVE_INTEGERS = [
   "THROTTLE_PROMO_TTL_MS",
   "BROADCAST_BATCH_SIZE",
   "REPORT_MAX_RANGE_DAYS",
+  "TRIP_METER_MAX_GAP_SECONDS",
+  "PAYMENT_RECONCILIATION_MAX_DAYS",
 ];
 
 const POSITIVE_DECIMALS = [
@@ -586,6 +616,23 @@ export function validateEnvironment(
     const percent = Number(input.DEFAULT_COMMISSION_PERCENT);
     if (!Number.isFinite(percent) || percent < 0 || percent > 100)
       throw new Error("DEFAULT_COMMISSION_PERCENT must be between 0 and 100");
+  }
+  if (isSet(input.FINAL_FARE_MODE) && !(FINAL_FARE_MODES as readonly string[]).includes(String(input.FINAL_FARE_MODE).toLowerCase()))
+    throw new Error("FINAL_FARE_MODE must be actual or booked");
+  if (isSet(input.FINAL_FARE_MAX_ESTIMATE_MULTIPLIER)) {
+    const multiplier = Number(input.FINAL_FARE_MAX_ESTIMATE_MULTIPLIER);
+    if (!Number.isFinite(multiplier) || (multiplier !== 0 && (multiplier < 1 || multiplier > 10)))
+      throw new Error("FINAL_FARE_MAX_ESTIMATE_MULTIPLIER must be 0 (no cap) or between 1 and 10");
+  }
+  if (isSet(input.PAYMENT_DAILY_RECONCILIATION_HOUR)) {
+    const hour = Number(input.PAYMENT_DAILY_RECONCILIATION_HOUR);
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23)
+      throw new Error("PAYMENT_DAILY_RECONCILIATION_HOUR must be an hour between 0 and 23");
+  }
+  if (isSet(input.PAYMENT_REFUND_WINDOW_DAYS)) {
+    const days = Number(input.PAYMENT_REFUND_WINDOW_DAYS);
+    if (!Number.isInteger(days) || days < 1 || days > 365)
+      throw new Error("PAYMENT_REFUND_WINDOW_DAYS must be between 1 and 365");
   }
   if (isSet(input.EARNINGS_HOLD_HOURS)) {
     const hours = Number(input.EARNINGS_HOLD_HOURS);

@@ -107,6 +107,23 @@ class FakeRazorpay extends RazorpayGateway {
     return [...this.payments.values()].filter((payment) => payment.order_id === orderId).map((p) => ({ ...p }));
   }
 
+  // Refunds and listing are exercised by payments-v2.e2e-spec.ts.
+  async createRefund(): Promise<never> {
+    throw new RazorpayGatewayError("Refunds are not faked in this suite", 400, "BAD_REQUEST_ERROR");
+  }
+
+  async fetchRefund(): Promise<never> {
+    throw new RazorpayGatewayError("Refunds are not faked in this suite", 400, "BAD_REQUEST_ERROR");
+  }
+
+  async fetchPaymentRefunds(): Promise<[]> {
+    return [];
+  }
+
+  async listPayments(): Promise<[]> {
+    return [];
+  }
+
   /** The customer completing (or failing) the checkout sheet. */
   pay(
     orderId: string,
@@ -212,6 +229,8 @@ describe("Phase 4 — payments & earnings (e2e)", () => {
     process.chdir(workDir);
     Object.assign(process.env, {
       NODE_ENV: "test",
+      // Older suites assert final fare = estimate; actual-trip pricing is in payments-v2.
+      FINAL_FARE_MODE: "booked",
       LOG_LEVEL: "silent",
       SWAGGER_ENABLED: "false",
       MONGODB_URI: mongo.getUri(),
@@ -757,7 +776,7 @@ describe("Phase 4 — payments & earnings (e2e)", () => {
       expect(data.summary.today).toMatchObject({ net, rides: 5 });
       expect(data.summary.week.net).toBe(net);
       expect(data.summary.total.net).toBe(net);
-      expect(data.summary.balances).toEqual({ pending: 0, available: net, paid: 0, collected: 0, commissionDue: 0 });
+      expect(data.summary.balances).toEqual({ pending: 0, available: net, paid: 0, collected: 0, commissionDue: 0, deductions: 0 });
       expect(data.items).toHaveLength(5);
       expect(data.periodTotals.net).toBe(net);
     });

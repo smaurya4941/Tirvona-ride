@@ -1,7 +1,14 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { RazorpayGateway, RazorpayGatewayError } from "./razorpay.gateway";
-import type { CreateOrderInput, RazorpayOrder, RazorpayPayment } from "./razorpay.types";
+import type {
+  CreateOrderInput,
+  CreateRefundInput,
+  ListPaymentsInput,
+  RazorpayOrder,
+  RazorpayPayment,
+  RazorpayRefund,
+} from "./razorpay.types";
 
 interface RazorpayErrorBody {
   error?: { code?: string; description?: string };
@@ -59,6 +66,41 @@ export class RazorpayHttpGateway extends RazorpayGateway {
       "GET",
       `/orders/${encodeURIComponent(orderId)}/payments`,
     );
+    return body.items ?? [];
+  }
+
+  createRefund(input: CreateRefundInput): Promise<RazorpayRefund> {
+    return this.request<RazorpayRefund>("POST", `/payments/${encodeURIComponent(input.razorpayPaymentId)}/refund`, {
+      amount: input.amountPaise,
+      speed: "normal",
+      receipt: input.receipt.slice(0, 40),
+      notes: input.notes,
+    });
+  }
+
+  fetchRefund(razorpayPaymentId: string, refundId: string): Promise<RazorpayRefund> {
+    return this.request<RazorpayRefund>(
+      "GET",
+      `/payments/${encodeURIComponent(razorpayPaymentId)}/refunds/${encodeURIComponent(refundId)}`,
+    );
+  }
+
+  async fetchPaymentRefunds(razorpayPaymentId: string): Promise<RazorpayRefund[]> {
+    const body = await this.request<{ items?: RazorpayRefund[] }>(
+      "GET",
+      `/payments/${encodeURIComponent(razorpayPaymentId)}/refunds?count=100`,
+    );
+    return body.items ?? [];
+  }
+
+  async listPayments(input: ListPaymentsInput): Promise<RazorpayPayment[]> {
+    const query = new URLSearchParams({
+      from: String(input.from),
+      to: String(input.to),
+      count: String(Math.min(100, input.count)),
+      skip: String(input.skip),
+    });
+    const body = await this.request<{ items?: RazorpayPayment[] }>("GET", `/payments?${query.toString()}`);
     return body.items ?? [];
   }
 

@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { ApiException, apiBadRequest } from "../../common/exceptions/api.exception";
 import { PaymentEventSource } from "./interfaces/payment-status";
 import { PaymentsService } from "./payments.service";
+import { RefundsService } from "./refunds.service";
 import { verifyWebhookSignature } from "./razorpay/razorpay-signature";
 import type { RazorpayPayment, RazorpayRefund, RazorpayWebhookBody } from "./razorpay/razorpay.types";
 import { PaymentWebhookEvent, WebhookEventStatus } from "./schemas/payment-webhook-event.schema";
@@ -21,6 +22,7 @@ const HANDLED_EVENTS = new Set([
   "payment.captured",
   "payment.failed",
   "order.paid",
+  "refund.created",
   "refund.processed",
   "refund.failed",
 ]);
@@ -41,6 +43,7 @@ export class PaymentWebhookService {
   constructor(
     @InjectModel(PaymentWebhookEvent.name) private readonly eventModel: Model<PaymentWebhookEvent>,
     private readonly payments: PaymentsService,
+    private readonly refunds: RefundsService,
     config: ConfigService,
   ) {
     this.webhookSecret = config.get<string>("razorpayWebhookSecret") ?? "";
@@ -120,9 +123,7 @@ export class PaymentWebhookService {
     if (body.event.startsWith("refund.")) {
       const refund = body.payload.refund?.entity;
       if (!refund) return { status: WebhookEventStatus.IGNORED, detail: "No refund entity" };
-      // Refund webhooks also carry the payment, whose amount_refunded is the
-      // cumulative total across partial refunds.
-      return this.onRefund(refund, body.event, body.payload.payment?.entity.amount_refunded);
+      return this.onRefund(refund, body.event);
     }
 
     const gatewayPayment = body.payload.payment?.entity;
@@ -139,20 +140,13 @@ export class PaymentWebhookService {
     return { status: WebhookEventStatus.PROCESSED, detail: `payment ${updated._id.toString()} → ${updated.status}` };
   }
 
-  private async onRefund(
-    refund: RazorpayRefund,
-    event: string,
-    cumulativeRefundedPaise?: number,
-  ): Promise<{ status: WebhookEventStatus; detail?: string }> {
-    const payment = await this.payments.findByRazorpayPaymentId(refund.payment_id);
-    if (!payment) return { status: WebhookEventStatus.IGNORED, detail: "Unknown payment" };
-    const updated = await this.payments.recordRefund(payment, {
-      refundId: refund.id,
-      amountPaise: cumulativeRefundedPaise ?? refund.amount,
-      status: event === "refund.failed" ? "failed" : refund.status,
-      source: PaymentEventSource.WEBHOOK,
-    });
-    return { status: WebhookEventStatus.PROCESSED, detail: `payment ${updated._id.toString()} → ${updated.status}` };
+  private async onRefund(refund: RazorpayRefund, event: string): Promise<{ status: WebhookEventStatus; detail?: string }> {
+    // refund.failed carries the entity already in status "failed"; trust the event name too.
+    const entity: RazorpayRefund = event === "refund.failed" ? { ...refund, status: "failed" } : refund;
+    const synced = await this.refunds.syncFromGateway(entity, PaymentEventSource.WEBHOOK);
+    // Not a Ride payment (e.g. the main Tirvona app on the same Razorpay account).
+    if (!synced) return { status: WebhookEventStatus.IGNORED, detail: "Unknown payment" };
+    return { status: WebhookEventStatus.PROCESSED, detail: `refund ${synced._id.toString()} → ${synced.status}` };
   }
 
   private async mark(eventId: string, status: WebhookEventStatus, detail?: string): Promise<void> {

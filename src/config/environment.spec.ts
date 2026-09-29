@@ -133,6 +133,23 @@ describe("validateEnvironment", () => {
     expect(() => validateEnvironment({ DEFAULT_COMMISSION_PERCENT: "17.5", EARNINGS_HOLD_HOURS: "24" })).not.toThrow();
   });
 
+  it("validates the final-fare and refund/reconciliation settings", () => {
+    expect(() => validateEnvironment({ FINAL_FARE_MODE: "estimate" })).toThrow("FINAL_FARE_MODE");
+    expect(() => validateEnvironment({ FINAL_FARE_MAX_ESTIMATE_MULTIPLIER: "0.8" })).toThrow("FINAL_FARE_MAX_ESTIMATE_MULTIPLIER");
+    expect(() => validateEnvironment({ PAYMENT_DAILY_RECONCILIATION_HOUR: "24" })).toThrow("PAYMENT_DAILY_RECONCILIATION_HOUR");
+    expect(() => validateEnvironment({ PAYMENT_REFUND_WINDOW_DAYS: "0" })).toThrow("PAYMENT_REFUND_WINDOW_DAYS");
+    expect(() =>
+      validateEnvironment({
+        FINAL_FARE_MODE: "BOOKED",
+        FINAL_FARE_MAX_ESTIMATE_MULTIPLIER: "0",
+        PAYMENT_DAILY_RECONCILIATION_HOUR: "2",
+        PAYMENT_REFUND_WINDOW_DAYS: "180",
+      }),
+    ).not.toThrow();
+    process.env = { FINAL_FARE_MODE: "Booked" };
+    expect(environment()).toMatchObject({ finalFareMode: "booked", finalFareMaxEstimateMultiplier: 1.5, tripMeterMaxGapSeconds: 120 });
+  });
+
   it("requires an HTTPS public base URL in production (share links)", () => {
     const input = productionInput();
     delete input.PUBLIC_BASE_URL;

@@ -16,6 +16,12 @@ export enum NotificationType {
   PAYMENT_SUCCESS = "PAYMENT_SUCCESS",
   PAYMENT_FAILED = "PAYMENT_FAILED",
   PAYMENT_RECEIVED = "PAYMENT_RECEIVED",
+  /** A refund is on its way to the customer. */
+  REFUND_INITIATED = "REFUND_INITIATED",
+  /** Razorpay processed the refund (the bank may take a few days to show it). */
+  REFUND_PROCESSED = "REFUND_PROCESSED",
+  /** A refund reduced the driver's earnings. */
+  EARNING_ADJUSTED = "EARNING_ADJUSTED",
   RATING_REMINDER = "RATING_REMINDER",
   SOS_CREATED = "SOS_CREATED",
   SOS_UPDATED = "SOS_UPDATED",

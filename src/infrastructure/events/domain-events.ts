@@ -53,6 +53,35 @@ export interface RidePaymentUpdatedEvent {
   method?: string;
 }
 
+/** A refund was requested, or Razorpay moved it (pending → processed / failed). */
+export interface PaymentRefundUpdatedEvent {
+  refundId: string;
+  paymentId: string;
+  rideId: string;
+  rideCode: string;
+  customerId: string;
+  /** Rupees. */
+  amount: number;
+  currency: string;
+  /** RefundStatus */
+  status: string;
+  /** RefundTarget: PAYMENT or DUPLICATE_CAPTURE. */
+  target: string;
+  /** Whether this update changed the status (vs. a repeated report). */
+  changed: boolean;
+}
+
+/** A driver's earnings were reduced after the ride (refund clawback). */
+export interface EarningsAdjustedEvent {
+  adjustmentId: string;
+  driverUserId: string;
+  rideId: string;
+  rideCode: string;
+  /** Deducted from the driver, rupees. */
+  amount: number;
+  refundAmount: number;
+}
+
 export interface DriverReviewedEvent {
   driverId: string;
   userId: string;
@@ -82,6 +111,8 @@ export interface DomainEventMap {
   "ride.transitioned": RideTransitionedEvent;
   "ride.driver_arriving": RideDriverArrivingEvent;
   "ride.payment_updated": RidePaymentUpdatedEvent;
+  "payment.refund_updated": PaymentRefundUpdatedEvent;
+  "earnings.adjusted": EarningsAdjustedEvent;
   "driver.reviewed": DriverReviewedEvent;
   "driver.status_changed": DriverStatusChangedEvent;
   "auth.logged_out": UserLoggedOutEvent;

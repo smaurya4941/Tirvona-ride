@@ -39,6 +39,9 @@ export class PaymentWebhookEvent {
 
   @Prop({ default: 1 })
   deliveries!: number;
+
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 export type PaymentWebhookEventDocument = HydratedDocument<PaymentWebhookEvent>;

@@ -8,6 +8,7 @@ import {
   PaymentEventSource,
   PaymentStatus,
 } from "../interfaces/payment-status";
+import { PaymentRefundState } from "../interfaces/refund-status";
 
 /** One Razorpay order raised for this ride's bill. */
 @Schema({ _id: false, timestamps: true })
@@ -77,6 +78,23 @@ export class PaymentEvent {
 
   @Prop()
   detail?: string;
+
+  /** Payment status before / after this event, when it changed one. */
+  @Prop()
+  fromStatus?: string;
+
+  @Prop()
+  toStatus?: string;
+
+  /** The user (customer or admin) who caused it, when a person did. */
+  @Prop({ type: SchemaTypes.ObjectId, ref: "User" })
+  actorId?: Types.ObjectId;
+
+  @Prop()
+  amountPaise?: number;
+
+  @Prop({ type: SchemaTypes.ObjectId, ref: "PaymentRefund" })
+  refundId?: Types.ObjectId;
 }
 const PaymentEventSchema = SchemaFactory.createForClass(PaymentEvent);
 
@@ -98,6 +116,14 @@ export class DuplicateCapture {
 
   @Prop({ required: true })
   detectedAt!: Date;
+
+  /** Refunded so far from this duplicate (recomputed from payment_refunds). */
+  @Prop({ min: 0, default: 0 })
+  refundedPaise!: number;
+
+  /** PENDING / FULL once a refund is on its way / done (PaymentRefundState). */
+  @Prop()
+  refundState?: string;
 }
 const DuplicateCaptureSchema = SchemaFactory.createForClass(DuplicateCapture);
 
@@ -184,18 +210,34 @@ export class Payment {
   @Prop()
   processingPaymentId?: string;
 
-  // ── Refunds (synced from Razorpay; no refund workflow in V1) ──────────
+  // ── Refunds (recomputed from payment_refunds; customer money only) ───
+  /** Latest Razorpay refund (rfnd_…). */
   @Prop()
   refundId?: string;
 
+  /** Processed so far (paise). */
   @Prop({ min: 0 })
   refundAmountPaise?: number;
 
-  @Prop()
-  refundStatus?: string;
+  /** Requested or pending at Razorpay — reserved against the refundable amount. */
+  @Prop({ min: 0, default: 0 })
+  refundPendingPaise!: number;
 
+  /** PaymentRefundState summary. */
+  @Prop({ enum: PaymentRefundState })
+  refundStatus?: PaymentRefundState;
+
+  /** When the latest refund was processed. */
   @Prop()
   refundedAt?: Date;
+
+  /** Bumped on every totals write: stale recomputations lose (see RefundsService). */
+  @Prop({ default: 0 })
+  refundSeq!: number;
+
+  /** Serialises refund requests so two admins can never over-refund. */
+  @Prop()
+  refundLockUntil?: Date;
 
   @Prop({ type: [DuplicateCaptureSchema], default: [] })
   duplicateCaptures!: DuplicateCapture[];

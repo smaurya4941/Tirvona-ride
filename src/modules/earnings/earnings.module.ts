@@ -9,6 +9,7 @@ import { EarningsService } from "./earnings.service";
 import { CommissionConfig, CommissionConfigSchema } from "./schemas/commission-config.schema";
 import { DriverEarning, DriverEarningSchema } from "./schemas/driver-earning.schema";
 import { DriverPayout, DriverPayoutSchema } from "./schemas/driver-payout.schema";
+import { DriverEarningAdjustment, DriverEarningAdjustmentSchema } from "./schemas/driver-earning-adjustment.schema";
 
 // Leaf of the money domain: depends only on drivers/users. Payments writes
 // into it; Rides (dashboard) and Admin read from it.
@@ -18,6 +19,7 @@ import { DriverPayout, DriverPayoutSchema } from "./schemas/driver-payout.schema
       { name: DriverEarning.name, schema: DriverEarningSchema },
       { name: CommissionConfig.name, schema: CommissionConfigSchema },
       { name: DriverPayout.name, schema: DriverPayoutSchema },
+      { name: DriverEarningAdjustment.name, schema: DriverEarningAdjustmentSchema },
     ]),
     DriversModule,
     UsersModule,

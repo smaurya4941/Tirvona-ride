@@ -19,8 +19,20 @@ export class DriverPayout {
   @Prop({ required: true, default: 0 })
   earningCount!: number;
 
+  /** Transferred to the driver: the earnings settled minus deductions recovered. */
   @Prop({ required: true, min: 0, default: 0 })
   amountPaise!: number;
+
+  /** Sum of the earnings settled (before deductions). Absent on older payouts (= amountPaise). */
+  @Prop({ min: 0 })
+  grossAmountPaise?: number;
+
+  /** Refund clawbacks recovered in this payout. */
+  @Prop({ min: 0, default: 0 })
+  deductionPaise!: number;
+
+  @Prop({ type: [SchemaTypes.ObjectId], ref: "DriverEarningAdjustment", default: [] })
+  adjustmentIds!: Types.ObjectId[];
 
   @Prop({ required: true, default: "INR" })
   currency!: string;

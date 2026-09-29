@@ -1,5 +1,16 @@
 import type { RidePaymentStatus } from "../../rides/ride-payment-status";
+import type { RideFinalFareView } from "../../rides/ride-view.service";
+import type { AdjustmentView } from "../../earnings/interfaces/earning-views";
 import type { PaymentAttemptStatus, PaymentEventSource, PaymentStatus } from "./payment-status";
+import type {
+  PaymentRefundState,
+  RefundDriverImpact,
+  RefundLedgerState,
+  RefundReason,
+  RefundSource,
+  RefundStatus,
+  RefundTarget,
+} from "./refund-status";
 
 // API shapes. Amounts are rupees (stored as paise).
 
@@ -28,7 +39,14 @@ export interface PaymentView {
   razorpayPaymentId?: string;
   failureReason?: string;
   paidAt?: Date;
-  refund?: { refundId?: string; amount: number; status?: string; refundedAt?: Date };
+  /** Customer money refunded (processed) and on its way; absent when never refunded. */
+  refund?: {
+    refundId?: string;
+    amount: number;
+    pending: number;
+    status?: PaymentRefundState;
+    refundedAt?: Date;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -78,10 +96,15 @@ export interface PaymentReceiptView extends PaymentView {
       minimumFareApplied: boolean;
       estimatedFare: number;
       finalFare?: number;
+      discount?: number;
+      payableFare?: number;
+      /** The frozen final bill (actual trip measured, components). */
+      final?: RideFinalFareView;
     };
   };
   customer: { name: string; phone?: string };
   driver: { name: string } | null;
+  refunds: CustomerRefundView[];
   vehicle: { vehicleType: string; registrationNumber: string; make?: string; model?: string; color?: string } | null;
 }
 
@@ -118,7 +141,15 @@ export interface AdminPaymentDetail extends AdminPaymentListItem {
     completedAt?: Date;
     finalFare?: number;
     estimatedFare: number;
+    discount?: number;
+    payableFare?: number;
+    final?: RideFinalFareView;
   } | null;
+  /** Still refundable (rupees): captured − processed − in-flight refunds. */
+  refundable: number;
+  refunds: RefundView[];
+  /** Driver clawbacks caused by this payment's refunds. */
+  adjustments: AdjustmentView[];
   attemptLog: Array<{
     orderId: string;
     amount: number;
@@ -136,8 +167,20 @@ export interface AdminPaymentDetail extends AdminPaymentListItem {
     razorpayOrderId?: string;
     razorpayPaymentId?: string;
     detail?: string;
+    fromStatus?: string;
+    toStatus?: string;
+    actorId?: string;
+    amount?: number;
+    refundId?: string;
   }>;
-  duplicateCaptures: Array<{ razorpayPaymentId: string; razorpayOrderId?: string; amount: number; detectedAt: Date }>;
+  duplicateCaptures: Array<{
+    razorpayPaymentId: string;
+    razorpayOrderId?: string;
+    amount: number;
+    detectedAt: Date;
+    refunded: number;
+    refundState: PaymentRefundState;
+  }>;
   earning: {
     id: string;
     grossFare: number;
@@ -166,6 +209,138 @@ export interface AdminPaymentsSummary {
   /** Completed rides still waiting for the customer to pay. */
   outstandingRides: number;
   outstandingAmount: number;
-  /** Duplicate captures awaiting a manual refund. */
+  /** Payments with a duplicate capture not yet refunded. */
   needsAttention: number;
+  refundedToday: number;
+  refundedTotal: number;
+  /** Refunds requested or pending at Razorpay. */
+  refundsPending: number;
+  /** Refunds failed in the last 30 days. */
+  refundsFailed: number;
+  /** Dashboard refunds awaiting a decision on the driver's share. */
+  refundsToReview: number;
+  /** Refund clawbacks still to be deducted from driver payouts. */
+  deductionsOutstanding: number;
+}
+
+// ── Refunds ─────────────────────────────────────────────────────────────
+
+export interface RefundView {
+  id: string;
+  paymentId: string;
+  rideId: string;
+  rideCode: string;
+  target: RefundTarget;
+  razorpayPaymentId: string;
+  razorpayRefundId?: string;
+  amount: number;
+  currency: string;
+  reason: RefundReason;
+  note?: string;
+  driverImpact: RefundDriverImpact;
+  status: RefundStatus;
+  failureReason?: string;
+  /** ARN / RRN once processed — what the customer's bank can trace. */
+  acquirerReference?: string;
+  speedProcessed?: string;
+  source: RefundSource;
+  requestedBy?: { id: string; name: string };
+  ledgerState: RefundLedgerState;
+  adjustment?: { id: string; amount?: number; status?: string };
+  needsReview: boolean;
+  createdAt: Date;
+  processedAt?: Date;
+  failedAt?: Date;
+}
+
+export interface AdminRefundListItem extends RefundView {
+  customer: { name: string; phone?: string } | null;
+}
+
+/** Receipt view: no admin notes, no failed attempts. */
+export interface CustomerRefundView {
+  id: string;
+  amount: number;
+  currency: string;
+  status: RefundStatus;
+  /** Customer wording ("Fare adjustment"). */
+  reason: string;
+  reference?: string;
+  createdAt: Date;
+  processedAt?: Date;
+}
+
+// ── Reconciliation ──────────────────────────────────────────────────────
+
+export type ExceptionSeverity = "CRITICAL" | "WARNING" | "INFO";
+
+export interface PaymentExceptionItem {
+  kind:
+    | "DUPLICATE_UNREFUNDED"
+    | "WEBHOOK_FLAGGED"
+    | "WEBHOOK_FAILED"
+    | "REFUND_FAILED"
+    | "REFUND_STUCK"
+    | "REFUND_REVIEW"
+    | "EARNING_MISSING"
+    | "PROCESSING_STALE"
+    | "LEDGER_PENDING"
+    | "RUN_EXCEPTION";
+  severity: ExceptionSeverity;
+  paymentId?: string;
+  rideCode?: string;
+  /** pay_… / rfnd_… / event id — what to search for at Razorpay. */
+  reference?: string;
+  amount?: number;
+  detail: string;
+  at: Date;
+  runId?: string;
+  exceptionId?: string;
+}
+
+export interface ReconciliationRunView {
+  id: string;
+  key: string;
+  trigger: string;
+  from: Date;
+  to: Date;
+  status: string;
+  startedAt: Date;
+  finishedAt?: Date;
+  stats: {
+    gatewayPayments: number;
+    ridePayments: number;
+    foreignPayments: number;
+    matched: number;
+    recordedChecked: number;
+    exceptions: number;
+    healed: number;
+    gatewayCaptured: number;
+    recordedCaptured: number;
+  };
+  /** Exceptions neither healed nor resolved by an admin. */
+  unresolved: number;
+  truncated: boolean;
+  error?: string;
+  exceptions?: Array<{
+    id: string;
+    type: string;
+    severity: string;
+    paymentId?: string;
+    rideCode?: string;
+    razorpayPaymentId?: string;
+    razorpayOrderId?: string;
+    expected?: string;
+    actual?: string;
+    detail: string;
+    healed: boolean;
+    resolvedAt?: Date;
+    resolutionNote?: string;
+  }>;
+}
+
+export interface PaymentExceptionsView {
+  counts: Record<ExceptionSeverity, number>;
+  items: PaymentExceptionItem[];
+  lastRun: ReconciliationRunView | null;
 }

@@ -11,11 +11,20 @@ import {
   startOfWeekInTimeZone,
 } from "../../common/utils/time";
 import { DriversService } from "../drivers/drivers.service";
+import { refundClawback } from "./clawback";
 import { splitFare } from "./commission";
 import { CommissionService } from "./commission.service";
 import type { DriverEarningsQueryDto } from "./dto/earnings-query.dto";
-import { CommissionType, EarningStatus, EarningsPeriod, PaymentMode } from "./interfaces/earning-status";
+import {
+  AdjustmentStatus,
+  AdjustmentType,
+  CommissionType,
+  EarningStatus,
+  EarningsPeriod,
+  PaymentMode,
+} from "./interfaces/earning-status";
 import type {
+  AdjustmentView,
   DriverEarningsResponse,
   EarningView,
   EarningsBalances,
@@ -24,6 +33,26 @@ import type {
 } from "./interfaces/earning-views";
 import { DriverEarning } from "./schemas/driver-earning.schema";
 import type { DriverEarningDocument } from "./schemas/driver-earning.schema";
+import { DriverEarningAdjustment } from "./schemas/driver-earning-adjustment.schema";
+import type { DriverEarningAdjustmentDocument } from "./schemas/driver-earning-adjustment.schema";
+
+export interface RefundClawbackInput {
+  refundId: Types.ObjectId;
+  paymentId: Types.ObjectId;
+  /** What the customer paid (paise). */
+  paidAmountPaise: number;
+  refundAmountPaise: number;
+  /** RefundReason, shown on the driver statement. */
+  reason: string;
+}
+
+/** Outcome of applying a refund to the driver ledger. */
+export type ClawbackOutcome =
+  | { status: "RECORDED"; adjustment: DriverEarningAdjustmentDocument }
+  /** No earning line yet (retry later). */
+  | { status: "NO_EARNING" }
+  /** Cash ride, or nothing left to reverse. */
+  | { status: "NOT_APPLICABLE" };
 
 export interface RecordEarningInput {
   paymentId: Types.ObjectId;
@@ -97,6 +126,7 @@ export class EarningsService {
 
   constructor(
     @InjectModel(DriverEarning.name) private readonly earningModel: Model<DriverEarning>,
+    @InjectModel(DriverEarningAdjustment.name) private readonly adjustmentModel: Model<DriverEarningAdjustment>,
     private readonly commission: CommissionService,
     private readonly drivers: DriversService,
     config: ConfigService,
@@ -163,6 +193,126 @@ export class EarningsService {
     }
   }
 
+  /**
+   * A processed refund claws back the driver's share: one adjustment per
+   * refund (unique), computed on the earning line's own snapshot. Safe to
+   * call repeatedly for the same refund.
+   */
+  async recordRefundClawback(input: RefundClawbackInput): Promise<ClawbackOutcome> {
+    const existing = await this.adjustmentModel.findOne({ refundId: input.refundId }).exec();
+    if (existing) return { status: "RECORDED", adjustment: existing };
+
+    const earning = await this.earningModel.findOne({ paymentId: input.paymentId }).exec();
+    if (!earning) return { status: "NO_EARNING" };
+    // The driver already holds a cash fare; Tirvona never refunds cash online.
+    if ((earning.paymentMode ?? PaymentMode.ONLINE) === PaymentMode.CASH) return { status: "NOT_APPLICABLE" };
+
+    const [previous] = await this.adjustmentModel
+      .aggregate<{ gross: number; commission: number; refunds: number }>([
+        { $match: { earningId: earning._id } },
+        {
+          $group: {
+            _id: null,
+            gross: { $sum: "$grossReversalPaise" },
+            commission: { $sum: "$commissionReversalPaise" },
+            refunds: { $sum: "$refundAmountPaise" },
+          },
+        },
+      ])
+      .exec();
+    const clawback = refundClawback({
+      earning,
+      paidAmountPaise: input.paidAmountPaise,
+      refundAmountPaise: input.refundAmountPaise,
+      previousRefundsPaise: previous?.refunds ?? 0,
+      previous: { grossPaise: previous?.gross ?? 0, commissionPaise: previous?.commission ?? 0 },
+    });
+    if (clawback.grossReversalPaise === 0 && clawback.amountPaise === 0) return { status: "NOT_APPLICABLE" };
+
+    try {
+      const adjustment = await this.adjustmentModel.create({
+        driverId: earning.driverId,
+        driverUserId: earning.driverUserId,
+        earningId: earning._id,
+        rideId: earning.rideId,
+        paymentId: earning.paymentId,
+        refundId: input.refundId,
+        rideCode: earning.rideCode,
+        type: AdjustmentType.REFUND_CLAWBACK,
+        reason: input.reason,
+        currency: earning.currency,
+        refundAmountPaise: input.refundAmountPaise,
+        grossReversalPaise: clawback.grossReversalPaise,
+        commissionReversalPaise: clawback.commissionReversalPaise,
+        amountPaise: clawback.amountPaise,
+        commissionRate: earning.commissionRate,
+        // Nothing to recover when the reversal is all commission.
+        status: clawback.amountPaise > 0 ? AdjustmentStatus.OUTSTANDING : AdjustmentStatus.SETTLED,
+        ...(clawback.amountPaise > 0 ? {} : { settledAt: new Date() }),
+      });
+      this.logger.log(
+        `Refund clawback on ride ${earning.rideCode}: refund ${input.refundAmountPaise}p → driver −${clawback.amountPaise}p ` +
+          `(gross ${clawback.grossReversalPaise}p, commission ${clawback.commissionReversalPaise}p)`,
+      );
+      return { status: "RECORDED", adjustment };
+    } catch (error) {
+      if (!isDuplicateKey(error)) throw error;
+      const winner = await this.adjustmentModel.findOne({ refundId: input.refundId }).exec();
+      if (!winner) throw error;
+      return { status: "RECORDED", adjustment: winner };
+    }
+  }
+
+  /** OUTSTANDING deductions per driver (paise). */
+  async outstandingDeductions(driverIds?: Types.ObjectId[]): Promise<Map<string, number>> {
+    const rows = await this.adjustmentModel
+      .aggregate<{ _id: Types.ObjectId; amount: number }>([
+        { $match: { status: AdjustmentStatus.OUTSTANDING, ...(driverIds ? { driverId: { $in: driverIds } } : {}) } },
+        { $group: { _id: "$driverId", amount: { $sum: "$amountPaise" } } },
+      ])
+      .exec();
+    return new Map(rows.map((row) => [row._id.toString(), row.amount]));
+  }
+
+  async totalOutstandingDeductions(): Promise<number> {
+    const totals = await this.outstandingDeductions();
+    return [...totals.values()].reduce((sum, amount) => sum + amount, 0);
+  }
+
+  async adjustmentsForDriver(driverId: Types.ObjectId, limit = 50): Promise<AdjustmentView[]> {
+    const rows = await this.adjustmentModel.find({ driverId }).sort({ createdAt: -1, _id: -1 }).limit(limit).exec();
+    return rows.map((row) => this.toAdjustmentView(row));
+  }
+
+  async adjustmentsForPayment(paymentId: Types.ObjectId): Promise<AdjustmentView[]> {
+    const rows = await this.adjustmentModel.find({ paymentId }).sort({ createdAt: 1 }).exec();
+    return rows.map((row) => this.toAdjustmentView(row));
+  }
+
+  toAdjustmentView(adjustment: DriverEarningAdjustmentDocument): AdjustmentView {
+    return {
+      id: adjustment._id.toString(),
+      type: adjustment.type,
+      earningId: adjustment.earningId.toString(),
+      rideId: adjustment.rideId.toString(),
+      rideCode: adjustment.rideCode,
+      paymentId: adjustment.paymentId.toString(),
+      refundId: adjustment.refundId.toString(),
+      reason: adjustment.reason,
+      currency: adjustment.currency,
+      refundAmount: toRupees(adjustment.refundAmountPaise),
+      grossReversal: toRupees(adjustment.grossReversalPaise),
+      commissionReversal: toRupees(adjustment.commissionReversalPaise),
+      amount: toRupees(adjustment.amountPaise),
+      commissionRate: adjustment.commissionRate,
+      status: adjustment.status,
+      payoutId: adjustment.payoutId?.toString(),
+      settledAt: adjustment.settledAt,
+      waiverNote: adjustment.waiverNote,
+      createdAt: adjustment.get("createdAt") as Date,
+    };
+  }
+
   async findForPayment(paymentId: Types.ObjectId): Promise<EarningView | null> {
     const earning = await this.earningModel.findOne({ paymentId }).exec();
     return earning ? this.toView(earning) : null;
@@ -190,7 +340,7 @@ export class EarningsService {
     if (since) filter.rideCompletedAt = { $gte: since };
     if (query.status) filter.status = query.status;
 
-    const [items, total, periodTotals, summary] = await Promise.all([
+    const [items, total, periodTotals, summary, adjustments] = await Promise.all([
       this.earningModel
         .find(filter)
         .sort({ rideCompletedAt: -1, _id: -1 })
@@ -200,9 +350,11 @@ export class EarningsService {
       this.earningModel.countDocuments(filter).exec(),
       this.earningModel.aggregate<WindowTotals>([{ $match: filter }, { $group: LEDGER_TOTALS }]).exec(),
       this.summaryFor(driver._id, false),
+      query.page === 1 ? this.adjustmentsForDriver(driver._id, 20) : Promise.resolve([]),
     ]);
     return {
       period: query.period,
+      adjustments,
       periodTotals: toWindow(periodTotals[0]),
       summary,
       items: items.map((earning) => this.toView(earning)),
@@ -218,7 +370,8 @@ export class EarningsService {
     await this.promoteMatured();
     const earning = await this.earningModel.findOne({ _id: earningId, driverId: driver._id }).exec();
     if (!earning) throw apiNotFound("Earning not found", "EARNING_NOT_FOUND");
-    return this.toView(earning);
+    const adjustments = await this.adjustmentModel.find({ earningId: earning._id }).sort({ createdAt: 1 }).exec();
+    return { ...this.toView(earning), adjustments: adjustments.map((adjustment) => this.toAdjustmentView(adjustment)) };
   }
 
   /** Today / this week / this month / all time, plus payout balances. */
@@ -245,13 +398,14 @@ export class EarningsService {
         },
       ])
       .exec();
+    const deductions = (await this.outstandingDeductions([driverId])).get(driverId.toString()) ?? 0;
     return {
       currency: "INR",
       today: toWindow(result?.today[0]),
       week: toWindow(result?.week[0]),
       month: toWindow(result?.month[0]),
       total: toWindow(result?.total[0]),
-      balances: this.balancesFrom(result?.balances ?? []),
+      balances: this.balancesFrom(result?.balances ?? [], deductions),
     };
   }
 
@@ -297,7 +451,7 @@ export class EarningsService {
     };
   }
 
-  balancesFrom(rows: StatusTotalsRow[]): EarningsBalances {
+  balancesFrom(rows: StatusTotalsRow[], deductionsPaise = 0): EarningsBalances {
     const row = (status: EarningStatus) => rows.find((candidate) => candidate._id === status);
     const of = (status: EarningStatus): number => toRupees(row(status)?.amount ?? 0);
     return {
@@ -309,6 +463,8 @@ export class EarningsService {
       // the platform owes the discount back: it is netted against commission
       // (negative = Tirvona owes the driver).
       commissionDue: toRupees((row(EarningStatus.COLLECTED)?.commission ?? 0) - (row(EarningStatus.COLLECTED)?.discount ?? 0)),
+      // Refund clawbacks still to be deducted from the next payout.
+      deductions: toRupees(deductionsPaise),
     };
   }
 

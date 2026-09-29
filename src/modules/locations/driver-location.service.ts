@@ -211,6 +211,31 @@ export class DriverLocationService {
   }
 
   /**
+   * The on-trip trail for the trip meter: the STARTED checkpoint, every TRIP
+   * sample taken after the start, and the driver's current fix as the drop
+   * point. Pickup-leg samples (DRIVER_ACCEPTED) are excluded.
+   */
+  async tripTrail(
+    rideId: Types.ObjectId,
+    driverId: Types.ObjectId,
+    startedAt: Date,
+  ): Promise<Array<GeoCoordinates & { recordedAt: Date }>> {
+    const rows = await this.checkpointModel
+      .find({
+        rideId,
+        $or: [{ kind: CheckpointKind.STARTED }, { kind: CheckpointKind.TRIP, recordedAt: { $gte: startedAt } }],
+      })
+      .sort({ recordedAt: 1, _id: 1 })
+      .lean()
+      .exec();
+    const trail = rows.map((row) => ({ ...fromGeoJsonPoint(row.location), recordedAt: row.recordedAt }));
+    const live = this.store.latest(driverId.toString(), this.staleMs);
+    if (live && (!trail.length || live.recordedAt > trail[trail.length - 1].recordedAt))
+      trail.push({ latitude: live.latitude, longitude: live.longitude, recordedAt: live.recordedAt });
+    return trail;
+  }
+
+  /**
    * Best current position of a driver: the live fix if fresh, else the last
    * persisted one. Used to place the driver on the customer's map at once.
    */

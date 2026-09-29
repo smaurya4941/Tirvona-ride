@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 import { AuthModule } from "../auth/auth.module";
+import { BrandingModule } from "../branding/branding.module";
 import { CancellationsModule } from "../cancellations/cancellations.module";
 import { ComplaintsModule } from "../complaints/complaints.module";
 import { SupportTicket, SupportTicketSchema } from "../complaints/schemas/support-ticket.schema";
@@ -30,6 +31,7 @@ import {
   AdminEarningsController,
   AdminPaymentsController,
 } from "./admin-payments.controller";
+import { AdminBrandingController } from "./admin-branding.controller";
 import { AdminPeopleService } from "./admin-people.service";
 import { AdminPricingController } from "./admin-pricing.controller";
 import { AdminComplaintsController, AdminSosController } from "./admin-safety.controller";
@@ -66,6 +68,7 @@ import { AdminService } from "./admin.service";
     PromotionsModule,
     CancellationsModule,
     ReportsModule,
+    BrandingModule,
   ],
   controllers: [
     AdminController,
@@ -80,6 +83,7 @@ import { AdminService } from "./admin.service";
     AdminPromotionsController,
     AdminCancellationsController,
     AdminBroadcastsController,
+    AdminBrandingController,
   ],
   providers: [AdminService, AdminPeopleService],
 })

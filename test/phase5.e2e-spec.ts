@@ -81,6 +81,23 @@ class FakeRazorpay extends RazorpayGateway {
     return { ...payment };
   }
 
+  // Refunds and listing are exercised by payments-v2.e2e-spec.ts.
+  async createRefund(): Promise<never> {
+    throw new RazorpayGatewayError("Refunds are not faked in this suite", 400, "BAD_REQUEST_ERROR");
+  }
+
+  async fetchRefund(): Promise<never> {
+    throw new RazorpayGatewayError("Refunds are not faked in this suite", 400, "BAD_REQUEST_ERROR");
+  }
+
+  async fetchPaymentRefunds(): Promise<[]> {
+    return [];
+  }
+
+  async listPayments(): Promise<[]> {
+    return [];
+  }
+
   async fetchOrderPayments(orderId: string): Promise<RazorpayPayment[]> {
     return [...this.payments.values()].filter((payment) => payment.order_id === orderId);
   }
@@ -225,6 +242,8 @@ describe("Phase 5 — ratings, notifications, safety, complaints (e2e)", () => {
     process.chdir(workDir);
     Object.assign(process.env, {
       NODE_ENV: "test",
+      // Older suites assert final fare = estimate; actual-trip pricing is in payments-v2.
+      FINAL_FARE_MODE: "booked",
       LOG_LEVEL: "silent",
       SWAGGER_ENABLED: "false",
       MONGODB_URI: mongo.getUri(),

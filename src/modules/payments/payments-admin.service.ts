@@ -13,7 +13,9 @@ import { RidePaymentStateService } from "../rides/ride-payment-state.service";
 import type { RideDocument } from "../rides/schemas/ride.schema";
 import { User } from "../users/schemas/user.schema";
 import type { AdminPaymentsQueryDto } from "./dto/payment.dto";
-import { PaymentGateway, PaymentStatus } from "./interfaces/payment-status";
+import { PaymentGateway, PaymentStatus, SETTLED_PAYMENT_STATUSES } from "./interfaces/payment-status";
+import { PaymentRefundState } from "./interfaces/refund-status";
+import { finalFareView } from "../rides/ride-view.service";
 import type {
   AdminPaymentDetail,
   AdminPaymentListItem,
@@ -21,6 +23,7 @@ import type {
   AdminPaymentsSummary,
 } from "./interfaces/payment-views";
 import { PaymentsService } from "./payments.service";
+import { RefundsService } from "./refunds.service";
 import { Payment } from "./schemas/payment.schema";
 import type { PaymentDocument } from "./schemas/payment.schema";
 
@@ -52,6 +55,7 @@ export class PaymentsAdminService {
     private readonly rides: RidePaymentStateService,
     private readonly earnings: EarningsService,
     private readonly earningsAdmin: EarningsAdminService,
+    private readonly refunds: RefundsService,
     config: ConfigService,
   ) {
     this.timeZone = config.getOrThrow<string>("appTimeZone");
@@ -87,11 +91,18 @@ export class PaymentsAdminService {
   async detail(paymentId: string): Promise<AdminPaymentDetail> {
     const payment = await this.paymentModel.findById(paymentId).exec();
     if (!payment) throw apiNotFound("Payment not found", "PAYMENT_NOT_FOUND");
-    const [people, ride, earning] = await Promise.all([
+    const [people, ride, earning, refunds, adjustments] = await Promise.all([
       this.people([payment]),
       this.rides.findById(payment.rideId),
       this.earnings.findForPayment(payment._id),
+      this.refunds.forPayment(payment._id),
+      this.earnings.adjustmentsForPayment(payment._id),
     ]);
+    // What can still be refunded: captured − (processed + requested/pending).
+    const refundable =
+      payment.gateway === PaymentGateway.RAZORPAY && SETTLED_PAYMENT_STATUSES.includes(payment.status) && payment.razorpayPaymentId
+        ? Math.max(0, payment.amountPaise - (payment.refundAmountPaise ?? 0) - (payment.refundPendingPaise ?? 0))
+        : 0;
     return {
       ...this.toListItem(payment, people, ride ?? undefined),
       ride: ride
@@ -105,8 +116,14 @@ export class PaymentsAdminService {
             completedAt: ride.completedAt,
             finalFare: ride.fare.finalFare,
             estimatedFare: ride.fare.estimatedFare,
+            discount: ride.fare.discount,
+            payableFare: ride.fare.payableFare,
+            final: finalFareView(ride.fare.final),
           }
         : null,
+      refundable: toRupees(refundable),
+      refunds,
+      adjustments,
       attemptLog: payment.attempts.map((attempt) => ({
         orderId: attempt.orderId,
         amount: toRupees(attempt.amountPaise),
@@ -124,12 +141,19 @@ export class PaymentsAdminService {
         razorpayOrderId: event.razorpayOrderId,
         razorpayPaymentId: event.razorpayPaymentId,
         detail: event.detail,
+        fromStatus: event.fromStatus,
+        toStatus: event.toStatus,
+        actorId: event.actorId?.toString(),
+        amount: event.amountPaise !== undefined ? toRupees(event.amountPaise) : undefined,
+        refundId: event.refundId?.toString(),
       })),
       duplicateCaptures: payment.duplicateCaptures.map((duplicate) => ({
         razorpayPaymentId: duplicate.razorpayPaymentId,
         razorpayOrderId: duplicate.razorpayOrderId,
         amount: toRupees(duplicate.amountPaise),
         detectedAt: duplicate.detectedAt,
+        refunded: toRupees(duplicate.refundedPaise ?? 0),
+        refundState: (duplicate.refundState as PaymentRefundState | undefined) ?? PaymentRefundState.NONE,
       })),
       earning: earning
         ? {
@@ -147,7 +171,7 @@ export class PaymentsAdminService {
   async summary(): Promise<AdminPaymentsSummary> {
     const today = startOfDayInTimeZone(new Date(), this.timeZone);
     const captured = { status: { $in: [PaymentStatus.CAPTURED, PaymentStatus.REFUNDED, PaymentStatus.PARTIALLY_REFUNDED] } };
-    const [todayRows, allRows, failedToday, outstanding, needsAttention, earnings] = await Promise.all([
+    const [todayRows, allRows, failedToday, outstanding, needsAttention, earnings, refunds] = await Promise.all([
       this.paymentModel
         .aggregate<GatewayTotals>([
           { $match: { ...captured, paidAt: { $gte: today } } },
@@ -162,8 +186,15 @@ export class PaymentsAdminService {
         .exec(),
       this.paymentModel.countDocuments({ status: PaymentStatus.FAILED, updatedAt: { $gte: today } }).exec(),
       this.rides.outstanding(),
-      this.paymentModel.countDocuments({ "duplicateCaptures.0": { $exists: true } }).exec(),
+      this.paymentModel
+        .countDocuments({
+          duplicateCaptures: {
+            $elemMatch: { refundState: { $nin: [PaymentRefundState.FULL, PaymentRefundState.PENDING] } },
+          },
+        })
+        .exec(),
       this.earningsAdmin.totals(),
+      this.refunds.summary(today),
     ]);
     // "Collected" is money Tirvona received online; cash stayed with drivers.
     const online = (rows: GatewayTotals[]) => rows.filter((row) => row._id !== PaymentGateway.CASH);
@@ -185,6 +216,12 @@ export class PaymentsAdminService {
       outstandingRides: outstanding.rides,
       outstandingAmount: outstanding.amount,
       needsAttention,
+      refundedToday: toRupees(refunds.refundedToday),
+      refundedTotal: toRupees(refunds.refundedTotal),
+      refundsPending: refunds.pending,
+      refundsFailed: refunds.failed,
+      refundsToReview: refunds.review,
+      deductionsOutstanding: earnings.deductions,
     };
   }
 
@@ -321,7 +358,9 @@ export class PaymentsAdminService {
       customer: people.customers.get(payment.customerId.toString()) ?? null,
       driver: people.drivers.get(payment.driverId.toString()) ?? null,
       attempts: payment.attempts.length,
-      needsAttention: payment.duplicateCaptures.length > 0,
+      needsAttention: payment.duplicateCaptures.some(
+        (duplicate) => duplicate.refundState !== PaymentRefundState.FULL && duplicate.refundState !== PaymentRefundState.PENDING,
+      ),
     };
   }
 }

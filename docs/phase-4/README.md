@@ -316,6 +316,11 @@ totals and scoping, admin filters, audit trail, and single + bulk payouts.
 5. Admin → Driver earnings → driver → select → **Mark as paid** with a
    reference → the driver's Paid balance updates.
 
+> **Superseded in parts by `docs/payments/README.md` (Razorpay integration v2):**
+> actual-trip final fare, admin refunds (full/partial) with driver clawbacks,
+> refund-aware payouts, Razorpay ↔ MongoDB reconciliation runs and the
+> `/payments/webhook/razorpay` URL.
+
 ## Not in Phase 4 (by design)
 
 Automatic driver bank transfers / Razorpay Route, wallets, subscriptions,

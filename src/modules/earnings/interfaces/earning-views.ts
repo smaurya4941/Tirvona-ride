@@ -1,4 +1,6 @@
 import type {
+  AdjustmentStatus,
+  AdjustmentType,
   CommissionConfigStatus,
   CommissionPhase,
   CommissionType,
@@ -53,6 +55,8 @@ export interface EarningView {
   payoutReference?: string;
   payoutNote?: string;
   createdAt: Date;
+  /** Refund deductions on this ride (detail view only). */
+  adjustments?: AdjustmentView[];
 }
 
 export interface EarningsWindow {
@@ -71,6 +75,33 @@ export interface EarningsBalances {
   collected: number;
   /** Tirvona's commission on cash fares, owed by the driver. */
   commissionDue: number;
+  /** Refund clawbacks still to be deducted from the driver's next payout. */
+  deductions: number;
+}
+
+/** A correction to the driver's earnings after the ride (refund clawback). */
+export interface AdjustmentView {
+  id: string;
+  type: AdjustmentType;
+  earningId: string;
+  rideId: string;
+  rideCode: string;
+  paymentId: string;
+  refundId: string;
+  reason: string;
+  currency: string;
+  /** What the customer got back. */
+  refundAmount: number;
+  grossReversal: number;
+  commissionReversal: number;
+  /** Deducted from the driver. */
+  amount: number;
+  commissionRate: number;
+  status: AdjustmentStatus;
+  payoutId?: string;
+  settledAt?: Date;
+  waiverNote?: string;
+  createdAt: Date;
 }
 
 export interface EarningsSummary {
@@ -92,6 +123,8 @@ export interface Paged<T> {
 
 export interface DriverEarningsResponse extends Paged<EarningView> {
   period: EarningsPeriod;
+  /** Recent refund clawbacks (first page only). */
+  adjustments: AdjustmentView[];
   /** Totals of the selected period (the list below). */
   periodTotals: EarningsWindow;
   summary: EarningsSummary;
@@ -128,6 +161,12 @@ export interface PayoutView {
   driverId: string;
   earningIds: string[];
   earningCount: number;
+  /** Earnings settled, before deductions. */
+  grossAmount: number;
+  /** Refund clawbacks recovered in this payout. */
+  deductionAmount: number;
+  adjustmentIds: string[];
+  /** Transferred to the driver: gross − deductions. */
   amount: number;
   currency: string;
   payoutReference: string;
@@ -141,4 +180,5 @@ export interface AdminDriverEarningsDetail {
   summary: AdminDriverEarningsRow;
   ledger: Paged<EarningView>;
   payouts: PayoutView[];
+  adjustments: AdjustmentView[];
 }

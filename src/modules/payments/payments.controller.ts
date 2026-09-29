@@ -69,6 +69,20 @@ export class PaymentsController {
   }
 
   /** Razorpay → Tirvona. Authenticated by the HMAC signature, not a JWT. */
+  @Post("webhook/razorpay")
+  @Public()
+  @SkipThrottle()
+  @HttpCode(HttpStatus.OK)
+  @ApiExcludeEndpoint()
+  async razorpayWebhook(
+    @Req() request: RawBodyRequest<Request>,
+    @Headers("x-razorpay-signature") signature?: string,
+    @Headers("x-razorpay-event-id") eventId?: string,
+  ): Promise<ApiSuccessBody<WebhookResult>> {
+    return ok(await this.webhooks.handle(request.rawBody, signature, eventId));
+  }
+
+  /** The Phase 4 webhook URL, kept so existing dashboard configurations keep working. */
   @Post("webhook")
   @Public()
   @SkipThrottle()

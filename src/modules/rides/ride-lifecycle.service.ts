@@ -10,7 +10,8 @@ import type { DriverProfileDocument } from "../drivers/schemas/driver-profile.sc
 import { DriverLocationService } from "../locations/driver-location.service";
 import { CheckpointKind } from "../locations/schemas/driver-location-checkpoint.schema";
 import { MatchingService } from "../matching/matching.service";
-import { calculateFare } from "../pricing/fare-calculator";
+import type { FinalFareMode } from "../../config/environment";
+import { measureTrip, resolveFinalFare } from "../pricing/trip-meter";
 import { CancellationsService } from "../cancellations/cancellations.service";
 import type { CancellationPreview, ResolvedReason } from "../cancellations/cancellations.service";
 import { CancellationFeeStatus } from "../cancellations/schemas/cancellation.schemas";
@@ -32,6 +33,7 @@ import { RideViewService } from "./ride-view.service";
 import type { CustomerRideView, DriverRideView } from "./ride-view.service";
 import { RidesService } from "./rides.service";
 import { Ride } from "./schemas/ride.schema";
+import type { RideFinalFare } from "./schemas/ride.schema";
 
 const MAX_CANCEL_RETRIES = 3;
 
@@ -45,6 +47,9 @@ export class RideLifecycleService {
   private readonly logger = new Logger(RideLifecycleService.name);
   private readonly otpTtlMs: number;
   private readonly otpMaxAttempts: number;
+  private readonly finalFareMode: FinalFareMode;
+  private readonly finalFareMaxEstimateMultiplier: number;
+  private readonly tripMeterMaxGapSeconds: number;
 
   constructor(
     @InjectModel(Ride.name) private readonly rideModel: Model<Ride>,
@@ -60,6 +65,9 @@ export class RideLifecycleService {
   ) {
     this.otpTtlMs = config.getOrThrow<number>("rideOtpTtlMinutes") * 60_000;
     this.otpMaxAttempts = config.getOrThrow<number>("rideOtpMaxAttempts");
+    this.finalFareMode = config.getOrThrow<FinalFareMode>("finalFareMode");
+    this.finalFareMaxEstimateMultiplier = config.getOrThrow<number>("finalFareMaxEstimateMultiplier");
+    this.tripMeterMaxGapSeconds = config.getOrThrow<number>("tripMeterMaxGapSeconds");
   }
 
   // ── Driver actions ────────────────────────────────────────────────────
@@ -203,14 +211,50 @@ export class RideLifecycleService {
     if (ride.status !== RideStatus.RIDE_STARTED)
       throw rideConflict(this.wrongStateMessage("complete", ride.status), ride.status);
 
-    // Priced with the tariff snapshotted at booking, never today's tariff.
-    // Phase 2 has no trip tracking, so the booked distance/duration stand in
-    // for actuals; Phase 3 feeds real telemetry into the same calculation.
-    const finalFare = calculateFare(ride.fare, ride.distanceMeters, ride.durationSeconds).total;
+    // Priced with the tariff snapshotted at booking (never today's tariff) on
+    // the actual trip: server-timed duration and the GPS-trail distance, with
+    // the booked route as fallback and a cap over the accepted estimate.
+    const completedAt = new Date();
+    const measurement =
+      this.finalFareMode === "actual" && ride.startedAt
+        ? measureTrip(await this.locations.tripTrail(ride._id, driver._id, ride.startedAt), this.tripMeterMaxGapSeconds)
+        : undefined;
+    const priced = resolveFinalFare({
+      mode: this.finalFareMode,
+      rates: ride.fare,
+      bookedDistanceMeters: ride.distanceMeters,
+      bookedDurationSeconds: ride.durationSeconds,
+      estimatedFare: ride.fare.estimatedFare,
+      startedAt: ride.startedAt,
+      completedAt,
+      measurement,
+      maxEstimateMultiplier: this.finalFareMaxEstimateMultiplier,
+    });
+    const finalFare = priced.total;
     // A promo applied at booking is priced again on the final fare with the
     // rules frozen on the ride (the admin may have edited the promo since).
     const discount = ride.promo ? computeDiscount(ride.promo, finalFare) : 0;
     const payableFare = finalFare - discount;
+    const snapshot: RideFinalFare = {
+      distanceMeters: priced.distanceMeters,
+      durationSeconds: priced.durationSeconds,
+      distanceSource: priced.distanceSource,
+      durationSource: priced.durationSource,
+      measuredDistanceMeters: priced.measuredDistanceMeters,
+      baseFare: priced.breakdown.baseFare,
+      distanceCharge: priced.breakdown.distanceCharge,
+      timeCharge: priced.breakdown.timeCharge,
+      subtotal: priced.breakdown.subtotal,
+      minimumFareApplied: priced.breakdown.minimumFareApplied,
+      capApplied: priced.capApplied,
+      uncappedFare: priced.uncappedFare,
+      total: finalFare,
+      discount,
+      payable: payableFare,
+      pricingVersion: ride.fare.pricingVersion,
+      mode: this.finalFareMode,
+      computedAt: completedAt,
+    };
 
     const completed = await this.transitions.apply({
       rideId: ride._id,
@@ -220,13 +264,22 @@ export class RideLifecycleService {
       // Completing the trip opens the bill; it does not close it. The ride is
       // financially closed only when the payment is verified (Phase 4).
       set: {
-        completedAt: new Date(),
+        completedAt,
         "fare.finalFare": finalFare,
+        "fare.final": snapshot,
         ...(ride.promo ? { "fare.discount": discount, "fare.payableFare": payableFare } : {}),
         paymentStatus: payableFare > 0 ? RidePaymentStatus.PENDING : RidePaymentStatus.NOT_REQUIRED,
       },
       actor: this.actorFor(driverUserId, RideActorType.DRIVER),
-      metadata: ride.promo ? { finalFare, discount, payableFare, promoCode: ride.promo.code } : { finalFare },
+      metadata: {
+        finalFare,
+        distanceMeters: priced.distanceMeters,
+        distanceSource: priced.distanceSource,
+        durationSeconds: priced.durationSeconds,
+        ...(measurement ? { trail: { points: measurement.points, reliable: measurement.reliable, reason: measurement.reason } } : {}),
+        ...(priced.capApplied ? { capApplied: true, uncappedFare: priced.uncappedFare } : {}),
+        ...(ride.promo ? { discount, payableFare, promoCode: ride.promo.code } : {}),
+      },
     });
     if (!completed) throw await this.explainDriverActionFailure(rideId, driver, "complete");
 

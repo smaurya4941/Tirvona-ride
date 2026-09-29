@@ -15,6 +15,7 @@ import { RedisModule } from "./infrastructure/redis/redis.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { AuditModule } from "./modules/audit/audit.module";
 import { AuthModule } from "./modules/auth/auth.module";
+import { BrandingModule } from "./modules/branding/branding.module";
 import { CancellationsModule } from "./modules/cancellations/cancellations.module";
 import { PromotionsModule } from "./modules/promotions/promotions.module";
 import { ReportsModule } from "./modules/reports/reports.module";
@@ -130,6 +131,7 @@ const ENV_FILES: Record<string, string[]> = {
     DomainEventsModule,
     HealthModule,
     AuthModule,
+    BrandingModule,
     UsersModule,
     DriversModule,
     VehiclesModule,

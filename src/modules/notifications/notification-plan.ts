@@ -1,5 +1,10 @@
 import { UserRole } from "../../common/types/user-role.enum";
-import type { RideSnapshot, RideTransitionedEvent } from "../../infrastructure/events/domain-events";
+import type {
+  EarningsAdjustedEvent,
+  PaymentRefundUpdatedEvent,
+  RideSnapshot,
+  RideTransitionedEvent,
+} from "../../infrastructure/events/domain-events";
 import { RidePaymentStatus } from "../rides/ride-payment-status";
 import { RideActorType, RideStatus } from "../rides/ride-state-machine";
 import { NotificationType } from "./notification-types";
@@ -211,4 +216,60 @@ export function planPaymentNotifications(
         `Your payment of ${money} for ride ${ride.rideCode} did not go through. Tap to try again.`, key),
     ];
   return [];
+}
+
+/**
+ * Refund notifications. The customer hears when a refund of their ride
+ * payment starts and when Razorpay processes it; a failed refund is an ops
+ * matter (the customer is told nothing they cannot act on). Refunds of a
+ * duplicate capture use the same wording.
+ */
+export function planRefundNotifications(event: PaymentRefundUpdatedEvent): NotificationDraft[] {
+  if (!event.changed) return [];
+  const money = formatRupees(event.amount);
+  const base = {
+    userId: event.customerId,
+    recipientRole: UserRole.CUSTOMER,
+    rideId: event.rideId,
+    referenceId: event.paymentId,
+    data: { rideId: event.rideId, rideCode: event.rideCode, paymentId: event.paymentId, refundId: event.refundId },
+  };
+  if (event.status === "PENDING")
+    return [
+      {
+        ...base,
+        type: NotificationType.REFUND_INITIATED,
+        title: "Refund initiated",
+        message: `A refund of ${money} for ride ${event.rideCode} is on its way to your original payment method.`,
+        dedupeKey: `refund:${event.refundId}:PENDING`,
+      },
+    ];
+  if (event.status === "PROCESSED")
+    return [
+      {
+        ...base,
+        type: NotificationType.REFUND_PROCESSED,
+        title: "Refund processed",
+        message: `${money} for ride ${event.rideCode} has been refunded. Banks usually show it within 5–7 working days.`,
+        dedupeKey: `refund:${event.refundId}:PROCESSED`,
+      },
+    ];
+  return [];
+}
+
+export function planEarningAdjustedNotification(event: EarningsAdjustedEvent): NotificationDraft | null {
+  if (event.amount <= 0) return null;
+  return {
+    userId: event.driverUserId,
+    recipientRole: UserRole.DRIVER,
+    type: NotificationType.EARNING_ADJUSTED,
+    title: "Earnings adjusted",
+    message: `The customer of ride ${event.rideCode} was refunded ${formatRupees(event.refundAmount)}. ${formatRupees(
+      event.amount,
+    )} will be deducted from your next payout.`,
+    rideId: event.rideId,
+    referenceId: event.adjustmentId,
+    data: { rideId: event.rideId, rideCode: event.rideCode, adjustmentId: event.adjustmentId },
+    dedupeKey: `adjustment:${event.adjustmentId}`,
+  };
 }

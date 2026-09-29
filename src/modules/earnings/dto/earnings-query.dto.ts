@@ -93,3 +93,23 @@ export class CreatePayoutDto extends MarkEarningPaidDto {
   @IsMongoId({ each: true })
   earningIds!: string[];
 }
+
+export class PayoutPreviewDto {
+  @ApiProperty({ description: "driver_profiles id" })
+  @IsMongoId()
+  driverId!: string;
+
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMaxSize(500)
+  @ArrayUnique()
+  @IsMongoId({ each: true })
+  earningIds!: string[];
+}
+
+export class WaiveAdjustmentDto {
+  @ApiProperty({ example: "Customer complaint was not the driver's fault" })
+  @IsString()
+  @Length(3, 240)
+  note!: string;
+}

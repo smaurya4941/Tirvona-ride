@@ -20,6 +20,77 @@ export class RideLocation {
 const RideLocationSchema = SchemaFactory.createForClass(RideLocation);
 
 /**
+ * The bill as priced at completion, frozen: the trip measured, the tariff
+ * applied (the booking snapshot, `pricingVersion`), each component, the
+ * customer-protection cap and the discount. Payments and earnings read this,
+ * never the current pricing configuration.
+ */
+@Schema({ _id: false })
+export class RideFinalFare {
+  @Prop({ required: true, min: 0 })
+  distanceMeters!: number;
+
+  @Prop({ required: true, min: 0 })
+  durationSeconds!: number;
+
+  /** ACTUAL (GPS trail) or BOOKED (the booked route: trail missing/unreliable, or booked mode). */
+  @Prop({ required: true })
+  distanceSource!: string;
+
+  /** ACTUAL (start → complete) or BOOKED. */
+  @Prop({ required: true })
+  durationSource!: string;
+
+  /** Trail distance even when not billed (support and disputes). */
+  @Prop({ min: 0 })
+  measuredDistanceMeters?: number;
+
+  @Prop({ required: true })
+  baseFare!: number;
+
+  @Prop({ required: true })
+  distanceCharge!: number;
+
+  @Prop({ required: true })
+  timeCharge!: number;
+
+  @Prop({ required: true })
+  subtotal!: number;
+
+  @Prop({ required: true })
+  minimumFareApplied!: boolean;
+
+  /** The fare was limited to FINAL_FARE_MAX_ESTIMATE_MULTIPLIER × estimate. */
+  @Prop({ required: true, default: false })
+  capApplied!: boolean;
+
+  @Prop()
+  uncappedFare?: number;
+
+  /** = fare.finalFare */
+  @Prop({ required: true })
+  total!: number;
+
+  @Prop({ required: true, min: 0, default: 0 })
+  discount!: number;
+
+  /** What the customer owes (= fare.payableFare when a promo applies, else total). */
+  @Prop({ required: true, min: 0 })
+  payable!: number;
+
+  @Prop({ required: true })
+  pricingVersion!: number;
+
+  /** actual | booked — the FINAL_FARE_MODE in force at completion. */
+  @Prop({ required: true })
+  mode!: string;
+
+  @Prop({ required: true })
+  computedAt!: Date;
+}
+const RideFinalFareSchema = SchemaFactory.createForClass(RideFinalFare);
+
+/**
  * The tariff and breakdown at booking time. Snapshotted so a later admin
  * price change never alters a ride that is already booked or completed.
  */
@@ -72,6 +143,10 @@ export class RideFare {
 
   @Prop({ required: true })
   pricingVersion!: number;
+
+  /** The final bill, frozen at completion (absent on rides completed before it existed). */
+  @Prop({ type: RideFinalFareSchema })
+  final?: RideFinalFare;
 }
 const RideFareSchema = SchemaFactory.createForClass(RideFare);
 
@@ -180,6 +255,10 @@ export class RidePaymentSummary {
 
   @Prop()
   failureReason?: string;
+
+  /** Refunded to the customer so far, rupees (processed refunds only). */
+  @Prop({ min: 0 })
+  refundedAmount?: number;
 }
 const RidePaymentSummarySchema = SchemaFactory.createForClass(RidePaymentSummary);
 

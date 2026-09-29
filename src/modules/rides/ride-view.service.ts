@@ -12,7 +12,7 @@ import { effectivePaymentStatus } from "./ride-payment-status";
 import type { RidePaymentStatus } from "./ride-payment-status";
 import { DRIVER_ENGAGED_STATUSES, RideStatus } from "./ride-state-machine";
 import type { RideActorType } from "./ride-state-machine";
-import type { RideDocument, RideLocation, RideVehicle } from "./schemas/ride.schema";
+import type { RideDocument, RideFinalFare, RideLocation, RideVehicle } from "./schemas/ride.schema";
 
 export interface RideFareView {
   currency: string;
@@ -30,6 +30,45 @@ export interface RideFareView {
   discount?: number;
   /** What the customer pays after the discount; absent when no promo. */
   payableFare?: number;
+  /** The frozen final bill: actual trip measured and each component (absent until completion). */
+  final?: RideFinalFareView;
+}
+
+export interface RideFinalFareView {
+  distanceMeters: number;
+  durationSeconds: number;
+  distanceSource: string;
+  durationSource: string;
+  baseFare: number;
+  distanceCharge: number;
+  timeCharge: number;
+  subtotal: number;
+  minimumFareApplied: boolean;
+  capApplied: boolean;
+  total: number;
+  discount: number;
+  payable: number;
+  pricingVersion: number;
+}
+
+export function finalFareView(final?: RideFinalFare): RideFinalFareView | undefined {
+  if (!final) return undefined;
+  return {
+    distanceMeters: final.distanceMeters,
+    durationSeconds: final.durationSeconds,
+    distanceSource: final.distanceSource,
+    durationSource: final.durationSource,
+    baseFare: final.baseFare,
+    distanceCharge: final.distanceCharge,
+    timeCharge: final.timeCharge,
+    subtotal: final.subtotal,
+    minimumFareApplied: final.minimumFareApplied,
+    capApplied: final.capApplied,
+    total: final.total,
+    discount: final.discount,
+    payable: final.payable,
+    pricingVersion: final.pricingVersion,
+  };
 }
 
 export interface RidePaymentView {
@@ -39,6 +78,7 @@ export interface RidePaymentView {
   amount?: number;
   paidAt?: Date;
   failureReason?: string;
+  refundedAmount?: number;
 }
 
 export interface RideView {
@@ -162,6 +202,7 @@ export class RideViewService {
         finalFare: ride.fare.finalFare,
         discount: ride.fare.discount,
         payableFare: ride.fare.payableFare,
+        final: finalFareView(ride.fare.final),
       },
       requestedAt: ride.requestedAt,
       assignedAt: ride.assignedAt,
@@ -194,6 +235,7 @@ export class RideViewService {
             amount: ride.payment.amount,
             paidAt: ride.payment.paidAt,
             failureReason: ride.payment.failureReason,
+            refundedAmount: ride.payment.refundedAmount,
           }
         : undefined,
     };

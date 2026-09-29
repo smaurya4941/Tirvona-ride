@@ -14,8 +14,9 @@ import type {
 } from "./dto/earnings-query.dto";
 import { EarningsService, LEDGER_TOTALS, STATUS_TOTALS } from "./earnings.service";
 import type { StatusTotalsRow } from "./earnings.service";
-import { EarningStatus } from "./interfaces/earning-status";
+import { AdjustmentStatus, EarningStatus } from "./interfaces/earning-status";
 import type {
+  AdjustmentView,
   AdminDriverEarningsDetail,
   AdminDriverEarningsRow,
   AdminEarningsTotals,
@@ -26,6 +27,17 @@ import type {
 import { DriverEarning } from "./schemas/driver-earning.schema";
 import { DriverPayout } from "./schemas/driver-payout.schema";
 import type { DriverPayoutDocument } from "./schemas/driver-payout.schema";
+import { DriverEarningAdjustment } from "./schemas/driver-earning-adjustment.schema";
+
+/** What a payout of the selected lines would transfer (rupees). */
+export interface PayoutPreview {
+  earningCount: number;
+  grossAmount: number;
+  deductionAmount: number;
+  adjustmentCount: number;
+  amount: number;
+  outstandingDeductions: number;
+}
 
 interface DriverTotals {
   _id: Types.ObjectId;
@@ -71,6 +83,7 @@ export class EarningsAdminService {
   constructor(
     @InjectModel(DriverEarning.name) private readonly earningModel: Model<DriverEarning>,
     @InjectModel(DriverPayout.name) private readonly payoutModel: Model<DriverPayout>,
+    @InjectModel(DriverEarningAdjustment.name) private readonly adjustmentModel: Model<DriverEarningAdjustment>,
     @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly earnings: EarningsService,
@@ -78,12 +91,13 @@ export class EarningsAdminService {
 
   async totals(): Promise<AdminEarningsTotals> {
     await this.earnings.promoteMatured();
-    const [[all], statuses, drivers] = await Promise.all([
+    const [[all], statuses, drivers, deductions] = await Promise.all([
       this.earningModel.aggregate<{ net: number; gross: number; commission: number; rides: number }>([
         { $group: LEDGER_TOTALS },
       ]),
       this.earningModel.aggregate<StatusTotalsRow>([{ $group: STATUS_TOTALS }]),
       this.earningModel.distinct("driverId"),
+      this.earnings.totalOutstandingDeductions(),
     ]);
     return {
       currency: "INR",
@@ -92,7 +106,7 @@ export class EarningsAdminService {
       commission: toRupees(all?.commission ?? 0),
       net: toRupees(all?.net ?? 0),
       drivers: drivers.length,
-      ...this.earnings.balancesFrom(statuses),
+      ...this.earnings.balancesFrom(statuses, deductions),
     };
   }
 
@@ -117,9 +131,12 @@ export class EarningsAdminService {
       .exec();
     const rows = result?.items ?? [];
     const total = result?.total[0]?.count ?? 0;
-    const refs = await this.driverRefs(rows.map((row) => row._id));
+    const [refs, deductions] = await Promise.all([
+      this.driverRefs(rows.map((row) => row._id)),
+      this.earnings.outstandingDeductions(rows.map((row) => row._id)),
+    ]);
     return {
-      items: rows.map((row) => this.toRow(row, refs.get(row._id.toString()))),
+      items: rows.map((row) => this.toRow(row, refs.get(row._id.toString()), deductions.get(row._id.toString()))),
       page: query.page,
       limit: query.limit,
       total,
@@ -136,7 +153,7 @@ export class EarningsAdminService {
 
     const ledgerFilter: QueryFilter<DriverEarning> = { driverId: id };
     if (query.status) ledgerFilter.status = query.status;
-    const [[totals], items, total, payouts] = await Promise.all([
+    const [[totals], items, total, payouts, deductions, adjustments] = await Promise.all([
       this.earningModel.aggregate<DriverTotals>([{ $match: { driverId: id } }, { $group: DRIVER_TOTALS }]),
       this.earningModel
         .find(ledgerFilter)
@@ -146,6 +163,8 @@ export class EarningsAdminService {
         .exec(),
       this.earningModel.countDocuments(ledgerFilter).exec(),
       this.payoutModel.find({ driverId: id }).sort({ paidAt: -1 }).limit(50).exec(),
+      this.earnings.outstandingDeductions([id]),
+      this.earnings.adjustmentsForDriver(id, 50),
     ]);
     return {
       driver,
@@ -163,6 +182,7 @@ export class EarningsAdminService {
           commissionDue: 0,
         },
         driver,
+        deductions.get(driverId),
       ),
       ledger: {
         items: items.map((earning) => this.earnings.toView(earning)),
@@ -172,7 +192,59 @@ export class EarningsAdminService {
         hasMore: query.page * query.limit < total,
       },
       payouts: await this.toPayoutViews(payouts),
+      adjustments,
     };
+  }
+
+  /**
+   * What paying these lines would transfer: their sum minus the driver's
+   * outstanding refund clawbacks that fit (oldest first, whole adjustments).
+   */
+  async previewPayout(dto: { driverId: string; earningIds: string[] }): Promise<PayoutPreview> {
+    await this.earnings.promoteMatured();
+    const driverId = new Types.ObjectId(dto.driverId);
+    const earnings = await this.earningModel
+      .find({ _id: { $in: dto.earningIds.map((id) => new Types.ObjectId(id)) }, driverId, status: EarningStatus.AVAILABLE })
+      .select("netEarningPaise")
+      .lean()
+      .exec();
+    const gross = earnings.reduce((sum, earning) => sum + earning.netEarningPaise, 0);
+    const outstanding = await this.outstandingAdjustments(driverId);
+    const picked = this.pickDeductions(outstanding, gross);
+    const deduction = picked.reduce((sum, adjustment) => sum + adjustment.amountPaise, 0);
+    return {
+      earningCount: earnings.length,
+      grossAmount: toRupees(gross),
+      deductionAmount: toRupees(deduction),
+      adjustmentCount: picked.length,
+      amount: toRupees(gross - deduction),
+      outstandingDeductions: toRupees(outstanding.reduce((sum, adjustment) => sum + adjustment.amountPaise, 0)),
+    };
+  }
+
+  /** Write off an outstanding clawback: Tirvona bears it, nothing is deducted. */
+  async waiveAdjustment(adjustmentId: string, note: string, adminUserId: string): Promise<AdjustmentView> {
+    const waived = await this.adjustmentModel
+      .findOneAndUpdate(
+        { _id: new Types.ObjectId(adjustmentId), status: AdjustmentStatus.OUTSTANDING },
+        {
+          $set: {
+            status: AdjustmentStatus.WAIVED,
+            waivedBy: new Types.ObjectId(adminUserId),
+            waiverNote: note.trim(),
+            settledAt: new Date(),
+          },
+        },
+        { returnDocument: "after" },
+      )
+      .exec();
+    if (!waived) {
+      const current = await this.adjustmentModel.exists({ _id: adjustmentId }).exec();
+      if (!current) throw apiNotFound("Adjustment not found", "ADJUSTMENT_NOT_FOUND");
+      throw new ApiException(HttpStatus.CONFLICT, "Only an outstanding deduction can be waived", "ADJUSTMENT_NOT_OUTSTANDING");
+    }
+    this.logger.log(`Adjustment ${adjustmentId} (${waived.amountPaise}p, ride ${waived.rideCode}) waived by ${adminUserId}`);
+    return this.earnings.toAdjustmentView(waived);
   }
 
   /** Mark a single AVAILABLE earning as paid (a one-line payout). */
@@ -260,15 +332,33 @@ export class EarningsAdminService {
         "EARNING_NOT_AVAILABLE",
       );
     }
-    if (settled.length !== ids.length) {
-      payout.earningIds = settled.map((earning) => earning._id);
-      payout.earningCount = settled.length;
-      payout.amountPaise = settled.reduce((sum, earning) => sum + earning.netEarningPaise, 0);
-      await payout.save();
-    }
+    const grossPaise = settled.reduce((sum, earning) => sum + earning.netEarningPaise, 0);
+    payout.earningIds = settled.map((earning) => earning._id);
+    payout.earningCount = settled.length;
+
+    // Recover outstanding refund clawbacks from this payout (oldest first,
+    // whole adjustments that fit). Conditional flip: a concurrent payout can
+    // never recover the same adjustment twice.
+    const picked = this.pickDeductions(await this.outstandingAdjustments(driverId), grossPaise);
+    if (picked.length)
+      await this.adjustmentModel
+        .updateMany(
+          { _id: { $in: picked.map((adjustment) => adjustment._id) }, driverId, status: AdjustmentStatus.OUTSTANDING },
+          { $set: { status: AdjustmentStatus.SETTLED, payoutId: payout._id, settledAt: paidAt } },
+        )
+        .exec();
+    const recovered = picked.length
+      ? await this.adjustmentModel.find({ payoutId: payout._id }).select("amountPaise").lean().exec()
+      : [];
+    const deductionPaise = recovered.reduce((sum, adjustment) => sum + adjustment.amountPaise, 0);
+    payout.grossAmountPaise = grossPaise;
+    payout.deductionPaise = deductionPaise;
+    payout.adjustmentIds = recovered.map((adjustment) => adjustment._id);
+    payout.amountPaise = grossPaise - deductionPaise;
+    await payout.save();
     this.logger.log(
       `Payout ${payout._id.toString()} to driver ${dto.driverId}: ${payout.earningCount} earnings, ` +
-        `${payout.amountPaise}p, ref ${payout.payoutReference} by ${adminUserId}`,
+        `${grossPaise}p − ${deductionPaise}p deductions = ${payout.amountPaise}p, ref ${payout.payoutReference} by ${adminUserId}`,
     );
     const [view] = await this.toPayoutViews([payout]);
     return view;
@@ -333,7 +423,28 @@ export class EarningsAdminService {
     );
   }
 
-  private toRow(totals: DriverTotals, driver?: DriverRef): AdminDriverEarningsRow {
+  private async outstandingAdjustments(driverId: Types.ObjectId): Promise<Array<{ _id: Types.ObjectId; amountPaise: number }>> {
+    return this.adjustmentModel
+      .find({ driverId, status: AdjustmentStatus.OUTSTANDING })
+      .sort({ createdAt: 1, _id: 1 })
+      .select("amountPaise")
+      .lean()
+      .exec();
+  }
+
+  /** Oldest-first whole adjustments whose total fits within the payout. */
+  private pickDeductions<T extends { amountPaise: number }>(outstanding: T[], grossPaise: number): T[] {
+    const picked: T[] = [];
+    let remaining = grossPaise;
+    for (const adjustment of outstanding) {
+      if (adjustment.amountPaise > remaining) continue;
+      picked.push(adjustment);
+      remaining -= adjustment.amountPaise;
+    }
+    return picked;
+  }
+
+  private toRow(totals: DriverTotals, driver?: DriverRef, deductionsPaise = 0): AdminDriverEarningsRow {
     return {
       driver: driver ?? {
         driverId: totals._id.toString(),
@@ -351,6 +462,7 @@ export class EarningsAdminService {
       paid: toRupees(totals.paid),
       collected: toRupees(totals.collected),
       commissionDue: toRupees(totals.commissionDue),
+      deductions: toRupees(deductionsPaise),
       lastEarningAt: totals.lastEarningAt,
     };
   }
@@ -367,6 +479,9 @@ export class EarningsAdminService {
       driverId: payout.driverId.toString(),
       earningIds: payout.earningIds.map((id) => id.toString()),
       earningCount: payout.earningCount,
+      grossAmount: toRupees(payout.grossAmountPaise ?? payout.amountPaise),
+      deductionAmount: toRupees(payout.deductionPaise ?? 0),
+      adjustmentIds: (payout.adjustmentIds ?? []).map((id) => id.toString()),
       amount: toRupees(payout.amountPaise),
       currency: payout.currency,
       payoutReference: payout.payoutReference,

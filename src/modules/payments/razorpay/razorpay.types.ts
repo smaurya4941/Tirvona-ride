@@ -45,7 +45,29 @@ export interface RazorpayRefund {
   amount: number;
   currency: string;
   status: "pending" | "processed" | "failed";
+  notes?: Record<string, string> | unknown[];
+  receipt?: string | null;
+  speed_processed?: string | null;
+  speed_requested?: string | null;
+  /** Bank references once processed (ARN for cards, RRN for UPI). */
+  acquirer_data?: { arn?: string | null; rrn?: string | null; utr?: string | null } | null;
   created_at: number;
+}
+
+export interface CreateRefundInput {
+  razorpayPaymentId: string;
+  amountPaise: number;
+  /** Our refund id, echoed back in notes for reconciliation. */
+  receipt: string;
+  notes: Record<string, string>;
+}
+
+export interface ListPaymentsInput {
+  /** Unix seconds, inclusive. */
+  from: number;
+  to: number;
+  count: number;
+  skip: number;
 }
 
 /** Webhook body (only the parts Tirvona uses). */

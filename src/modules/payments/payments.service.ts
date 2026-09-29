@@ -19,9 +19,11 @@ import { RideStatus } from "../rides/ride-state-machine";
 import type { RideDocument } from "../rides/schemas/ride.schema";
 import { User } from "../users/schemas/user.schema";
 import type { PaymentFailureDto, PaymentHistoryQueryDto, VerifyPaymentDto } from "./dto/payment.dto";
+import { finalFareView } from "../rides/ride-view.service";
 import {
   CASH_METHOD,
   OPEN_PAYMENT_STATUSES,
+  PAYMENT_APP_TAG,
   PAYMENT_GATEWAY,
   PaymentGateway,
   PaymentAttemptStatus,
@@ -36,6 +38,7 @@ import type {
   PaymentView,
 } from "./interfaces/payment-views";
 import { RazorpayGateway, RazorpayGatewayError } from "./razorpay/razorpay.gateway";
+import { RefundsService } from "./refunds.service";
 import { verifyPaymentSignature } from "./razorpay/razorpay-signature";
 import type { RazorpayPayment } from "./razorpay/razorpay.types";
 import { Payment } from "./schemas/payment.schema";
@@ -85,6 +88,7 @@ export class PaymentsService {
     private readonly gateway: RazorpayGateway,
     private readonly rides: RidePaymentStateService,
     private readonly earnings: EarningsService,
+    private readonly refunds: RefundsService,
     config: ConfigService,
   ) {
     this.keySecret = config.get<string>("razorpayKeySecret") ?? "";
@@ -190,6 +194,10 @@ export class PaymentsService {
                   type: "CASH_SELECTED",
                   source: PaymentEventSource.CUSTOMER,
                   at: now,
+                  fromStatus: payment.status,
+                  toStatus: PaymentStatus.CAPTURED,
+                  actorId: new Types.ObjectId(customerUserId),
+                  amountPaise,
                   detail: `${amountPaise} paise to the driver`,
                 },
               ],
@@ -329,6 +337,15 @@ export class PaymentsService {
       (!payment.lastReconciledAt || Date.now() - payment.lastReconciledAt.getTime() > READ_RECONCILE_INTERVAL_MS)
     )
       payment = await this.reconcile(payment, PaymentEventSource.RECONCILE);
+    else if (
+      this.gateway.isConfigured &&
+      (payment.refundPendingPaise ?? 0) > 0 &&
+      (!payment.lastReconciledAt || Date.now() - payment.lastReconciledAt.getTime() > READ_RECONCILE_INTERVAL_MS)
+    ) {
+      await this.paymentModel.updateOne({ _id: payment._id }, { $set: { lastReconciledAt: new Date() } }).exec();
+      await this.refunds.syncPayment(payment._id, PaymentEventSource.RECONCILE);
+      payment = (await this.paymentModel.findById(payment._id).exec()) ?? payment;
+    }
 
     const ride = await this.rides.findById(payment.rideId);
     const [customer, driverProfile] = await Promise.all([
@@ -368,6 +385,9 @@ export class PaymentsService {
               minimumFareApplied: ride.fare.minimumFareApplied,
               estimatedFare: ride.fare.estimatedFare,
               finalFare: ride.fare.finalFare,
+              discount: ride.fare.discount,
+              payableFare: ride.fare.payableFare,
+              final: finalFareView(ride.fare.final),
             },
           }
         : {
@@ -393,6 +413,7 @@ export class PaymentsService {
           },
       customer: { name: nameOf(customer) || "Customer", phone: customer?.phone },
       driver: driverUser ? { name: nameOf(driverUser) || "Driver" } : null,
+      refunds: await this.refunds.forCustomer(payment._id),
       vehicle: ride?.vehicle
         ? {
             vehicleType: ride.vehicle.vehicleType,
@@ -485,17 +506,18 @@ export class PaymentsService {
     // Already settled by another payment on this ride.
     if (SETTLED_PAYMENT_STATUSES.includes(payment.status)) {
       if (payment.razorpayPaymentId === gatewayPayment.id) {
-        if (gatewayPayment.status === "refunded" || (gatewayPayment.amount_refunded ?? 0) > 0)
-          return this.recordRefund(payment, {
-            amountPaise: gatewayPayment.amount_refunded ?? gatewayPayment.amount,
-            status: "processed",
-            source,
-          });
         await this.afterCapture(payment);
+        // Razorpay reports more refunded than we know of: pull its refunds.
+        if ((gatewayPayment.amount_refunded ?? 0) > (payment.refundAmountPaise ?? 0) + (payment.refundPendingPaise ?? 0)) {
+          await this.refunds.syncPayment(payment._id, source);
+          return (await this.paymentModel.findById(payment._id).exec()) ?? payment;
+        }
         return payment;
       }
-      if (gatewayPayment.status === "captured" || gatewayPayment.status === "refunded")
+      if (gatewayPayment.status === "captured" || gatewayPayment.status === "refunded") {
         await this.recordDuplicate(payment, gatewayPayment, source);
+        if ((gatewayPayment.amount_refunded ?? 0) > 0) await this.refunds.syncPayment(payment._id, source);
+      }
       else if (gatewayPayment.status === "authorized")
         // Deliberately not captured: Razorpay auto-refunds an uncaptured
         // authorisation, so the customer is never charged twice.
@@ -512,12 +534,10 @@ export class PaymentsService {
       case "captured":
         return this.settleCaptured(payment, gatewayPayment, source, signature);
       case "refunded": {
+        // Captured, then refunded (e.g. in the dashboard) before we heard of it.
         const captured = await this.settleCaptured(payment, gatewayPayment, source, signature);
-        return this.recordRefund(captured, {
-          amountPaise: gatewayPayment.amount_refunded ?? gatewayPayment.amount,
-          status: "processed",
-          source,
-        });
+        await this.refunds.syncPayment(captured._id, source);
+        return (await this.paymentModel.findById(captured._id).exec()) ?? captured;
       }
       case "authorized": {
         try {
@@ -682,6 +702,27 @@ export class PaymentsService {
       .exec();
   }
 
+  /**
+   * Open payments with a Razorpay order that nothing is known to be in
+   * flight for — e.g. the app died after checkout and the webhook was lost.
+   * Only recent orders, and each at most once per `checkedBefore` window.
+   */
+  async findOpenOrdersToCheck(checkedBefore: Date, raisedAfter: Date, limit: number): Promise<PaymentDocument[]> {
+    return this.paymentModel
+      .find({
+        gateway: PaymentGateway.RAZORPAY,
+        status: { $in: [PaymentStatus.CREATED, PaymentStatus.FAILED] },
+        processingPaymentId: { $exists: false },
+        // An order raised in the horizon, and not in the last few minutes
+        // (the customer may still be in checkout).
+        attempts: { $elemMatch: { createdAt: { $gte: raisedAfter, $lte: checkedBefore } } },
+        $or: [{ lastReconciledAt: { $exists: false } }, { lastReconciledAt: { $lte: checkedBefore } }],
+      })
+      .sort({ lastReconciledAt: 1, _id: 1 })
+      .limit(limit)
+      .exec();
+  }
+
   async findById(paymentId: string): Promise<PaymentDocument | null> {
     return this.paymentModel.findById(paymentId).exec();
   }
@@ -696,63 +737,6 @@ export class PaymentsService {
         $or: [{ razorpayPaymentId }, { "attempts.razorpayPaymentId": razorpayPaymentId }, { processingPaymentId: razorpayPaymentId }],
       })
       .exec();
-  }
-
-  /** Refund synced from Razorpay (V1 has no refund workflow of its own). */
-  async recordRefund(
-    payment: PaymentDocument,
-    refund: { refundId?: string; amountPaise: number; status: string; source: PaymentEventSource },
-  ): Promise<PaymentDocument> {
-    if (!SETTLED_PAYMENT_STATUSES.includes(payment.status)) return payment;
-    const processed = refund.status === "processed";
-    const amountPaise = Math.min(refund.amountPaise, payment.amountPaise);
-    const full = amountPaise >= payment.amountPaise;
-    const status = !processed
-      ? payment.status
-      : full
-        ? PaymentStatus.REFUNDED
-        : PaymentStatus.PARTIALLY_REFUNDED;
-    const updated = await this.paymentModel
-      .findOneAndUpdate(
-        { _id: payment._id },
-        {
-          $set: {
-            status,
-            refundId: refund.refundId ?? payment.refundId,
-            refundAmountPaise: amountPaise,
-            refundStatus: refund.status,
-            ...(processed ? { refundedAt: new Date() } : {}),
-          },
-          $push: {
-            events: {
-              $each: [
-                {
-                  type: `REFUND_${refund.status.toUpperCase()}`,
-                  source: refund.source,
-                  at: new Date(),
-                  razorpayPaymentId: payment.razorpayPaymentId,
-                  detail: `${amountPaise} paise${refund.refundId ? ` (${refund.refundId})` : ""}`,
-                },
-              ],
-              $slice: -MAX_EVENTS,
-            },
-          },
-        },
-        { returnDocument: "after" },
-      )
-      .exec();
-    if (processed) {
-      await this.rides.apply({
-        rideId: payment.rideId,
-        from: [RidePaymentStatus.SUCCESS, RidePaymentStatus.PARTIALLY_REFUNDED],
-        to: full ? RidePaymentStatus.REFUNDED : RidePaymentStatus.PARTIALLY_REFUNDED,
-      });
-      // The earning line is immutable and V1 has no clawback: flag it.
-      this.logger.warn(
-        `Payment ${payment._id.toString()} refunded ${amountPaise}p — review driver earning ${payment.earningId?.toString() ?? "(none)"} before payout`,
-      );
-    }
-    return updated ?? payment;
   }
 
   // ── Internals ─────────────────────────────────────────────────────────
@@ -885,6 +869,7 @@ export class PaymentsService {
           currency: payment.currency,
           receipt: payment.rideCode,
           notes: {
+            app: PAYMENT_APP_TAG,
             rideId: payment.rideId.toString(),
             rideCode: payment.rideCode,
             paymentId: payment._id.toString(),
@@ -997,8 +982,11 @@ export class PaymentsService {
                     type: "PAYMENT_CAPTURED",
                     source,
                     at: now,
+                    fromStatus: payment.status,
+                    toStatus: PaymentStatus.CAPTURED,
                     razorpayOrderId: gatewayPayment.order_id ?? undefined,
                     razorpayPaymentId: gatewayPayment.id,
+                    amountPaise: gatewayPayment.amount,
                     detail: gatewayPayment.method,
                   },
                 ],
@@ -1047,6 +1035,8 @@ export class PaymentsService {
       type: failure.fromClient ? "CLIENT_REPORTED_FAILURE" : "PAYMENT_FAILED",
       source: failure.source,
       at: new Date(),
+      fromStatus: payment.status,
+      toStatus: PaymentStatus.FAILED,
       razorpayOrderId: failure.orderId,
       razorpayPaymentId: failure.razorpayPaymentId,
       detail: `${failure.code}: ${failure.reason}`,
@@ -1217,7 +1207,13 @@ export class PaymentsService {
           contact: customer?.phone,
           email: customer?.email,
         },
-        notes: { rideId: payment.rideId.toString(), paymentId: payment._id.toString(), rideCode: payment.rideCode },
+        // Copied onto the Razorpay payment: identifies Ride money on the shared account.
+        notes: {
+          app: PAYMENT_APP_TAG,
+          rideId: payment.rideId.toString(),
+          paymentId: payment._id.toString(),
+          rideCode: payment.rideCode,
+        },
       },
     };
   }
@@ -1257,10 +1253,11 @@ export class PaymentsService {
       failureReason: payment.failureReason,
       paidAt: payment.paidAt,
       refund:
-        payment.refundAmountPaise !== undefined
+        payment.refundAmountPaise !== undefined || (payment.refundPendingPaise ?? 0) > 0 || payment.refundStatus
           ? {
               refundId: payment.refundId,
-              amount: toRupees(payment.refundAmountPaise),
+              amount: toRupees(payment.refundAmountPaise ?? 0),
+              pending: toRupees(payment.refundPendingPaise ?? 0),
               status: payment.refundStatus,
               refundedAt: payment.refundedAt,
             }

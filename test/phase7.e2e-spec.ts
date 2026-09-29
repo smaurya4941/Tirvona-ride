@@ -59,6 +59,10 @@ const EXPECTED_PUBLIC_ROUTES = [
   "POST /auth/verify-otp",
   "POST /admin/auth/login",
   "POST /payments/webhook",
+  "POST /payments/webhook/razorpay",
+  // Branding: the apps show the logo/splash before sign-in.
+  "GET /branding",
+  "GET /branding/assets/:kind",
 ].sort();
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "ALL", "OPTIONS", "HEAD", "SEARCH"];
@@ -138,6 +142,8 @@ describe("Phase 7 — admin completion & hardening (e2e)", () => {
     process.chdir(workDir);
     Object.assign(process.env, {
       NODE_ENV: "test",
+      // Older suites assert final fare = estimate; actual-trip pricing is in payments-v2.
+      FINAL_FARE_MODE: "booked",
       LOG_LEVEL: "silent",
       SWAGGER_ENABLED: "false",
       MONGODB_URI: mongo.getUri(),

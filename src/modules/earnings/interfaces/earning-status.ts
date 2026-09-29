@@ -14,6 +14,23 @@ export enum EarningStatus {
   COLLECTED = "COLLECTED",
 }
 
+/** Why a driver's earnings were corrected after the ride. */
+export enum AdjustmentType {
+  /** The driver's share of a customer refund. */
+  REFUND_CLAWBACK = "REFUND_CLAWBACK",
+}
+
+/**
+ * OUTSTANDING — owed back by the driver; deducted from the next payout.
+ * SETTLED     — deducted from a payout (`payoutId`).
+ * WAIVED      — written off by an admin (Tirvona bears it).
+ */
+export enum AdjustmentStatus {
+  OUTSTANDING = "OUTSTANDING",
+  SETTLED = "SETTLED",
+  WAIVED = "WAIVED",
+}
+
 /** Who received the customer's money for a ride. */
 export enum PaymentMode {
   /** Paid through Razorpay: Tirvona holds it and pays the driver out. */

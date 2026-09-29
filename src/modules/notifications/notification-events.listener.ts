@@ -11,7 +11,9 @@ import { User } from "../users/schemas/user.schema";
 import { DeviceTokensService } from "./device-tokens.service";
 import {
   planArrivingNotification,
+  planEarningAdjustedNotification,
   planPaymentNotifications,
+  planRefundNotifications,
   planRideNotifications,
 } from "./notification-plan";
 import type { RideNotificationContext } from "./notification-plan";
@@ -51,6 +53,16 @@ export class NotificationEventsListener implements OnModuleInit {
     this.events.on("ride.payment_updated", async (event) => {
       const drafts = planPaymentNotifications(event.ride, event.paymentStatus, event.amount, event.method);
       if (drafts.length) await this.notifications.notify(drafts);
+    });
+
+    this.events.on("payment.refund_updated", async (event) => {
+      const drafts = planRefundNotifications(event);
+      if (drafts.length) await this.notifications.notify(drafts);
+    });
+
+    this.events.on("earnings.adjusted", async (event) => {
+      const notification = planEarningAdjustedNotification(event);
+      if (notification) await this.notifications.notify([notification]);
     });
 
     this.events.on("driver.status_changed", async (event) => {

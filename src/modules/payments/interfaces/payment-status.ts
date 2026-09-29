@@ -7,7 +7,8 @@
  * CAPTURED   — money collected and verified by the backend. Success. For a
  *              CASH payment: the customer chose to pay the driver in cash.
  * FAILED     — the latest attempt failed; the customer may retry.
- * REFUNDED / PARTIALLY_REFUNDED — synced from Razorpay refund webhooks.
+ * REFUNDED / PARTIALLY_REFUNDED — recomputed from the payment's processed
+ *              refunds (payment_refunds); see RefundsService.
  */
 export enum PaymentStatus {
   CREATED = "CREATED",
@@ -47,6 +48,8 @@ export enum PaymentEventSource {
   WEBHOOK = "WEBHOOK",
   RECONCILE = "RECONCILE",
   SYSTEM = "SYSTEM",
+  /** An admin action (refund, review). */
+  ADMIN = "ADMIN",
 }
 
 /** How a payment was settled (the record's `gateway`). */
@@ -57,6 +60,13 @@ export enum PaymentGateway {
 }
 
 export const PAYMENT_GATEWAY = PaymentGateway.RAZORPAY;
+
+/**
+ * Put in the notes of every Razorpay order, checkout and refund this app
+ * creates. The Razorpay account is shared with the main Tirvona app: this is
+ * how webhooks and reconciliation tell Ride money from everything else.
+ */
+export const PAYMENT_APP_TAG = "tirvona-ride";
 
 /** `method` of a cash payment (Razorpay methods are upi, card, …). */
 export const CASH_METHOD = "cash";

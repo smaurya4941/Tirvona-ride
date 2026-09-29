@@ -105,6 +105,8 @@ describe("Phase 1 — done tests (e2e)", () => {
     process.chdir(workDir);
     Object.assign(process.env, {
       NODE_ENV: "test",
+      // Older suites assert final fare = estimate; actual-trip pricing is in payments-v2.
+      FINAL_FARE_MODE: "booked",
       LOG_LEVEL: "silent",
       SWAGGER_ENABLED: "false",
       MONGODB_URI: mongo.getUri(),
