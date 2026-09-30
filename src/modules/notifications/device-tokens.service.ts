@@ -115,6 +115,21 @@ export class DeviceTokensService {
     return result.modifiedCount;
   }
 
+  /** Every session ended (password reset, sign out everywhere): stop pushing to the other devices. */
+  async deactivateAllForUser(userId: string, exceptDeviceId?: string): Promise<number> {
+    const result = await this.tokenModel
+      .updateMany(
+        {
+          userId: new Types.ObjectId(userId),
+          isActive: true,
+          ...(exceptDeviceId ? { deviceId: { $ne: exceptDeviceId } } : {}),
+        },
+        { $set: { isActive: false, deactivatedAt: new Date(), deactivationReason: DeviceTokenDeactivation.LOGOUT } },
+      )
+      .exec();
+    return result.modifiedCount;
+  }
+
   /** FCM said the token is gone (app uninstalled / data cleared). */
   async markInvalid(tokens: string[]): Promise<void> {
     if (!tokens.length) return;

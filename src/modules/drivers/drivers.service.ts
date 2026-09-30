@@ -50,11 +50,17 @@ const REQUIRED_DOCUMENT_TYPES: DriverDocumentType[] = [
 ];
 
 // Submitting KYC locks the application so the admin never reviews a moving
-// target; it unlocks again only if the admin rejects it. Changes after
-// approval would need re-verification, which is out of Phase 1 scope.
+// target; it unlocks again only if the admin rejects it.
 const EDITABLE_STATUSES: DriverStatus[] = [
   DriverStatus.PENDING,
   DriverStatus.REJECTED,
+];
+
+// After approval verified details change only through a reviewed change
+// request (modules/driver-changes); only the address stays self-service.
+const AFTER_APPROVAL_STATUSES: DriverStatus[] = [
+  DriverStatus.APPROVED,
+  DriverStatus.SUSPENDED,
 ];
 
 @Injectable()
@@ -119,6 +125,18 @@ export class DriversService {
     dto: UpdateDriverProfileDto,
   ): Promise<DriverProfileDocument> {
     const driver = await this.getByUserId(userId);
+    if (AFTER_APPROVAL_STATUSES.includes(driver.driverStatus)) {
+      // Licence and date of birth were verified: they change through a
+      // reviewed change request. The address is the driver's own to keep current.
+      if (dto.licenseNumber !== undefined || dto.licenseExpiry !== undefined || dto.dateOfBirth !== undefined)
+        throw apiBadRequest(
+          "Licence details and date of birth are verified: submit a change request for review",
+          "DRIVER_CHANGE_REVIEW_REQUIRED",
+        );
+      if (dto.address !== undefined) driver.address = dto.address;
+      await driver.save();
+      return driver;
+    }
     this.assertEditable(driver);
 
     if (dto.licenseNumber !== undefined) driver.licenseNumber = dto.licenseNumber;

@@ -1,9 +1,10 @@
+import { createHash } from "node:crypto";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
 import { Types } from "mongoose";
-import { apiConflict, apiNotFound } from "../../common/exceptions/api.exception";
+import { apiBadRequest, apiConflict, apiNotFound } from "../../common/exceptions/api.exception";
 import { DriverProfile } from "../drivers/schemas/driver-profile.schema";
 import { rideNotFound } from "../rides/ride-errors";
 import { Ride } from "../rides/schemas/ride.schema";
@@ -38,11 +39,31 @@ export interface RideRatingStatus {
   } | null;
 }
 
+/**
+ * One rating as the rated driver sees it: stars, the comment and the day.
+ * No ride, rider, time of day or id that leads back to either — riders rate
+ * honestly only if the driver cannot tell who wrote what.
+ */
+export interface DriverReviewView {
+  /** Opaque key for list rendering; not the rating's database id. */
+  key: string;
+  rating: number;
+  comment?: string;
+  /** Calendar day in the app time zone, "YYYY-MM-DD". */
+  ratedOn: string;
+}
+
+export interface DriverReviewsPage {
+  items: DriverReviewView[];
+  /** Pass as `cursor` for the next page; null when there are no more. */
+  nextCursor: string | null;
+}
+
 export interface DriverRatingSummary {
   ratingAverage: number;
   ratingCount: number;
   totalRides: number;
-  /** Stars → count, "1" … "5". Individual ratings stay anonymous. */
+  /** Stars → count, "1" … "5". */
   distribution: Record<"1" | "2" | "3" | "4" | "5", number>;
 }
 
@@ -50,6 +71,20 @@ const isDuplicateKey = (error: unknown): boolean =>
   typeof error === "object" && error !== null && (error as { code?: number }).code === 11000;
 
 const round2 = (value: number): number => Math.round(value * 100) / 100;
+
+/** Position after a row, as an opaque string. */
+const encodeCursor = (createdAt: Date, id: Types.ObjectId): string =>
+  Buffer.from(`${createdAt.getTime()}:${id.toHexString()}`).toString("base64url");
+
+const decodeCursor = (cursor: string): { createdAt: Date; id: Types.ObjectId } | null => {
+  const [millis, id] = Buffer.from(cursor, "base64url").toString("utf8").split(":");
+  const time = Number(millis);
+  if (!Number.isSafeInteger(time) || !id || !Types.ObjectId.isValid(id)) return null;
+  return { createdAt: new Date(time), id: new Types.ObjectId(id) };
+};
+
+/** Stable per rating, but not the id (which would reveal the exact time). */
+const reviewKey = (id: Types.ObjectId): string => createHash("sha256").update(id.toHexString()).digest("hex").slice(0, 16);
 
 /**
  * Customer → driver ratings. NestJS decides everything: whether the ride is
@@ -60,6 +95,7 @@ const round2 = (value: number): number => Math.round(value * 100) / 100;
 export class RatingsService {
   private readonly logger = new Logger(RatingsService.name);
   private readonly windowDays: number;
+  private readonly dayFormat: Intl.DateTimeFormat;
 
   constructor(
     @InjectModel(Rating.name) private readonly ratingModel: Model<Rating>,
@@ -69,6 +105,13 @@ export class RatingsService {
     config: ConfigService,
   ) {
     this.windowDays = config.getOrThrow<number>("ratingWindowDays");
+    // en-CA formats as YYYY-MM-DD.
+    this.dayFormat = new Intl.DateTimeFormat("en-CA", {
+      timeZone: config.getOrThrow<string>("appTimeZone"),
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
   }
 
   async statusForRide(customerUserId: string, rideId: string): Promise<RideRatingStatus> {
@@ -138,6 +181,45 @@ export class RatingsService {
       ratingCount: driver.ratingCount ?? 0,
       totalRides: driver.totalRides,
       distribution,
+    };
+  }
+
+  /** The driver's individual ratings, newest first (`GET /drivers/me/ratings/reviews`). */
+  async reviewsForDriverUser(
+    driverUserId: string,
+    query: { cursor?: string; limit: number; stars?: number; withComment?: boolean },
+  ): Promise<DriverReviewsPage> {
+    const driver = await this.driverModel.findOne({ userId: new Types.ObjectId(driverUserId) }).select("_id").lean().exec();
+    if (!driver) throw apiNotFound("Driver profile not found", "DRIVER_NOT_FOUND");
+
+    const filter: Record<string, unknown> = { driverId: driver._id };
+    if (query.stars !== undefined) filter.rating = query.stars;
+    if (query.withComment) filter.comment = { $exists: true, $nin: [null, ""] };
+    const after = query.cursor ? decodeCursor(query.cursor) : null;
+    if (query.cursor && !after) throw apiBadRequest("Invalid cursor", "VALIDATION_FAILED");
+    if (after)
+      filter.$or = [
+        { createdAt: { $lt: after.createdAt } },
+        { createdAt: after.createdAt, _id: { $lt: after.id } },
+      ];
+
+    const rows = await this.ratingModel
+      .find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(query.limit + 1)
+      .select("rating comment createdAt")
+      .lean()
+      .exec();
+    const page = rows.slice(0, query.limit);
+    const last = page.at(-1);
+    return {
+      items: page.map((row) => ({
+        key: reviewKey(row._id),
+        rating: row.rating,
+        comment: row.comment || undefined,
+        ratedOn: this.dayFormat.format(row.createdAt),
+      })),
+      nextCursor: rows.length > query.limit && last ? encodeCursor(last.createdAt, last._id) : null,
     };
   }
 

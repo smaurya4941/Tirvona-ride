@@ -11,7 +11,9 @@ import { AdminAuthController } from "./admin-auth.controller";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { OtpService } from "./otp.service";
+import { PasswordResetService } from "./password-reset.service";
 import { OtpSendQuota, OtpSendQuotaSchema } from "./schemas/otp-send-quota.schema";
+import { PasswordReset, PasswordResetSchema } from "./schemas/password-reset.schema";
 import { PendingSignup, PendingSignupSchema } from "./schemas/pending-signup.schema";
 import { SignupService } from "./signup.service";
 import {
@@ -31,6 +33,7 @@ import { TokenService } from "./token.service";
       { name: OtpVerification.name, schema: OtpVerificationSchema },
       { name: OtpSendQuota.name, schema: OtpSendQuotaSchema },
       { name: PendingSignup.name, schema: PendingSignupSchema },
+      { name: PasswordReset.name, schema: PasswordResetSchema },
     ]),
     UsersModule,
     DriversModule,
@@ -42,6 +45,7 @@ import { TokenService } from "./token.service";
     TokenService,
     OtpService,
     SignupService,
+    PasswordResetService,
     // Applied to every route in the app; individual routes opt out with
     // @Public() or restrict with @Roles(). RolesGuard must run after
     // JwtAuthGuard (relies on request.user), which array order guarantees.

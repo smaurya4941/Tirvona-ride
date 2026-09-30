@@ -1,12 +1,10 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
-import { IsEmail, IsIn, IsOptional, IsString, Length, Matches } from "class-validator";
+import { IsEmail, IsIn, IsOptional, IsString, Length } from "class-validator";
 import { UserRole } from "../../../common/types/user-role.enum";
 import { IsMobileNumber } from "../../../common/phone/phone-number";
+import { IsStrongPassword } from "../../../common/validation/password";
 import { DeviceInfoDto } from "./device.dto";
-
-const STRONG_PASSWORD =
-  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{8,}$/;
 
 // role deliberately excludes ADMIN — see spec §14. Admin accounts are seeded,
 // never self-registered.
@@ -47,12 +45,7 @@ export class RegisterDto extends DeviceInfoDto {
   email?: string;
 
   @ApiProperty()
-  @IsString()
-  @Length(8, 128)
-  @Matches(STRONG_PASSWORD, {
-    message:
-      "password must contain an uppercase letter, a lowercase letter, a number and a symbol",
-  })
+  @IsStrongPassword("password")
   password!: string;
 
   @ApiProperty({ enum: REGISTERABLE_ROLES })

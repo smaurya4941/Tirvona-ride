@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
@@ -8,9 +8,9 @@ import type { ApiSuccessBody } from "../../common/http/api-response";
 import { ParseObjectIdPipe } from "../../common/pipes/parse-object-id.pipe";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
-import { CreateRatingDto } from "./dto/rating.dto";
+import { CreateRatingDto, DriverReviewsQueryDto } from "./dto/rating.dto";
 import { RatingsService } from "./ratings.service";
-import type { DriverRatingSummary, RatingView, RideRatingStatus } from "./ratings.service";
+import type { DriverRatingSummary, DriverReviewsPage, RatingView, RideRatingStatus } from "./ratings.service";
 
 @ApiTags("Ratings")
 @ApiBearerAuth()
@@ -52,5 +52,18 @@ export class DriverRatingsController {
   @ApiOperation({ summary: "The driver's average rating, count and star distribution" })
   async summary(@CurrentUser() user: AuthenticatedUser): Promise<ApiSuccessBody<DriverRatingSummary>> {
     return ok(await this.ratings.summaryForDriverUser(user.userId));
+  }
+
+  @Get("reviews")
+  @Roles(UserRole.DRIVER)
+  @ApiOperation({
+    summary: "The driver's individual ratings, newest first: stars, comment and day only",
+    description: "Anonymous by design: no ride, rider or time of day is returned.",
+  })
+  async reviews(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: DriverReviewsQueryDto,
+  ): Promise<ApiSuccessBody<DriverReviewsPage>> {
+    return ok(await this.ratings.reviewsForDriverUser(user.userId, query));
   }
 }

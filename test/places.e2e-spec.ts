@@ -230,10 +230,12 @@ describe("Place search (e2e)", () => {
     expect(estimates.body.data.length).toBeGreaterThan(0);
   });
 
-  it("serves a rider far from Braj (testing from Noida): no Braj popular list, local fares", async () => {
+  it("serves a rider far from Braj (testing from Noida): Noida popular list, local fares", async () => {
     const noida = { latitude: 28.627, longitude: 77.3727 };
     const popular = await api().get("/api/v1/places/popular").query({ ...noida, limit: 8 }).set(asCustomer()).expect(200);
-    expect(popular.body.data).toEqual([]);
+    const cities = new Set((popular.body.data as Array<{ address: string }>).map((place) => place.address));
+    expect(popular.body.data.length).toBeGreaterThan(0);
+    expect([...cities].some((address) => /vrindavan|mathura/i.test(address))).toBe(false);
 
     const search = await api()
       .get("/api/v1/places/autocomplete")

@@ -57,12 +57,18 @@ const EXPECTED_PUBLIC_ROUTES = [
   "POST /auth/logout",
   "POST /auth/verify-otp",
   "POST /auth/resend-otp",
+  // Forgot password: the user cannot sign in, by definition.
+  "POST /auth/password/forgot",
+  "POST /auth/password/verify-otp",
+  "POST /auth/password/reset",
   "POST /admin/auth/login",
   "POST /payments/webhook",
   "POST /payments/webhook/razorpay",
   // Branding: the apps show the logo/splash before sign-in.
   "GET /branding",
   "GET /branding/assets/:kind",
+  // Popular-place photos: rendered with a plain image request; admin-published only.
+  "GET /places/popular/:id/image",
 ].sort();
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "ALL", "OPTIONS", "HEAD", "SEARCH"];

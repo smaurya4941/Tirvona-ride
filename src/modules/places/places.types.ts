@@ -21,6 +21,11 @@ export interface PlaceSuggestion {
   distanceMeters?: number;
   /** A curated Braj landmark rather than a provider result. */
   featured: boolean;
+  /**
+   * Admin-uploaded photo of a popular place, relative to the versioned API
+   * base (`/places/popular/:id/image?v=…`); absent or null when none is set.
+   */
+  imagePath?: string | null;
 }
 
 /** A place with coordinates — what pickup/destination are booked with. */

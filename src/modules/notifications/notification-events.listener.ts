@@ -117,9 +117,31 @@ export class NotificationEventsListener implements OnModuleInit {
       ]);
     });
 
+    this.events.on("driver.change_reviewed", async (event) => {
+      await this.notifications.notify([
+        {
+          userId: event.userId,
+          recipientRole: UserRole.DRIVER,
+          type: event.approved ? NotificationType.DRIVER_UPDATE_APPROVED : NotificationType.DRIVER_UPDATE_REJECTED,
+          title: event.approved ? `${event.label} updated` : `${event.label} update not approved`,
+          message: event.approved
+            ? `Your ${event.label.toLowerCase()} change was verified and is now on your profile.`
+            : event.reason
+              ? `Your ${event.label.toLowerCase()} change was not approved: ${event.reason}`
+              : `Your ${event.label.toLowerCase()} change was not approved.`,
+          referenceId: event.requestId,
+          data: { driverId: event.driverId, changeRequestId: event.requestId },
+        },
+      ]);
+    });
+
     // Belt and braces with the app's own unregister call on sign out.
     this.events.on("auth.logged_out", async (event) => {
       if (event.deviceId) await this.deviceTokens.deactivateDevice(event.userId, event.deviceId);
+    });
+
+    this.events.on("auth.sessions_revoked", async (event) => {
+      await this.deviceTokens.deactivateAllForUser(event.userId, event.exceptDeviceId);
     });
   }
 

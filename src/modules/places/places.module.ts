@@ -1,17 +1,28 @@
 import { Logger, Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { MongooseModule } from "@nestjs/mongoose";
 import type { PlacesFallbackName, PlacesProviderName } from "../../config/environment";
 import { PlacesController } from "./places.controller";
 import { PlacesService } from "./places.service";
+import { PopularPlacesService } from "./popular-places.service";
+import { SavedPlacesService } from "./saved-places.service";
+import { PopularPlace, PopularPlaceSchema } from "./schemas/popular-place.schema";
+import { SavedPlace, SavedPlaceSchema } from "./schemas/saved-place.schema";
 import { FallbackGeocodingProvider } from "./providers/fallback.provider";
 import { DisabledGeocodingProvider, GeocodingProvider } from "./providers/geocoding.provider";
 import { GooglePlacesProvider } from "./providers/google-places.provider";
 import { NominatimProvider } from "./providers/nominatim.provider";
 import { PhotonProvider } from "./providers/photon.provider";
 
-// Leaf module (config only). Rides still validate every booked point
-// themselves; places only helps the rider find one.
+// Leaf module (config + its own collections). Rides still validate every
+// booked point themselves; places only helps the rider find one.
 @Module({
+  imports: [
+    MongooseModule.forFeature([
+      { name: PopularPlace.name, schema: PopularPlaceSchema },
+      { name: SavedPlace.name, schema: SavedPlaceSchema },
+    ]),
+  ],
   controllers: [PlacesController],
   providers: [
     {
@@ -43,7 +54,9 @@ import { PhotonProvider } from "./providers/photon.provider";
       },
     },
     PlacesService,
+    PopularPlacesService,
+    SavedPlacesService,
   ],
-  exports: [PlacesService],
+  exports: [PlacesService, PopularPlacesService],
 })
 export class PlacesModule {}

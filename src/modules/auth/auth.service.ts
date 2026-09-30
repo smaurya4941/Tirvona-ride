@@ -107,6 +107,13 @@ export class AuthService {
     }
   }
 
+  /** Ends every session of the user (all devices, the caller's included). */
+  async logoutEverywhere(userId: string): Promise<number> {
+    const ended = await this.tokens.revokeAllForUser(userId);
+    this.domainEvents.emit("auth.sessions_revoked", { userId, reason: "SIGN_OUT_EVERYWHERE" });
+    return ended;
+  }
+
   async me(userId: string): Promise<AuthUserView> {
     return this.buildUserView(userId);
   }

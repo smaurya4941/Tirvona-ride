@@ -14,25 +14,14 @@ import { AuthService } from "./auth.service";
 import type { RegisterDto } from "./dto/register.dto";
 import type { ResendOtpDto } from "./dto/resend-otp.dto";
 import type { VerifyOtpDto } from "./dto/verify-otp.dto";
+import { toOtpChallengeView } from "./otp-challenge.view";
+import type { OtpChallengeView } from "./otp-challenge.view";
 import type { OtpChallenge } from "./otp.service";
 import { OtpService } from "./otp.service";
 import { PendingSignup } from "./schemas/pending-signup.schema";
 import type { PendingSignupDocument } from "./schemas/pending-signup.schema";
 import { OtpPurpose } from "./schemas/otp-verification.schema";
 import type { DeviceMetadata } from "./token.service";
-
-/** Returned by register and resend: everything the OTP screen shows. */
-export interface OtpChallengeView {
-  phone: string;
-  maskedPhone: string;
-  channel: "WHATSAPP";
-  codeLength: number;
-  expiresAt: Date;
-  expiresInSeconds: number;
-  resendAvailableInSeconds: number;
-  sendsRemaining: number;
-  codeSent: boolean;
-}
 
 export interface SignupChallengeView extends OtpChallengeView {
   /** Opaque handle for this sign-up; required by verify-otp and resend-otp. */
@@ -258,17 +247,7 @@ export class SignupService {
   }
 
   private view(phone: string, challenge: OtpChallenge): OtpChallengeView {
-    return {
-      phone,
-      maskedPhone: maskPhone(phone),
-      channel: challenge.channel,
-      codeLength: challenge.codeLength,
-      expiresAt: challenge.expiresAt,
-      expiresInSeconds: Math.max(0, Math.round((challenge.expiresAt.getTime() - Date.now()) / 1000)),
-      resendAvailableInSeconds: challenge.resendAvailableInSeconds,
-      sendsRemaining: challenge.sendsRemaining,
-      codeSent: challenge.codeSent,
-    };
+    return toOtpChallengeView(phone, challenge);
   }
 
   private phoneTaken() {

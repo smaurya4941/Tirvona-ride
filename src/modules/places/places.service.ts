@@ -8,7 +8,6 @@ import {
   featuredToResolved,
   findFeatured,
   isNearFeatured,
-  popularPlaces,
   searchFeatured,
 } from "./featured-places";
 import { coordinateLabel, normalizeQuery } from "./place-text";
@@ -36,7 +35,8 @@ const FEATURED_SNAP_METERS = 60;
 /**
  * Place search for the booking flow: autocomplete, resolving a tapped
  * suggestion to coordinates, reverse geocoding ("current location", a pin
- * on the map) and the curated popular places.
+ * on the map). The rider-facing "Popular destinations" list lives in
+ * PopularPlacesService (admin-managed, in MongoDB).
  *
  * Every provider answer is cached and concurrent identical lookups share one
  * provider call, so a debounced search box costs a fraction of a request per
@@ -162,11 +162,6 @@ export class PlacesService {
       ...pinned(point),
       approximate: true,
     };
-  }
-
-  /** Curated places, nearest first; none for a rider far from Braj. */
-  popular(near: GeoCoordinates | undefined, limit: number): PlaceSuggestion[] {
-    return this.isInBraj(near) ? popularPlaces(near, limit) : [];
   }
 
   /** Unknown positions count as in Braj, the service area. */

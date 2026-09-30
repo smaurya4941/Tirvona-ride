@@ -34,6 +34,10 @@ export class User {
   @Prop({ trim: true })
   lastName?: string;
 
+  /**
+   * App path of the current profile photo ("/users/me/profile-image?v=…"),
+   * or unset. The bytes live in profile_images (ProfileImagesService).
+   */
   @Prop()
   profileImage?: string;
 
@@ -51,6 +55,10 @@ export class User {
 
   @Prop()
   lastLoginAt?: Date;
+
+  /** Last password change or reset. */
+  @Prop()
+  passwordChangedAt?: Date;
 
   // ── Admin account actions (Phase 7) ───────────────────────────────────
   @Prop({ trim: true })

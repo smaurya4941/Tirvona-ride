@@ -4,6 +4,7 @@ import { popularPlaces, searchFeatured } from "./featured-places";
 import { bookingAddress, clampAddress, normalizeQuery, secondaryLine } from "./place-text";
 import type { PlaceSuggestion, ResolvedPlace } from "./places.types";
 import { PlacesService } from "./places.service";
+import { POPULAR_PLACE_SEEDS } from "./popular-places.seed";
 import { GeocodingProvider, GeocodingProviderError } from "./providers/geocoding.provider";
 import type { ProviderSearchRequest } from "./providers/geocoding.provider";
 import { TtlCache } from "../../common/cache/ttl-cache";
@@ -229,16 +230,23 @@ describe("PlacesService", () => {
     expect(inBraj.suggestions.map((place) => place.name)).toEqual(["Gokul", "Gokul Dham Society"]);
   });
 
-  it("offers no popular Braj places to a rider far from Braj", () => {
-    expect(service.popular(NOIDA, 8)).toEqual([]);
-    expect(service.popular(undefined, 3)).toHaveLength(3);
-  });
+  // "Popular destinations" moved to PopularPlacesService (MongoDB); covered
+  // by test/home-search.e2e-spec.ts.
+});
 
-  it("lists popular places nearest first", () => {
-    const nearMathura = service.popular({ latitude: 27.4808, longitude: 77.6734 }, 3);
-    expect(nearMathura[0].name).toBe("Mathura Junction");
-    expect(nearMathura).toHaveLength(3);
-    expect(nearMathura.every((place) => place.distanceMeters !== undefined)).toBe(true);
+describe("popular place seeds", () => {
+  it("are bookable, distinct and cover both Braj and Noida", () => {
+    const names = POPULAR_PLACE_SEEDS.map((seed) => `${seed.name}|${seed.city}`);
+    expect(new Set(names).size).toBe(names.length);
+    for (const seed of POPULAR_PLACE_SEEDS) {
+      const address = bookingAddress(seed.name, seed.secondaryText);
+      expect(address.length).toBeGreaterThanOrEqual(2);
+      expect(address.length).toBeLessThanOrEqual(200);
+      expect(Math.abs(seed.latitude)).toBeLessThanOrEqual(90);
+      expect(seed.city.length).toBeGreaterThan(1);
+    }
+    expect(POPULAR_PLACE_SEEDS.some((seed) => seed.city === "Vrindavan")).toBe(true);
+    expect(POPULAR_PLACE_SEEDS.some((seed) => seed.city === "Noida")).toBe(true);
   });
 });
 

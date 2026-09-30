@@ -2,6 +2,9 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
 import {
   IsEnum,
+  IsLatitude,
+  IsLongitude,
+  IsNumber,
   IsInt,
   IsOptional,
   IsString,
@@ -95,4 +98,29 @@ export class ListRidesQueryDto {
   @IsOptional()
   @IsEnum(RideStatus)
   status?: RideStatus;
+}
+
+/** The rider's position, for the cars drawn on the Home map. */
+export class NearbyDriversQueryDto {
+  @ApiProperty({ example: 28.627 })
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @IsLatitude()
+  latitude!: number;
+
+  @ApiProperty({ example: 77.3727 })
+  @Type(() => Number)
+  @IsNumber({ allowNaN: false, allowInfinity: false })
+  @IsLongitude()
+  longitude!: number;
+}
+
+export class RecentDestinationsQueryDto {
+  @ApiPropertyOptional({ default: 8, minimum: 1, maximum: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  limit = 8;
 }

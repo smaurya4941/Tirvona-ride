@@ -9,6 +9,7 @@ import { DriversModule } from "../drivers/drivers.module";
 import { EarningsModule } from "../earnings/earnings.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { PaymentsModule } from "../payments/payments.module";
+import { PlacesModule } from "../places/places.module";
 import { Payment, PaymentSchema } from "../payments/schemas/payment.schema";
 import { PricingModule } from "../pricing/pricing.module";
 import { PromotionsModule } from "../promotions/promotions.module";
@@ -32,6 +33,7 @@ import {
   AdminPaymentsController,
 } from "./admin-payments.controller";
 import { AdminBrandingController } from "./admin-branding.controller";
+import { AdminPopularPlacesController } from "./admin-places.controller";
 import { AdminPeopleService } from "./admin-people.service";
 import { AdminPricingController } from "./admin-pricing.controller";
 import { AdminComplaintsController, AdminSosController } from "./admin-safety.controller";
@@ -69,6 +71,7 @@ import { AdminService } from "./admin.service";
     CancellationsModule,
     ReportsModule,
     BrandingModule,
+    PlacesModule,
   ],
   controllers: [
     AdminController,
@@ -84,6 +87,7 @@ import { AdminService } from "./admin.service";
     AdminCancellationsController,
     AdminBroadcastsController,
     AdminBrandingController,
+    AdminPopularPlacesController,
   ],
   providers: [AdminService, AdminPeopleService],
 })

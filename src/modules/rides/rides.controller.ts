@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { ok } from "../../common/http/api-response";
@@ -11,6 +12,8 @@ import {
   CancelRideDto,
   CreateRideDto,
   ListRidesQueryDto,
+  NearbyDriversQueryDto,
+  RecentDestinationsQueryDto,
   RejectRideDto,
   RideRequestDto,
   StartRideDto,
@@ -21,12 +24,15 @@ import { RideLifecycleService } from "./ride-lifecycle.service";
 import { RideRouteService } from "./ride-route.service";
 import type { LiveRouteView } from "./ride-route.service";
 import type { CustomerRideView, DriverRideView, RideView } from "./ride-view.service";
+import { RiderHomeService } from "./rider-home.service";
+import type { NearbyDriversView, RecentDestinationView } from "./rider-home.service";
 import { RidesService } from "./rides.service";
 import type { FareEstimateView, Page } from "./rides.service";
 
 type AnyRideView = CustomerRideView | DriverRideView;
 
-// Route order matters: static segments (estimate, active, requests) are
+// Route order matters: static segments (estimate, active, requests,
+// nearby-drivers, recent-destinations) are
 // declared before `:id` so Express never treats them as ride ids.
 @ApiTags("Rides")
 @ApiBearerAuth()
@@ -36,6 +42,7 @@ export class RidesController {
     private readonly rides: RidesService,
     private readonly lifecycle: RideLifecycleService,
     private readonly routes: RideRouteService,
+    private readonly home: RiderHomeService,
   ) {}
 
   // ── Customer ──────────────────────────────────────────────────────────
@@ -64,6 +71,24 @@ export class RidesController {
     @Body() dto: CreateRideDto,
   ): Promise<ApiSuccessBody<CustomerRideView>> {
     return ok(await this.rides.create(user.userId, dto));
+  }
+
+  @Get("nearby-drivers")
+  @Roles(UserRole.CUSTOMER)
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @ApiOperation({ summary: "Approximate positions of free drivers around the rider (Home map)" })
+  async nearbyDrivers(@Query() query: NearbyDriversQueryDto): Promise<ApiSuccessBody<NearbyDriversView>> {
+    return ok(await this.home.nearbyDrivers({ latitude: query.latitude, longitude: query.longitude }));
+  }
+
+  @Get("recent-destinations")
+  @Roles(UserRole.CUSTOMER)
+  @ApiOperation({ summary: "Distinct destinations of the rider's own bookings, most recent first" })
+  async recentDestinations(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: RecentDestinationsQueryDto,
+  ): Promise<ApiSuccessBody<RecentDestinationView[]>> {
+    return ok(await this.home.recentDestinations(user.userId, query.limit));
   }
 
   // ── Shared reads ──────────────────────────────────────────────────────

@@ -14,6 +14,13 @@ export interface DriverCandidate {
   distanceMeters: number;
 }
 
+export interface NearbyDriver {
+  latitude: number;
+  longitude: number;
+  vehicleType?: VehicleType;
+  distanceMeters: number;
+}
+
 export interface CandidateQuery {
   pickup: GeoCoordinates;
   vehicleType: VehicleType;
@@ -82,6 +89,44 @@ export class MatchingService {
             driverId: "$_id",
             userId: 1,
             activeVehicleId: 1,
+            distanceMeters: 1,
+          },
+        },
+      ])
+      .exec();
+  }
+
+  /**
+   * Free drivers around a rider, for the cars on the Home map. Same
+   * eligibility as matching (minus the vehicle type), so the map never
+   * shows a car that could not actually be dispatched.
+   */
+  async nearbyAvailable(point: GeoCoordinates, radiusMeters: number, limit: number): Promise<NearbyDriver[]> {
+    return this.driverModel
+      .aggregate<NearbyDriver>([
+        {
+          $geoNear: {
+            near: toGeoJsonPoint(point),
+            key: "currentLocation",
+            distanceField: "distanceMeters",
+            maxDistance: radiusMeters,
+            spherical: true,
+            query: {
+              driverStatus: DriverStatus.APPROVED,
+              isOnline: true,
+              isAvailable: true,
+              currentRideId: null,
+              locationUpdatedAt: { $gte: new Date(Date.now() - this.locationStaleMs) },
+            },
+          },
+        },
+        { $limit: limit },
+        {
+          $project: {
+            _id: 0,
+            longitude: { $arrayElemAt: ["$currentLocation.coordinates", 0] },
+            latitude: { $arrayElemAt: ["$currentLocation.coordinates", 1] },
+            vehicleType: "$activeVehicleType",
             distanceMeters: 1,
           },
         },

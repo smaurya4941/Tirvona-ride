@@ -74,7 +74,7 @@ export const documentUploadOptions: MulterModuleOptions = {
 /** Moves a temp upload to `uploads/<segment>/<ownerId>/` and returns its path. */
 export async function storeUpload(
   file: Express.Multer.File,
-  segment: "drivers" | "vehicles",
+  segment: "drivers" | "vehicles" | "driver-changes",
   ownerId: string,
 ): Promise<string> {
   const directory = join(UPLOAD_ROOT, segment, ownerId);

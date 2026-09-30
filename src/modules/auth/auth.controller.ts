@@ -12,9 +12,13 @@ import { LoginDto } from "./dto/login.dto";
 import { RefreshTokenDto } from "./dto/refresh-token.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { PhoneOtpDto } from "./dto/otp-code.dto";
+import { ForgotPasswordDto, ResetPasswordDto, VerifyPasswordResetOtpDto } from "./dto/password-reset.dto";
 import { ResendOtpDto } from "./dto/resend-otp.dto";
 import { VerifyOtpDto } from "./dto/verify-otp.dto";
-import type { OtpChallengeView, SignupChallengeView } from "./signup.service";
+import type { OtpChallengeView } from "./otp-challenge.view";
+import type { PasswordResetTicket } from "./password-reset.service";
+import { PasswordResetService } from "./password-reset.service";
+import type { SignupChallengeView } from "./signup.service";
 import { SignupService } from "./signup.service";
 
 @ApiTags("Auth")
@@ -23,6 +27,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly signup: SignupService,
+    private readonly passwordReset: PasswordResetService,
   ) {}
 
   @Public()
@@ -110,6 +115,53 @@ export class AuthController {
   ): Promise<ApiSuccessBody<{ loggedOut: true }>> {
     await this.auth.logout(dto.refreshToken);
     return ok({ loggedOut: true });
+  }
+
+  @Post("logout-all")
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Sign out on every device, this one included" })
+  async logoutAll(@CurrentUser() user: AuthenticatedUser): Promise<ApiSuccessBody<{ sessionsEnded: number }>> {
+    return ok({ sessionsEnded: await this.auth.logoutEverywhere(user.userId) });
+  }
+
+  // ── Forgot password (WhatsApp code) ────────────────────────────────────
+
+  @Public()
+  @ThrottlePolicy("otpSend")
+  @Post("password/forgot")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Forgot password: send a 6-digit reset code to the account's number on WhatsApp",
+    description: "Inside the resend cooldown the code already sent is kept (codeSent=false). 404 ACCOUNT_NOT_FOUND when no customer or driver account uses the number.",
+  })
+  async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<ApiSuccessBody<OtpChallengeView>> {
+    return ok(await this.passwordReset.requestCode(dto.phone));
+  }
+
+  @Public()
+  @ThrottlePolicy("otpVerify")
+  @Post("password/verify-otp")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Check the reset code; returns a one-time token for choosing the new password" })
+  async verifyPasswordResetOtp(@Body() dto: VerifyPasswordResetOtpDto): Promise<ApiSuccessBody<PasswordResetTicket>> {
+    return ok(await this.passwordReset.verifyCode(dto.phone, dto.otp));
+  }
+
+  @Public()
+  @ThrottlePolicy("auth")
+  @Post("password/reset")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Set a new password with the reset token: signs out every device and signs this one in" })
+  async resetPassword(@Body() dto: ResetPasswordDto, @Ip() ip: string): Promise<ApiSuccessBody<AuthSession>> {
+    return ok(
+      await this.passwordReset.reset(dto.resetToken, dto.newPassword, {
+        deviceId: dto.deviceId,
+        deviceType: dto.deviceType,
+        deviceName: dto.deviceName,
+        ipAddress: ip,
+      }),
+    );
   }
 
   @ThrottlePolicy("otpSend")

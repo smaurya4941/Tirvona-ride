@@ -20,6 +20,7 @@ import { RideEventsService } from "./ride-events.service";
 import { RideLifecycleService } from "./ride-lifecycle.service";
 import { RidePaymentStateService } from "./ride-payment-state.service";
 import { RideRouteService } from "./ride-route.service";
+import { RiderHomeService } from "./rider-home.service";
 import { RideTransitionService } from "./ride-transition.service";
 import { RideViewService } from "./ride-view.service";
 import { RidesAdminService } from "./rides-admin.service";
@@ -69,6 +70,7 @@ import { RideStatusHistory, RideStatusHistorySchema } from "./schemas/ride-statu
     RidesAdminService,
     RidePaymentStateService,
     RideRouteService,
+    RiderHomeService,
   ],
   exports: [RidesAdminService, RideDispatchService, RidePaymentStateService, RideViewService],
 })

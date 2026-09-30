@@ -165,6 +165,33 @@ export const ERROR_CODES = {
   // ── Branding ──────────────────────────────────────────────────────────
   BRANDING_NOT_SET: "BRANDING_NOT_SET",
   BRANDING_INVALID_IMAGE: "BRANDING_INVALID_IMAGE",
+
+  // ── Popular places ────────────────────────────────────────────────────
+  POPULAR_PLACE_NOT_FOUND: "POPULAR_PLACE_NOT_FOUND",
+  POPULAR_PLACE_INVALID_IMAGE: "POPULAR_PLACE_INVALID_IMAGE",
+  POPULAR_PLACE_IMAGE_NOT_SET: "POPULAR_PLACE_IMAGE_NOT_SET",
+
+  // ── Account: password reset, profile photo, saved places ──────────────
+  // No account uses this number (forgot password).
+  ACCOUNT_NOT_FOUND: "ACCOUNT_NOT_FOUND",
+  // The one-time token from a verified reset code is expired, used or unknown.
+  PASSWORD_RESET_INVALID: "PASSWORD_RESET_INVALID",
+  // The new password is the one the account already has.
+  PASSWORD_UNCHANGED: "PASSWORD_UNCHANGED",
+  PROFILE_IMAGE_INVALID: "PROFILE_IMAGE_INVALID",
+  PROFILE_IMAGE_NOT_SET: "PROFILE_IMAGE_NOT_SET",
+  SAVED_PLACE_NOT_FOUND: "SAVED_PLACE_NOT_FOUND",
+  SAVED_PLACE_LIMIT_REACHED: "SAVED_PLACE_LIMIT_REACHED",
+  SAVED_PLACE_DUPLICATE_LABEL: "SAVED_PLACE_DUPLICATE_LABEL",
+
+  // ── Driver changes after approval ─────────────────────────────────────
+  DRIVER_CHANGE_NOT_FOUND: "DRIVER_CHANGE_NOT_FOUND",
+  // Already approved, rejected or withdrawn.
+  DRIVER_CHANGE_NOT_PENDING: "DRIVER_CHANGE_NOT_PENDING",
+  // The request would change nothing.
+  DRIVER_CHANGE_EMPTY: "DRIVER_CHANGE_EMPTY",
+  // An approved driver tried to edit verified details directly.
+  DRIVER_CHANGE_REVIEW_REQUIRED: "DRIVER_CHANGE_REVIEW_REQUIRED",
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

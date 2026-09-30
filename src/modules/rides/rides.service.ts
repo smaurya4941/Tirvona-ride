@@ -10,12 +10,14 @@ import { DriversService } from "../drivers/drivers.service";
 import { DriverStatus } from "../drivers/schemas/driver-profile.schema";
 import type { DriverProfileDocument } from "../drivers/schemas/driver-profile.schema";
 import { LocationsService } from "../locations/locations.service";
+import type { GeoCoordinates } from "../locations/geo";
 import type { RouteEstimate } from "../locations/route-estimator";
 import { MatchingService } from "../matching/matching.service";
 import { PricingService } from "../pricing/pricing.service";
 import type { PricedFare } from "../pricing/pricing.service";
 import { RideTypesService } from "../ride-types/ride-types.service";
 import type { RideTypeDocument } from "../ride-types/schemas/ride-type.schema";
+import type { VehicleType } from "../vehicles/schemas/vehicle.schema";
 import { UserStatus } from "../users/schemas/user.schema";
 import { UsersService } from "../users/users.service";
 import type { CreateRideDto, RideRequestDto, TripDto } from "./dto/ride-requests.dto";
@@ -57,6 +59,15 @@ export interface FareEstimateView {
     estimatedFare: number;
   };
   pricingVersion: number;
+  /**
+   * How long the nearest free driver of this ride type's vehicle would take
+   * to reach the pickup (straight line, road-adjusted); null when none is
+   * within the matching radius right now. Advisory only — booking still works
+   * and dispatch keeps looking.
+   */
+  pickupEtaSeconds: number | null;
+  /** Free drivers of this vehicle type within the matching radius. */
+  driversNearby: number;
 }
 
 export interface Page<T> {
@@ -67,6 +78,14 @@ export interface Page<T> {
   hasMore: boolean;
 }
 
+/** Free drivers of one vehicle type near a pickup. */
+type DriverSupply = Map<VehicleType, { count: number; nearestMeters: number }>;
+/** Enough to cover every vehicle type in a busy area. */
+const SUPPLY_SCAN_LIMIT = 60;
+/** Straight line → road distance, typical for Indian city grids. */
+const ROAD_DETOUR_FACTOR = 1.3;
+const MIN_PICKUP_ETA_SECONDS = 60;
+
 const isDuplicateKey = (error: unknown, index?: string): boolean => {
   const mongoError = error as { code?: number; message?: string } | undefined;
   return mongoError?.code === 11000 && (!index || (mongoError.message ?? "").includes(index));
@@ -76,6 +95,8 @@ const isDuplicateKey = (error: unknown, index?: string): boolean => {
 export class RidesService {
   private readonly logger = new Logger(RidesService.name);
   private readonly searchTimeoutMs: number;
+  private readonly matchingRadiusMeters: number;
+  private readonly averageSpeedMps: number;
 
   constructor(
     @InjectModel(Ride.name) private readonly rideModel: Model<Ride>,
@@ -94,6 +115,8 @@ export class RidesService {
     config: ConfigService,
   ) {
     this.searchTimeoutMs = config.getOrThrow<number>("rideSearchTimeoutSeconds") * 1000;
+    this.matchingRadiusMeters = config.getOrThrow<number>("matchingRadiusKm") * 1000;
+    this.averageSpeedMps = (config.getOrThrow<number>("routeAverageSpeedKmph") * 1000) / 3600;
   }
 
   // ── Estimates ─────────────────────────────────────────────────────────
@@ -101,21 +124,27 @@ export class RidesService {
   async estimate(dto: RideRequestDto): Promise<FareEstimateView> {
     await this.zones.assertServiceable(dto.pickup);
     const rideType = await this.rideTypes.getBookable(dto.rideType);
-    const route = await this.locations.estimateTrip(dto.pickup, dto.destination);
+    const [route, supply] = await Promise.all([
+      this.locations.estimateTrip(dto.pickup, dto.destination),
+      this.driverSupply(dto.pickup),
+    ]);
     const fare = await this.pricing.priceTrip(rideType.code, route.distanceMeters, route.durationSeconds);
-    return this.toEstimate(rideType, route, fare);
+    return this.toEstimate(rideType, route, fare, supply);
   }
 
   /** One route calculation, priced for every bookable ride type. */
   async estimateAll(dto: TripDto): Promise<FareEstimateView[]> {
     await this.zones.assertServiceable(dto.pickup);
-    const route = await this.locations.estimateTrip(dto.pickup, dto.destination);
-    const rideTypes = await this.rideTypes.listActive();
+    const [route, rideTypes, supply] = await Promise.all([
+      this.locations.estimateTrip(dto.pickup, dto.destination),
+      this.rideTypes.listActive(),
+      this.driverSupply(dto.pickup),
+    ]);
     const estimates = await Promise.all(
       rideTypes.map(async (rideType) => {
         try {
           const fare = await this.pricing.priceTrip(rideType.code, route.distanceMeters, route.durationSeconds);
-          return this.toEstimate(rideType, route, fare);
+          return this.toEstimate(rideType, route, fare, supply);
         } catch (error) {
           // A ride type without a tariff is hidden rather than failing the list.
           this.logger.warn(`Skipping ${rideType.code} estimate: ${(error as Error).message}`);
@@ -380,7 +409,36 @@ export class RidesService {
     return (await this.rideModel.findById(settled._id).select("+otpCode").exec()) ?? settled;
   }
 
-  private toEstimate(rideType: RideTypeDocument, route: RouteEstimate, fare: PricedFare): FareEstimateView {
+  /**
+   * Free drivers around the pickup, per vehicle type: how many, and how far
+   * the nearest is. One geo query for every ride type on the quote. Supply
+   * is decoration on a quote, so a failure here never fails the estimate.
+   */
+  private async driverSupply(pickup: GeoCoordinates): Promise<DriverSupply> {
+    const supply: DriverSupply = new Map();
+    try {
+      const drivers = await this.matching.nearbyAvailable(pickup, this.matchingRadiusMeters, SUPPLY_SCAN_LIMIT);
+      for (const driver of drivers) {
+        if (!driver.vehicleType) continue;
+        const entry = supply.get(driver.vehicleType);
+        // Sorted nearest first by $geoNear: the first seen is the nearest.
+        if (entry) entry.count += 1;
+        else supply.set(driver.vehicleType, { count: 1, nearestMeters: driver.distanceMeters });
+      }
+    } catch (error) {
+      this.logger.warn(`Driver supply lookup failed: ${(error as Error).message}`);
+    }
+    return supply;
+  }
+
+  private pickupEtaSeconds(nearestMeters: number): number {
+    const seconds = (nearestMeters * ROAD_DETOUR_FACTOR) / this.averageSpeedMps;
+    // Never promise less than a minute: the driver still has to accept.
+    return Math.max(MIN_PICKUP_ETA_SECONDS, Math.round(seconds / 60) * 60);
+  }
+
+  private toEstimate(rideType: RideTypeDocument, route: RouteEstimate, fare: PricedFare, supply: DriverSupply): FareEstimateView {
+    const available = supply.get(rideType.vehicleType);
     return {
       rideType: rideType.code,
       displayName: rideType.displayName,
@@ -404,6 +462,8 @@ export class RidesService {
         estimatedFare: fare.total,
       },
       pricingVersion: fare.pricingVersion,
+      pickupEtaSeconds: available ? this.pickupEtaSeconds(available.nearestMeters) : null,
+      driversNearby: available?.count ?? 0,
     };
   }
 }

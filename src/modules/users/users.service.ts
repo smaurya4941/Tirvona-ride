@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
 import * as argon2 from "argon2";
-import { apiBadRequest, apiNotFound } from "../../common/exceptions/api.exception";
+import { apiBadRequest, apiConflict, apiNotFound } from "../../common/exceptions/api.exception";
 import type { UserRole } from "../../common/types/user-role.enum";
 import { User, UserStatus } from "./schemas/user.schema";
 import type { UserDocument } from "./schemas/user.schema";
@@ -60,6 +60,14 @@ export class UsersService {
 
   async findByPhoneWithPassword(phone: string): Promise<UserDocument | null> {
     return this.userModel.findOne({ phone }).select("+passwordHash").exec();
+  }
+
+  async findByPhone(phone: string): Promise<UserDocument | null> {
+    return this.userModel.findOne({ phone }).exec();
+  }
+
+  async findByIdWithPassword(userId: string): Promise<UserDocument | null> {
+    return this.userModel.findById(userId).select("+passwordHash").exec();
   }
 
   async findById(userId: string): Promise<UserDocument> {
@@ -144,11 +152,48 @@ export class UsersService {
   ): Promise<UserDocument> {
     const user = await this.findById(userId);
     if (dto.firstName !== undefined) user.firstName = dto.firstName;
-    if (dto.lastName !== undefined) user.lastName = dto.lastName;
+    if (dto.lastName !== undefined) user.lastName = dto.lastName || undefined;
     if (dto.gender !== undefined) user.gender = dto.gender;
-    if (dto.dob !== undefined) user.dob = new Date(dto.dob);
-    await user.save();
+    if (dto.dob !== undefined) {
+      const dob = new Date(dto.dob);
+      if (dob.getTime() >= Date.now() || dob.getUTCFullYear() < 1900)
+        throw apiBadRequest("Enter a real date of birth", "VALIDATION_FAILED");
+      user.dob = dob;
+    }
+    if (dto.email !== undefined) {
+      const email = dto.email ?? undefined;
+      if (email !== user.email) {
+        if (email && (await this.userModel.exists({ email, _id: { $ne: user._id } })))
+          throw this.emailTaken();
+        user.email = email;
+        // A new address has not been proven yet.
+        user.isEmailVerified = false;
+      }
+    }
+    try {
+      await user.save();
+    } catch (error) {
+      // Someone claimed the address between the check and the save.
+      if ((error as { code?: number })?.code === 11000) throw this.emailTaken();
+      throw error;
+    }
     return user;
+  }
+
+  /** Sets a new password (already validated against the policy). */
+  async setPassword(userId: string, password: string, options: { markPhoneVerified?: boolean } = {}): Promise<void> {
+    await this.userModel
+      .updateOne(
+        { _id: userId },
+        {
+          $set: {
+            passwordHash: await this.hashPassword(password),
+            passwordChangedAt: new Date(),
+            ...(options.markPhoneVerified ? { isPhoneVerified: true } : {}),
+          },
+        },
+      )
+      .exec();
   }
 
   async changePassword(
@@ -170,7 +215,15 @@ export class UsersService {
         "AUTH_INVALID_CREDENTIALS",
       );
 
+    if (await argon2.verify(user.passwordHash!, dto.newPassword))
+      throw apiBadRequest("Choose a password you haven't used for this account.", "PASSWORD_UNCHANGED");
+
     user.passwordHash = await argon2.hash(dto.newPassword);
+    user.passwordChangedAt = new Date();
     await user.save();
+  }
+
+  private emailTaken() {
+    return apiConflict("This email is already used by another account.", "EMAIL_ALREADY_REGISTERED");
   }
 }

@@ -71,6 +71,8 @@ export interface Environment {
   rideOtpTtlMinutes: number;
   rideOtpMaxAttempts: number;
   matchingRadiusKm: number;
+  nearbyDriversRadiusKm: number;
+  nearbyDriversLimit: number;
   matchingSweepIntervalMs: number;
   matchingReactiveDispatch: boolean;
   realtimePingIntervalMs: number;
@@ -169,6 +171,7 @@ export interface Environment {
   otpSendWindowMinutes: number;
   otpHashSecret: string;
   signupPendingTtlMinutes: number;
+  passwordResetTokenTtlMinutes: number;
 }
 
 export const WHATSAPP_PROVIDERS = ["meta", "log"] as const;
@@ -293,6 +296,9 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
   rideOtpTtlMinutes: integer(env.RIDE_OTP_TTL_MINUTES, 15),
   rideOtpMaxAttempts: integer(env.RIDE_OTP_MAX_ATTEMPTS, 5),
   matchingRadiusKm: decimal(env.MATCHING_RADIUS_KM, 8),
+  // Cars drawn on the rider Home map (approximate positions, no identities).
+  nearbyDriversRadiusKm: decimal(env.NEARBY_DRIVERS_RADIUS_KM, 3),
+  nearbyDriversLimit: integer(env.NEARBY_DRIVERS_LIMIT, 12),
   // 0 disables the background sweep (the e2e suite drives it explicitly).
   // Phase 3 keeps it only as a safety net behind the reactive dispatch below.
   matchingSweepIntervalMs: integer(
@@ -537,6 +543,8 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
   otpHashSecret: (env.OTP_HASH_SECRET || env.JWT_ACCESS_SECRET || "tirvona-dev-otp-hash-secret").trim(),
   // How long a submitted sign-up form waits for its OTP (resends included).
   signupPendingTtlMinutes: integer(env.SIGNUP_PENDING_TTL_MINUTES, 30),
+  // How long the one-time token from a verified reset code may set a new password.
+  passwordResetTokenTtlMinutes: integer(env.PASSWORD_RESET_TOKEN_TTL_MINUTES, 10),
 });
 
 export const environment = (): Environment => environmentFrom(process.env);
@@ -614,6 +622,7 @@ const POSITIVE_INTEGERS = [
   "OTP_MAX_SENDS_PER_WINDOW",
   "OTP_SEND_WINDOW_MINUTES",
   "SIGNUP_PENDING_TTL_MINUTES",
+  "PASSWORD_RESET_TOKEN_TTL_MINUTES",
 ];
 
 const POSITIVE_DECIMALS = [

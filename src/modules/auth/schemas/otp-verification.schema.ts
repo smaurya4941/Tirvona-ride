@@ -6,9 +6,10 @@ export enum OtpPurpose {
   SIGNUP = "SIGNUP",
   /** A signed-in account created before signup OTP existed proving its number. */
   PHONE_VERIFICATION = "PHONE_VERIFICATION",
-  // Reserved for later flows; nothing issues these yet.
-  LOGIN = "LOGIN",
+  /** Forgot password: proves the account's number before a new password is set. */
   RESET_PASSWORD = "RESET_PASSWORD",
+  // Reserved for a later flow; nothing issues it yet.
+  LOGIN = "LOGIN",
 }
 
 /**

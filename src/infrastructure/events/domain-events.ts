@@ -89,6 +89,17 @@ export interface DriverReviewedEvent {
   reason?: string;
 }
 
+/** An admin approved or rejected a change an approved driver asked for. */
+export interface DriverChangeReviewedEvent {
+  requestId: string;
+  driverId: string;
+  userId: string;
+  /** "Driving licence", "Vehicle details", … */
+  label: string;
+  approved: boolean;
+  reason?: string;
+}
+
 /** An admin suspended an approved driver, or reinstated a suspended one (Phase 7). */
 export interface DriverStatusChangedEvent {
   driverId: string;
@@ -100,6 +111,17 @@ export interface DriverStatusChangedEvent {
 export interface UserLoggedOutEvent {
   userId: string;
   deviceId?: string;
+}
+
+/**
+ * Every session of a user was ended at once (password reset, "sign out
+ * everywhere"). `exceptDeviceId` is the device that asked for it and keeps
+ * receiving pushes when it signs straight back in.
+ */
+export interface UserSessionsRevokedEvent {
+  userId: string;
+  reason: "PASSWORD_RESET" | "SIGN_OUT_EVERYWHERE";
+  exceptDeviceId?: string;
 }
 
 /**
@@ -115,7 +137,9 @@ export interface DomainEventMap {
   "earnings.adjusted": EarningsAdjustedEvent;
   "driver.reviewed": DriverReviewedEvent;
   "driver.status_changed": DriverStatusChangedEvent;
+  "driver.change_reviewed": DriverChangeReviewedEvent;
   "auth.logged_out": UserLoggedOutEvent;
+  "auth.sessions_revoked": UserSessionsRevokedEvent;
 }
 
 export type DomainEventName = keyof DomainEventMap;
