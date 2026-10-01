@@ -35,7 +35,7 @@ The global guards are `JwtAuthGuard` followed by `RolesGuard`. Every route is au
 | Payments | own | own earnings | all |
 | Ratings | own | own ratings | view |
 | Notifications | own | own | inbox + broadcasts |
-| Promotions | `GET /promotions`, `POST /promotions/validate` | ❌ | manage |
+| Promotions | `GET /promotions`, `POST /promotions/check`, `POST /promotions/validate` | ❌ | manage |
 | Ride types, pricing, zones | read bookable types | ❌ | manage |
 | Reports, audit log | ❌ | ❌ | ✅ |
 | SOS | create own | create own | manage |
@@ -64,7 +64,7 @@ Limits are per client IP and per route. Each route has its own budget, so exhaus
 | `otpVerify` | `/auth/verify-otp` | 10 / 10 min | `THROTTLE_OTP_VERIFY_*` |
 | `refresh` | refresh, logout | 30 / min | `THROTTLE_REFRESH_*` |
 | `adminLogin` | `/admin/auth/login` | 5 / 5 min | `THROTTLE_ADMIN_LOGIN_*` |
-| `promo` | `/promotions/validate` | 20 / min | `THROTTLE_PROMO_*` |
+| `promo` | `/promotions/check`, `/promotions/validate` | 20 / min | `THROTTLE_PROMO_*` |
 | default | everything else | `THROTTLE_LIMIT` / `THROTTLE_TTL_MS` | |
 
 - WebSockets are not affected: `HttpThrottlerGuard` skips non-HTTP contexts, and the payment webhook is `@SkipThrottle`.
@@ -109,6 +109,7 @@ Limits are per client IP and per route. Each route has its own budget, so exhaus
   5. minimum fare met
   6. total usage limit not reached
   7. per-customer limit not reached
+- **Saving a code before a trip (Offers tab).** `POST /promotions/check {code}` runs the checks that need no trip (`precheckPromo`: active, started, not expired, total and per-customer limits) and returns the offer. It works for codes that are not `showInApp` too. The app keeps the code as `BookingState.savedPromo` and, on "Choose a ride", applies it through `/promotions/validate` for the selected ride type. A refusal for ride type or minimum fare keeps the code saved, with the reason shown, so it can apply to another ride type. Any other refusal drops it. Nothing is reserved until booking. Same `promo` throttle as validate.
 - **Booking reserves a use.** It creates a `RESERVED` redemption and increments `usedCount` in one conditional update (`usedCount < usageLimit`), so the limit holds under concurrent bookings. The per-customer limit cannot race either, because the database allows one active ride per customer.
 - **Ride outcomes, handled by the `ride.transitioned` listener:**
   - completed → `REDEEMED`, with the discount recomputed on the final fare using the rules frozen on the ride;

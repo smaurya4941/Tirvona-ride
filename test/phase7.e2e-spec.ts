@@ -565,6 +565,16 @@ describe("Phase 7 — admin completion & hardening (e2e)", () => {
       expect(quote).toMatchObject({ code: "BRAJ20", discount: 20, payableFare: quote.fare - 20 });
     });
 
+    it("checks a code before a trip is chosen (Offers screen)", async () => {
+      const saved = (await api().post("/api/v1/promotions/check").set(as("customerA")).send({ code: " braj20 " }).expect(200)).body.data;
+      expect(saved).toMatchObject({ code: "BRAJ20", discountType: "FLAT", discountValue: 20, applicableRideTypes: ["AUTO"] });
+      expect(saved.usedCount).toBeUndefined();
+      const unknown = await api().post("/api/v1/promotions/check").set(as("customerA")).send({ code: "NOPE99" }).expect(404);
+      expect(unknown.body.code).toBe("PROMO_INVALID");
+      await api().post("/api/v1/promotions/check").set(as("customerA")).send({ code: "X" }).expect(400);
+      await api().post("/api/v1/promotions/check").set(as("driverA")).send({ code: "BRAJ20" }).expect(403);
+    });
+
     it("books with the promo, charges fare − discount, credits the driver on the full fare", async () => {
       const ride = await completedRide("customerA", { ...trip(), promoCode: "BRAJ20" });
       expect(ride.promo).toMatchObject({ code: "BRAJ20", discount: 20 });
@@ -587,6 +597,8 @@ describe("Phase 7 — admin completion & hardening (e2e)", () => {
     it("enforces the per-user limit", async () => {
       const response = await api().post("/api/v1/rides").set(as("customerA")).send({ ...trip(), promoCode: "BRAJ20" }).expect(400);
       expect(response.body.code).toBe("PROMO_USER_LIMIT_REACHED");
+      const check = await api().post("/api/v1/promotions/check").set(as("customerA")).send({ code: "BRAJ20" }).expect(400);
+      expect(check.body.code).toBe("PROMO_USER_LIMIT_REACHED");
     });
 
     it("gives the use back when the ride is cancelled", async () => {

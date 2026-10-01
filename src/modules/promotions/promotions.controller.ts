@@ -10,7 +10,7 @@ import { UserRole } from "../../common/types/user-role.enum";
 import { LocationsService } from "../locations/locations.service";
 import { PricingService } from "../pricing/pricing.service";
 import { RideTypesService } from "../ride-types/ride-types.service";
-import { ValidatePromoDto } from "./dto/promo.dto";
+import { CheckPromoDto, ValidatePromoDto } from "./dto/promo.dto";
 import { PromotionsService } from "./promotions.service";
 import type { CustomerPromoView } from "./promotions.service";
 
@@ -41,6 +41,19 @@ export class PromotionsController {
   @ApiOperation({ summary: "Live offers the app may list (codes flagged 'show in app')" })
   async offers(): Promise<ApiSuccessBody<CustomerPromoView[]>> {
     return ok(await this.promotions.listForCustomers());
+  }
+
+  @Post("check")
+  @HttpCode(HttpStatus.OK)
+  @ThrottlePolicy("promo")
+  @ApiOperation({
+    summary: "Check a code before a trip is chosen (active, in date, uses left). The fare-based checks run at validate.",
+  })
+  async check(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CheckPromoDto,
+  ): Promise<ApiSuccessBody<CustomerPromoView>> {
+    return ok(await this.promotions.check(user.userId, dto.code));
   }
 
   @Post("validate")

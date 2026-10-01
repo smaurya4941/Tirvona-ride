@@ -3,7 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model, QueryFilter } from "mongoose";
 import { Types } from "mongoose";
-import { ApiException, apiForbidden } from "../../common/exceptions/api.exception";
+import { ApiException, apiBadRequest, apiForbidden } from "../../common/exceptions/api.exception";
 import { UserRole } from "../../common/types/user-role.enum";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { DriversService } from "../drivers/drivers.service";
@@ -300,8 +300,14 @@ export class RidesService {
 
   async history(
     user: AuthenticatedUser,
-    query: { page: number; limit: number; status?: RideStatus },
+    query: { page: number; limit: number; status?: RideStatus; startDate?: string; endDate?: string },
   ): Promise<Page<RideView>> {
+    const start = query.startDate ? new Date(query.startDate) : undefined;
+    const end = query.endDate ? new Date(query.endDate) : undefined;
+    if (start && end && start.getTime() >= end.getTime()) {
+      throw apiBadRequest("startDate must be before endDate", "RIDE_HISTORY_RANGE_INVALID");
+    }
+
     let filter: QueryFilter<Ride>;
     if (user.role === UserRole.DRIVER) {
       const driver = await this.resolveDriver(user.userId);
@@ -311,6 +317,9 @@ export class RidesService {
       filter = { customerId: new Types.ObjectId(user.userId) };
     }
     if (query.status) filter = { ...filter, status: query.status };
+    if (start || end) {
+      filter = { ...filter, requestedAt: { ...(start && { $gte: start }), ...(end && { $lt: end }) } };
+    }
 
     const [rides, total] = await Promise.all([
       this.rideModel

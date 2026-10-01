@@ -243,3 +243,12 @@ export class ValidatePromoDto extends TripDto {
   @Matches(RIDE_TYPE_CODE_PATTERN)
   rideType!: string;
 }
+
+/** Trip-free check of a code (Offers screen, before a trip is chosen). */
+export class CheckPromoDto {
+  @ApiProperty({ example: "BRAJ50" })
+  @Transform(upper)
+  @IsString()
+  @Length(3, 20)
+  code!: string;
+}

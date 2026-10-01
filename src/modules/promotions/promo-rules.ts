@@ -70,6 +70,25 @@ const fail = (code: ErrorCode, message: string): PromoEvaluation => ({ ok: false
 const rupees = (value: number): string => `₹${Number.isInteger(value) ? value : value.toFixed(2)}`;
 
 /**
+ * The checks that need no trip: used when a rider saves a code from the
+ * Offers screen before choosing a trip. Ride type, minimum fare and the
+ * discount itself are only known once the trip is priced (evaluatePromo).
+ */
+export function precheckPromo(
+  promo: PromoEligibilityRules,
+  context: Pick<PromoContext, "now" | "userUses">,
+): { ok: true } | { ok: false; code: ErrorCode; message: string } {
+  if (promo.status !== PromoStatus.ACTIVE) return { ok: false, code: "PROMO_INACTIVE", message: "This promo code is not active" };
+  if (context.now < promo.startsAt) return { ok: false, code: "PROMO_NOT_STARTED", message: "This promo code is not valid yet" };
+  if (context.now >= promo.endsAt) return { ok: false, code: "PROMO_EXPIRED", message: "This promo code has expired" };
+  if (promo.usageLimit !== undefined && promo.usageLimit !== null && promo.usedCount >= promo.usageLimit)
+    return { ok: false, code: "PROMO_USAGE_LIMIT_REACHED", message: "This promo code has been fully used" };
+  if (context.userUses >= promo.perUserLimit)
+    return { ok: false, code: "PROMO_USER_LIMIT_REACHED", message: "You have already used this promo code" };
+  return { ok: true };
+}
+
+/**
  * Every check the backend runs before a promo may be applied, in the order
  * the customer should hear about them. The app never decides validity.
  */

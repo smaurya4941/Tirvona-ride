@@ -5,7 +5,7 @@ import { Types } from "mongoose";
 import { ApiException, apiBadRequest, apiConflict, apiNotFound } from "../../common/exceptions/api.exception";
 import type { Page } from "../rides/rides.service";
 import type { CreatePromoDto, UpdatePromoDto } from "./dto/promo.dto";
-import { PromoDiscountType, PromoStatus, evaluatePromo } from "./promo-rules";
+import { PromoDiscountType, PromoStatus, evaluatePromo, precheckPromo } from "./promo-rules";
 import type { PromoDiscountRules, PromoEvaluation } from "./promo-rules";
 import { PromoCode, PromoRedemption, PromoRedemptionStatus } from "./schemas/promo-code.schema";
 import type { PromoCodeDocument } from "./schemas/promo-code.schema";
@@ -255,6 +255,34 @@ export class PromotionsService {
     return promos
       .filter((promo) => promo.usageLimit === undefined || promo.usageLimit === null || promo.usedCount < promo.usageLimit)
       .map((promo) => this.toCustomerView(promo));
+  }
+
+  /**
+   * Trip-free check for saving a code before a trip is chosen (Offers screen).
+   * Works for codes not shown in the app too. Throws the specific PROMO_* error.
+   */
+  async check(userId: string, code: string): Promise<CustomerPromoView> {
+    const promo = await this.promoModel.findOne({ code: code.trim().toUpperCase() }).exec();
+    if (!promo) throw this.rejection({ ok: false, code: "PROMO_INVALID", message: "This promo code is not valid" });
+    const userUses = await this.redemptionModel
+      .countDocuments({ promoId: promo._id, userId: new Types.ObjectId(userId), status: { $in: ACTIVE_USE } })
+      .exec();
+    const result = precheckPromo(
+      {
+        status: promo.status,
+        startsAt: promo.startsAt,
+        endsAt: promo.endsAt,
+        applicableRideTypes: promo.applicableRideTypes,
+        usageLimit: promo.usageLimit ?? null,
+        usedCount: promo.usedCount,
+        perUserLimit: promo.perUserLimit,
+        discountType: promo.discountType,
+        discountValue: promo.discountValue,
+      },
+      { now: new Date(), userUses },
+    );
+    if (!result.ok) throw this.rejection(result);
+    return this.toCustomerView(promo);
   }
 
   /** Full eligibility check against a server-priced fare. Never reserves. */

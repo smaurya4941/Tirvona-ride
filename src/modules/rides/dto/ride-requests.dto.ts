@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
 import {
   IsEnum,
+  IsISO8601,
   IsLatitude,
   IsLongitude,
   IsNumber,
@@ -98,6 +99,23 @@ export class ListRidesQueryDto {
   @IsOptional()
   @IsEnum(RideStatus)
   status?: RideStatus;
+
+  /**
+   * Instants with an offset (the app sends UTC), so "today" means the rider's
+   * day, not the server's. Matched against requestedAt: start inclusive,
+   * end exclusive.
+   */
+  @ApiPropertyOptional({ example: "2026-09-23T18:30:00.000Z", description: "Rides requested at or after this instant" })
+  @IsOptional()
+  @IsISO8601({ strict: true, strictSeparator: true })
+  @Matches(/(Z|[+-]\d{2}:?\d{2})$/, { message: "startDate must include a time zone offset (e.g. Z)" })
+  startDate?: string;
+
+  @ApiPropertyOptional({ example: "2026-09-30T18:30:00.000Z", description: "Rides requested before this instant" })
+  @IsOptional()
+  @IsISO8601({ strict: true, strictSeparator: true })
+  @Matches(/(Z|[+-]\d{2}:?\d{2})$/, { message: "endDate must include a time zone offset (e.g. Z)" })
+  endDate?: string;
 }
 
 /** The rider's position, for the cars drawn on the Home map. */

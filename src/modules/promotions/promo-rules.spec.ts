@@ -1,4 +1,4 @@
-import { MIN_PAYABLE_RUPEES, PromoDiscountType, PromoStatus, computeDiscount, evaluatePromo } from "./promo-rules";
+import { MIN_PAYABLE_RUPEES, PromoDiscountType, PromoStatus, computeDiscount, evaluatePromo, precheckPromo } from "./promo-rules";
 import type { PromoEligibilityRules } from "./promo-rules";
 
 const NOW = new Date("2026-09-26T10:00:00Z");
@@ -85,5 +85,21 @@ describe("evaluatePromo", () => {
   it("reports the first failing rule (inactive beats expired)", () => {
     const result = evaluatePromo(promo({ status: PromoStatus.INACTIVE, endsAt: new Date("2020-01-01") }), context());
     expect(result).toMatchObject({ code: "PROMO_INACTIVE" });
+  });
+});
+
+describe("precheckPromo (no trip yet)", () => {
+  it("accepts a live code without looking at ride type or minimum fare", () => {
+    expect(precheckPromo(promo({ applicableRideTypes: ["BIKE"], minRideValue: 5_000 }), { now: NOW, userUses: 0 })).toEqual({ ok: true });
+  });
+
+  it.each([
+    ["PROMO_INACTIVE", { status: PromoStatus.INACTIVE }, 0],
+    ["PROMO_NOT_STARTED", { startsAt: new Date("2026-09-27T00:00:00Z") }, 0],
+    ["PROMO_EXPIRED", { endsAt: NOW }, 0],
+    ["PROMO_USAGE_LIMIT_REACHED", { usageLimit: 3, usedCount: 3 }, 0],
+    ["PROMO_USER_LIMIT_REACHED", {}, 1],
+  ] as const)("refuses with %s", (code, overrides, userUses) => {
+    expect(precheckPromo(promo(overrides), { now: NOW, userUses })).toMatchObject({ ok: false, code });
   });
 });
