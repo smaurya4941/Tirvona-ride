@@ -8,7 +8,7 @@ export enum OtpPurpose {
   PHONE_VERIFICATION = "PHONE_VERIFICATION",
   /** Forgot password: proves the account's number before a new password is set. */
   RESET_PASSWORD = "RESET_PASSWORD",
-  // Reserved for a later flow; nothing issues it yet.
+  /** Passwordless sign-in: the code alone proves the account's number. */
   LOGIN = "LOGIN",
 }
 

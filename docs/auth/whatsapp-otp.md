@@ -5,8 +5,10 @@ entering a 6-digit code sent to it on **WhatsApp** (Meta WhatsApp Cloud API),
 through the existing Tirvona WhatsApp Business number. NestJS generates,
 sends, stores and checks every code. The app only relays `phone + code`.
 
-Scope: **signup only**. The ride-start PIN stays inside the app and never goes
-over WhatsApp. There is no SMS and no Redis. Expiry cleanup uses MongoDB TTL
+Scope: this page covers **signup**. The same code machinery also serves
+login with a WhatsApp code ([otp-login.md](otp-login.md)) and forgot password
+([../account/README.md](../account/README.md)). The ride-start PIN stays
+inside the app and never goes over WhatsApp. There is no SMS and no Redis. Expiry cleanup uses MongoDB TTL
 indexes.
 
 ```
@@ -118,7 +120,7 @@ are accepted in E.164.
 
 | Collection | Holds | TTL |
 | --- | --- | --- |
-| `otp_verifications` | `phone, purpose (SIGNUP \| PHONE_VERIFICATION), otpHash, expiresAt, attempts, verified, createdAt`. One active code per `(phone, purpose)` (unique index) | `expiresAt` (5 min) |
+| `otp_verifications` | `phone, purpose (SIGNUP \| PHONE_VERIFICATION \| RESET_PASSWORD \| LOGIN), otpHash, expiresAt, attempts, verified, createdAt`. One active code per `(phone, purpose)` (unique index) | `expiresAt` (5 min) |
 | `otp_send_quotas` | per `(phone, purpose)`: `sendCount, windowStartedAt, lastSentAt, expiresAt`. Kept apart so waiting out a code doesn't reset the budget | end of window (60 min) |
 | `pending_signups` | the submitted form: `phone` (unique), `verificationIdHash`, names, email, **argon2** `passwordHash`, role, IP | `expiresAt` (30 min, extended by resends) |
 

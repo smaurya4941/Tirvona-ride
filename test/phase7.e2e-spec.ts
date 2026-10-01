@@ -61,6 +61,9 @@ const EXPECTED_PUBLIC_ROUTES = [
   "POST /auth/password/forgot",
   "POST /auth/password/verify-otp",
   "POST /auth/password/reset",
+  // Login with a WhatsApp code instead of the password.
+  "POST /auth/login/otp/request",
+  "POST /auth/login/otp/verify",
   "POST /admin/auth/login",
   "POST /payments/webhook",
   "POST /payments/webhook/razorpay",

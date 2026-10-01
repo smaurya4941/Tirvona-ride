@@ -3,11 +3,10 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
-import { apiBadRequest, apiForbidden, apiNotFound } from "../../common/exceptions/api.exception";
+import { apiBadRequest, apiNotFound } from "../../common/exceptions/api.exception";
 import { maskPhone } from "../../common/phone/phone-number";
 import { UserRole } from "../../common/types/user-role.enum";
 import { DomainEventsService } from "../../infrastructure/events/domain-events.service";
-import { UserStatus } from "../users/schemas/user.schema";
 import type { UserDocument } from "../users/schemas/user.schema";
 import { UsersService } from "../users/users.service";
 import type { AuthSession } from "./auth.service";
@@ -107,7 +106,7 @@ export class PasswordResetService {
 
     const user = await this.users.findByIdWithPassword(ticket.userId.toString());
     if (!user || user.role === UserRole.ADMIN) throw invalid;
-    if (user.status === UserStatus.BLOCKED) throw apiForbidden("This account has been blocked", "USER_BLOCKED");
+    this.auth.assertCanSignIn(user);
     // Checked before the token is spent, so the user can simply pick another.
     if (await this.users.verifyPassword(user, newPassword))
       throw apiBadRequest("Choose a password you haven't used for this account.", "PASSWORD_UNCHANGED");
@@ -128,8 +127,7 @@ export class PasswordResetService {
     });
     this.logger.log(`Password reset for ${maskPhone(user.phone)}; ${revoked} session(s) ended`);
 
-    await this.users.recordLogin(userId);
-    return this.auth.startSession(userId, user.role, device);
+    return this.auth.completeSignIn(user, device);
   }
 
   /** The account a reset may be started for; the same answer for unknown and admin numbers. */
@@ -140,7 +138,7 @@ export class PasswordResetService {
         "No Tirvona Rides account uses this mobile number. Check the number or create an account.",
         "ACCOUNT_NOT_FOUND",
       );
-    if (user.status === UserStatus.BLOCKED) throw apiForbidden("This account has been blocked", "USER_BLOCKED");
+    this.auth.assertCanSignIn(user);
     return user;
   }
 }

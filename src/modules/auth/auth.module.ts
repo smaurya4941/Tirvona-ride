@@ -10,6 +10,7 @@ import { WhatsAppModule } from "../whatsapp/whatsapp.module";
 import { AdminAuthController } from "./admin-auth.controller";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
+import { LoginOtpService } from "./login-otp.service";
 import { OtpService } from "./otp.service";
 import { PasswordResetService } from "./password-reset.service";
 import { OtpSendQuota, OtpSendQuotaSchema } from "./schemas/otp-send-quota.schema";
@@ -46,6 +47,7 @@ import { TokenService } from "./token.service";
     OtpService,
     SignupService,
     PasswordResetService,
+    LoginOtpService,
     // Applied to every route in the app; individual routes opt out with
     // @Public() or restrict with @Roles(). RolesGuard must run after
     // JwtAuthGuard (relies on request.user), which array order guarantees.

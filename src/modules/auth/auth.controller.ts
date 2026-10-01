@@ -9,12 +9,14 @@ import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import type { AuthSession, AuthUserView } from "./auth.service";
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
+import { RequestLoginOtpDto, VerifyLoginOtpDto } from "./dto/login-otp.dto";
 import { RefreshTokenDto } from "./dto/refresh-token.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { PhoneOtpDto } from "./dto/otp-code.dto";
 import { ForgotPasswordDto, ResetPasswordDto, VerifyPasswordResetOtpDto } from "./dto/password-reset.dto";
 import { ResendOtpDto } from "./dto/resend-otp.dto";
 import { VerifyOtpDto } from "./dto/verify-otp.dto";
+import { LoginOtpService } from "./login-otp.service";
 import type { OtpChallengeView } from "./otp-challenge.view";
 import type { PasswordResetTicket } from "./password-reset.service";
 import { PasswordResetService } from "./password-reset.service";
@@ -28,6 +30,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly signup: SignupService,
     private readonly passwordReset: PasswordResetService,
+    private readonly loginOtp: LoginOtpService,
   ) {}
 
   @Public()
@@ -88,6 +91,37 @@ export class AuthController {
       ipAddress: ip,
     });
     return ok(session);
+  }
+
+  // ── Login with a WhatsApp code (alternative to the password) ─────────────
+
+  @Public()
+  @ThrottlePolicy("otpSend")
+  @Post("login/otp/request")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Log in with a WhatsApp code: send a 6-digit code to the account's number",
+    description:
+      "Also the resend: inside the cooldown the code already sent is kept (codeSent=false), after it a new code replaces it. 404 ACCOUNT_NOT_FOUND when no customer or driver account uses the number (nothing is sent).",
+  })
+  async requestLoginOtp(@Body() dto: RequestLoginOtpDto): Promise<ApiSuccessBody<OtpChallengeView>> {
+    return ok(await this.loginOtp.requestCode(dto.phone));
+  }
+
+  @Public()
+  @ThrottlePolicy("otpVerify")
+  @Post("login/otp/verify")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Log in with the WhatsApp code: returns the same session as password login" })
+  async verifyLoginOtp(@Body() dto: VerifyLoginOtpDto, @Ip() ip: string): Promise<ApiSuccessBody<AuthSession>> {
+    return ok(
+      await this.loginOtp.verify(dto.phone, dto.otp, {
+        deviceId: dto.deviceId,
+        deviceType: dto.deviceType,
+        deviceName: dto.deviceName,
+        ipAddress: ip,
+      }),
+    );
   }
 
   @Public()

@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { DomainEventsService } from "../../infrastructure/events/domain-events.service";
 import { UserRole } from "../../common/types/user-role.enum";
 import { UserStatus } from "../users/schemas/user.schema";
+import type { UserDocument } from "../users/schemas/user.schema";
 import type { UserSummary } from "../users/users.service";
 import { UsersService } from "../users/users.service";
 import { DriversService } from "../drivers/drivers.service";
@@ -63,16 +64,25 @@ export class AuthService {
     if (!(await this.users.verifyPassword(user, dto.password)))
       throw invalidCredentials;
     if (requiredRole && user.role !== requiredRole) throw invalidCredentials;
+    this.assertCanSignIn(user);
+    return this.completeSignIn(user, device);
+  }
+
+  /**
+   * Rules every sign-in method enforces once it knows *who* is signing in
+   * (password, WhatsApp code, …). Kept in one place so the methods cannot
+   * drift apart.
+   */
+  assertCanSignIn(user: Pick<UserDocument, "status">): void {
     if (user.status === UserStatus.BLOCKED)
       throw apiForbidden("This account has been blocked", "USER_BLOCKED");
+  }
 
-    await this.users.recordLogin(user._id.toString());
-    const tokens = await this.tokens.issueTokenPair(
-      user._id.toString(),
-      user.role,
-      device,
-    );
-    return { user: await this.buildUserView(user._id.toString()), ...tokens };
+  /** Records the login and opens a session for a user who passed assertCanSignIn. */
+  async completeSignIn(user: Pick<UserDocument, "_id" | "role">, device: DeviceMetadata): Promise<AuthSession> {
+    const userId = user._id.toString();
+    await this.users.recordLogin(userId);
+    return this.startSession(userId, user.role, device);
   }
 
   async refresh(refreshToken: string, device: DeviceMetadata): Promise<AuthSession> {
