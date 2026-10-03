@@ -16,15 +16,16 @@ Each push carries a bundled sound, chosen by notification type (`pushSoundFor` i
 
 | Sound | Android channel | Used for |
 |---|---|---|
-| `ride_request` (triple double-ring, ~4 s) | `tirvona_ride_requests` | a new ride offer for a driver |
-| `ride_update` (two-note chime) | `tirvona_rides_v2` | everything else (ride progress, payments, account) |
-| `sos_alert` (siren, ~3 s) | `tirvona_sos` | SOS created/updated |
+| `ride_request` (triple double-ring, ~4 s) | `tirvona_ride_requests_v2` | a new ride offer for a driver |
+| `ride_update` (two-note chime) | `tirvona_rides_v3` | everything else (ride progress, payments, account) |
+| `sos_alert` (siren, ~3 s) | `tirvona_sos_v2` | SOS created/updated |
 
 - Android plays the channel's sound and cannot change it once the channel exists on a phone, so the channels are new ids. `MainActivity.kt` creates them at start-up and deletes the old `tirvona_rides` channel. The Dart side (`alert_sounds.dart`) creates the same channels and uses them for notifications shown while the app is open.
+- `res/raw/keep.xml` stops the release resource shrinker from deleting the sounds (they are only referenced by name). Without it a release build has no sound at all.
 - Files: `android/app/src/main/res/raw/*.wav` and `ios/Runner/*.wav` (registered in the Xcode project). They are synthesised tones; replace the files, keeping the names, to change them.
 - iOS plays `<sound>.wav` from the APNs payload; sounds must stay under 30 s.
 - `PUSH_ANDROID_CHANNEL_ID` is gone: channel ids are constants shared with the app.
-- Phones that still run an older build keep the old channel id and get the default sound until they update. FCM falls back to the manifest default channel (`tirvona_rides_v2`) when a channel does not exist.
+- Phones that still run an older build keep the old channel id and get the default sound until they update. FCM falls back to the manifest default channel (`tirvona_rides_v3`) when a channel does not exist.
 
 ## 4. Live driver map (admin)
 - `GET /admin/live/drivers`: every approved online driver with name, phone, vehicle, current ride and the best known position. `GET /admin/live/drivers/:id`: one driver of any status. Admin-only, `Cache-Control: no-store`.

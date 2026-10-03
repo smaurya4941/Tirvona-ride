@@ -17,7 +17,12 @@ import type { RideDocument, RideFinalFare, RideLocation, RideVehicle } from "./s
 export interface RideFareView {
   currency: string;
   baseFare: number;
+  /** What the ride is charged per km (the peak rate when `peak` is set). */
   perKmRate: number;
+  /** The permanent per-km rate, for showing "₹18 → ₹27/km". */
+  basePerKmRate: number;
+  /** The peak slot that applied when the ride was booked. Frozen on the ride. */
+  peak?: RidePeakView;
   perMinuteRate: number;
   minimumFare: number;
   distanceCharge: number;
@@ -32,6 +37,14 @@ export interface RideFareView {
   payableFare?: number;
   /** The frozen final bill: actual trip measured and each component (absent until completion). */
   final?: RideFinalFareView;
+}
+
+export interface RidePeakView {
+  name: string;
+  hikePercent: number;
+  startTime: string;
+  endTime: string;
+  surcharge: number;
 }
 
 export interface RideFinalFareView {
@@ -192,6 +205,14 @@ export class RideViewService {
         currency: ride.fare.currency,
         baseFare: ride.fare.baseFare,
         perKmRate: ride.fare.perKmRate,
+        basePerKmRate: ride.fare.basePerKmRate ?? ride.fare.perKmRate,
+        peak: ride.fare.peak && {
+          name: ride.fare.peak.name,
+          hikePercent: ride.fare.peak.hikePercent,
+          startTime: ride.fare.peak.startTime,
+          endTime: ride.fare.peak.endTime,
+          surcharge: ride.fare.peak.surcharge,
+        },
         perMinuteRate: ride.fare.perMinuteRate,
         minimumFare: ride.fare.minimumFare,
         distanceCharge: ride.fare.distanceCharge,

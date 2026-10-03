@@ -100,9 +100,9 @@ export enum PushSound {
 
 /** Android channel id per sound. Keep in sync with the app. */
 export const PUSH_CHANNEL_IDS: Record<PushSound, string> = {
-  [PushSound.RIDE_REQUEST]: "tirvona_ride_requests",
-  [PushSound.RIDE_UPDATE]: "tirvona_rides_v2",
-  [PushSound.SOS_ALERT]: "tirvona_sos",
+  [PushSound.RIDE_REQUEST]: "tirvona_ride_requests_v2",
+  [PushSound.RIDE_UPDATE]: "tirvona_rides_v3",
+  [PushSound.SOS_ALERT]: "tirvona_sos_v2",
 };
 
 export function pushSoundFor(type: NotificationType): PushSound {

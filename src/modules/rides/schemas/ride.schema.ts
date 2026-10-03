@@ -90,6 +90,30 @@ export class RideFinalFare {
 }
 const RideFinalFareSchema = SchemaFactory.createForClass(RideFinalFare);
 
+/** The peak slot that raised this ride's per-km rate, copied at booking so later edits never touch the ride. */
+@Schema({ _id: false })
+export class RidePeakFare {
+  @Prop({ required: true })
+  slotId!: string;
+
+  @Prop({ required: true })
+  name!: string;
+
+  @Prop({ required: true })
+  hikePercent!: number;
+
+  @Prop({ required: true })
+  startTime!: string;
+
+  @Prop({ required: true })
+  endTime!: string;
+
+  /** Extra distance charge caused by the peak, rupees, on the booked route. */
+  @Prop({ required: true })
+  surcharge!: number;
+}
+const RidePeakFareSchema = SchemaFactory.createForClass(RidePeakFare);
+
 /**
  * The tariff and breakdown at booking time. Snapshotted so a later admin
  * price change never alters a ride that is already booked or completed.
@@ -102,8 +126,17 @@ export class RideFare {
   @Prop({ required: true })
   baseFare!: number;
 
+  /** The rate the ride is charged at: the base rate, or the peak-raised rate when `peak` is set. */
   @Prop({ required: true })
   perKmRate!: number;
+
+  /** The permanent per-km rate. Absent on rides booked before peak pricing existed (= perKmRate). */
+  @Prop()
+  basePerKmRate?: number;
+
+  /** Present when a peak slot was in force at booking; the ride keeps this rate through completion. */
+  @Prop({ type: RidePeakFareSchema })
+  peak?: RidePeakFare;
 
   @Prop({ required: true })
   perMinuteRate!: number;

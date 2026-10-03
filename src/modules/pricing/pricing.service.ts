@@ -7,6 +7,9 @@ import { apiBadRequest, apiConflict, apiNotFound } from "../../common/exceptions
 import { RideTypeCode } from "../ride-types/schemas/ride-type.schema";
 import type { UpdatePricingDto } from "./dto/update-pricing.dto";
 import { calculateFare } from "./fare-calculator";
+import { PeakPricingService } from "./peak-pricing.service";
+import { peakRates } from "./peak-pricing";
+import type { AppliedPeak } from "./peak-pricing";
 import type { FareBreakdown, PricingRates } from "./fare-calculator";
 import { PricingConfig } from "./schemas/pricing-config.schema";
 import type { PricingConfigDocument } from "./schemas/pricing-config.schema";
@@ -20,6 +23,13 @@ export interface PricingSummary extends PricingRates {
 
 export interface PricedFare extends FareBreakdown {
   pricingVersion: number;
+  /**
+   * The permanent per-km rate. `perKmRate` (inherited) is what the trip is
+   * charged at: equal to this normally, higher while a peak slot is in force.
+   */
+  basePerKmRate: number;
+  /** The peak that raised the per-km rate; absent at normal pricing. */
+  peak?: AppliedPeak;
 }
 
 // Launch tariffs — seeded once, then owned by admins through the panel.
@@ -40,6 +50,7 @@ export class PricingService implements OnModuleInit {
 
   constructor(
     @InjectModel(PricingConfig.name) private readonly pricingModel: Model<PricingConfig>,
+    private readonly peaks: PeakPricingService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -94,16 +105,49 @@ export class PricingService implements OnModuleInit {
     return config;
   }
 
-  /** Prices a trip with the tariff that is active right now. */
+  /**
+   * Prices a trip with the tariff that is active right now: the ride type's
+   * base tariff, with the per-km rate raised by the peak slot in force at
+   * `at` (the server clock; never a device's). Base fare, per-minute rate and
+   * minimum fare are never touched by a peak.
+   */
   async priceTrip(
     rideType: string,
     distanceMeters: number,
     durationSeconds: number,
+    at: Date = new Date(),
   ): Promise<PricedFare> {
     const config = await this.getConfig(rideType);
+    const slot = await this.peaks.resolve(rideType, at);
+    if (!slot)
+      return {
+        ...calculateFare(config, distanceMeters, durationSeconds),
+        pricingVersion: config.version,
+        basePerKmRate: config.perKmRate,
+      };
+
+    // Plain rates, not the Mongoose document: spreading a hydrated document loses its fields.
+    const base: PricingRates = {
+      currency: config.currency,
+      baseFare: config.baseFare,
+      perKmRate: config.perKmRate,
+      perMinuteRate: config.perMinuteRate,
+      minimumFare: config.minimumFare,
+    };
+    const fare = calculateFare(peakRates(base, slot.hikePercent), distanceMeters, durationSeconds);
+    const normalDistanceCharge = calculateFare(base, distanceMeters, durationSeconds).distanceCharge;
     return {
-      ...calculateFare(config, distanceMeters, durationSeconds),
+      ...fare,
       pricingVersion: config.version,
+      basePerKmRate: config.perKmRate,
+      peak: {
+        slotId: slot.id,
+        name: slot.name,
+        hikePercent: slot.hikePercent,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        surcharge: Math.round((fare.distanceCharge - normalDistanceCharge) * 100) / 100,
+      },
     };
   }
 

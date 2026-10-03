@@ -14,6 +14,7 @@ import type { GeoCoordinates } from "../locations/geo";
 import type { RouteEstimate } from "../locations/route-estimator";
 import { MatchingService } from "../matching/matching.service";
 import { PricingService } from "../pricing/pricing.service";
+import type { AppliedPeak } from "../pricing/peak-pricing";
 import type { PricedFare } from "../pricing/pricing.service";
 import { RideTypesService } from "../ride-types/ride-types.service";
 import type { RideTypeDocument } from "../ride-types/schemas/ride-type.schema";
@@ -49,7 +50,11 @@ export interface FareEstimateView {
   fare: {
     currency: string;
     baseFare: number;
+    /** What the trip is charged per km: the base rate, or the peak rate while `peak` is set. */
     perKmRate: number;
+    basePerKmRate: number;
+    /** Set while a peak-hour slot raises the per-km rate (the server decides; apps only show it). */
+    peak?: AppliedPeak;
     perMinuteRate: number;
     minimumFare: number;
     distanceCharge: number;
@@ -203,6 +208,8 @@ export class RidesService {
           currency: fare.currency,
           baseFare: fare.baseFare,
           perKmRate: fare.perKmRate,
+          basePerKmRate: fare.basePerKmRate,
+          ...(fare.peak ? { peak: fare.peak } : {}),
           perMinuteRate: fare.perMinuteRate,
           minimumFare: fare.minimumFare,
           distanceCharge: fare.distanceCharge,
@@ -244,6 +251,7 @@ export class RidesService {
       metadata: {
         estimatedFare: fare.total,
         pricingVersion: fare.pricingVersion,
+        ...(fare.peak ? { peakSlot: fare.peak.name, peakHikePercent: fare.peak.hikePercent } : {}),
         ...(promo ? { promoCode: promo.code, discount: promo.estimatedDiscount } : {}),
         ...(zone ? { zone: zone.zoneName } : {}),
       },
@@ -462,6 +470,8 @@ export class RidesService {
         currency: fare.currency,
         baseFare: fare.baseFare,
         perKmRate: fare.perKmRate,
+        basePerKmRate: fare.basePerKmRate,
+        peak: fare.peak,
         perMinuteRate: fare.perMinuteRate,
         minimumFare: fare.minimumFare,
         distanceCharge: fare.distanceCharge,

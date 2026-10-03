@@ -37,6 +37,7 @@ import { AdminBrandingController } from "./admin-branding.controller";
 import { AdminPopularPlacesController } from "./admin-places.controller";
 import { AdminLiveController } from "./admin-live.controller";
 import { AdminLiveService } from "./admin-live.service";
+import { AdminPeakPricingController } from "./admin-peak-pricing.controller";
 import { AdminPeopleService } from "./admin-people.service";
 import { AdminPricingController } from "./admin-pricing.controller";
 import { AdminComplaintsController, AdminSosController } from "./admin-safety.controller";
@@ -80,6 +81,7 @@ import { AdminService } from "./admin.service";
   controllers: [
     AdminController,
     AdminLiveController,
+    AdminPeakPricingController,
     AdminRidesController,
     AdminPricingController,
     AdminPaymentsController,
