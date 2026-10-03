@@ -43,6 +43,38 @@ export class SosContactSnapshot {
 }
 const SosContactSnapshotSchema = SchemaFactory.createForClass(SosContactSnapshot);
 
+/** One WhatsApp message to an emergency contact: what was sent and whether Meta accepted it. */
+@Schema({ _id: false })
+export class SosContactAlert {
+  @Prop({ required: true })
+  phone!: string;
+
+  @Prop({ required: true })
+  name!: string;
+
+  /** ALERT: the first message. UPDATE: a newer position. */
+  @Prop({ required: true, enum: ["ALERT", "UPDATE"] })
+  kind!: "ALERT" | "UPDATE";
+
+  @Prop({ required: true, enum: ["SENT", "FAILED"] })
+  status!: "SENT" | "FAILED";
+
+  /** WhatsApp message id (wamid.…) when accepted. */
+  @Prop()
+  messageId?: string;
+
+  /** Why it failed, reduced to what an operator can act on (never Meta's raw error). */
+  @Prop()
+  failure?: string;
+
+  @Prop({ required: true, default: 1 })
+  attempts!: number;
+
+  @Prop({ required: true })
+  at!: Date;
+}
+const SosContactAlertSchema = SchemaFactory.createForClass(SosContactAlert);
+
 @Schema({ _id: false })
 export class SosTimelineEntry {
   @Prop({ required: true, enum: SosStatus })
@@ -120,11 +152,25 @@ export class SosEvent {
   emergencyContacts!: SosContactSnapshot[];
 
   /**
-   * Honest record of contact outreach. V1 has no SMS/WhatsApp/voice
-   * integration, so this stays NOT_SENT and the safety team calls them.
+   * Honest record of contact outreach over WhatsApp: SENT when at least one
+   * contact's alert was accepted by WhatsApp, FAILED when every attempt
+   * failed, NOT_SENT when there was nobody to message (or messaging is off).
+   * Per-contact detail is in `contactAlerts`.
    */
   @Prop({ required: true, default: "NOT_SENT", enum: ["NOT_SENT", "SENT", "FAILED"] })
   contactsNotification!: "NOT_SENT" | "SENT" | "FAILED";
+
+  /** Every WhatsApp message sent to the contacts for this incident (newest last, capped). */
+  @Prop({ type: [SosContactAlertSchema], default: [] })
+  contactAlerts!: SosContactAlert[];
+
+  /**
+   * The live-tracking link token shared with the contacts. The link is a
+   * capability URL, so it is never returned by an API: only this service
+   * reads it, to put it in follow-up messages.
+   */
+  @Prop({ select: false })
+  trackingToken?: string;
 
   @Prop({ required: true })
   triggeredAt!: Date;

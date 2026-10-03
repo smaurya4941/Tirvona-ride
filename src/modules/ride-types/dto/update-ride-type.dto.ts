@@ -14,6 +14,7 @@ import {
   ValidateNested,
 } from "class-validator";
 import { VehicleType } from "../../vehicles/schemas/vehicle.schema";
+import { InitialDistanceDto } from "../../ride-config/dto/ride-config.dto";
 import { RIDE_TYPE_CODE_PATTERN } from "../schemas/ride-type.schema";
 
 /** Icon keys the mobile apps bundle; anything else would render a blank. */
@@ -144,4 +145,10 @@ export class CreateRideTypeDto {
   @ValidateNested()
   @Type(() => InitialTariffDto)
   pricing?: InitialTariffDto;
+
+  @ApiPropertyOptional({ type: InitialDistanceDto, description: "Minimum (m) and maximum (km) trip distance. Required to create it active" })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => InitialDistanceDto)
+  distance?: InitialDistanceDto;
 }

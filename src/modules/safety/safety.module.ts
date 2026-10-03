@@ -5,16 +5,18 @@ import { LocationsModule } from "../locations/locations.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { Ride, RideSchema } from "../rides/schemas/ride.schema";
 import { UsersModule } from "../users/users.module";
+import { WhatsAppModule } from "../whatsapp/whatsapp.module";
 import { EmergencyContactsController, RideSafetyController, SharedRidesController } from "./safety.controller";
 import { EmergencyContactsService } from "./emergency-contacts.service";
 import { EmergencyContact, EmergencyContactSchema } from "./schemas/emergency-contact.schema";
 import { RideShareToken, RideShareTokenSchema } from "./schemas/ride-share-token.schema";
 import { SosEvent, SosEventSchema } from "./schemas/sos-event.schema";
 import { ShareRideService } from "./share-ride.service";
+import { SosContactAlertService } from "./sos-contact-alert.service";
 import { SosService } from "./sos.service";
 
 // Dependency direction (no cycles):
-//   Safety → Notifications, Locations, Users(model), Rides/Drivers(schemas only)
+//   Safety → Notifications, Locations, WhatsApp, Users(model), Rides/Drivers(schemas only)
 //   Admin → Safety
 @Module({
   imports: [
@@ -28,9 +30,10 @@ import { SosService } from "./sos.service";
     UsersModule,
     LocationsModule,
     NotificationsModule,
+    WhatsAppModule,
   ],
   controllers: [EmergencyContactsController, RideSafetyController, SharedRidesController],
-  providers: [EmergencyContactsService, SosService, ShareRideService],
-  exports: [SosService, EmergencyContactsService],
+  providers: [EmergencyContactsService, SosService, ShareRideService, SosContactAlertService],
+  exports: [SosService, EmergencyContactsService, SosContactAlertService],
 })
 export class SafetyModule {}

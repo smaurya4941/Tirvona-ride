@@ -21,7 +21,7 @@ The redesigned rider Home and search screens are backed entirely by the API. Non
 
 ## Nearby drivers
 
-Positions are rounded to 3 decimals (~110 m) and carry no ids, names or plates. `NEARBY_DRIVERS_RADIUS_KM` (default 3) and `NEARBY_DRIVERS_LIMIT` (default 12) configure it. The route is throttled to 30 requests/min. The app refreshes every 30 s while Home is visible.
+Positions are rounded to 3 decimals (~110 m) and carry no ids, names or plates. The radius is an admin setting (Configuration → Ride limits, see `docs/ride-config/README.md`) and `NEARBY_DRIVERS_LIMIT` (default 12) caps the count. The route is throttled to 30 requests/min. The app refreshes every 30 s while Home is visible.
 
 ## App notes
 
@@ -42,7 +42,7 @@ After both ends are set (search, map pin, a saved place or a popular place), the
 - The map shows the route (`routePolyline` of the quote), with a blue pickup and a red destination marker.
 - The trip card lets the rider tap either end (back to "Where to?" for that end), swap (re-quotes, keeps the chosen ride type) or change. It also shows distance • time.
 - Ride rows come from `POST /rides/estimate/all`: fare, trip time and distance, the fare breakdown (ⓘ) and how soon a driver could arrive. Each quote now carries:
-  - `pickupEtaSeconds`: the nearest free driver of the ride type's vehicle type within `MATCHING_RADIUS_KM`, straight line × 1.3 at `ROUTE_AVERAGE_SPEED_KMPH`, rounded to whole minutes, at least 1 minute. It is `null` when there is none; the app then shows "No drivers nearby right now" and booking still works, because dispatch keeps searching.
+  - `pickupEtaSeconds`: the nearest free driver of the ride type's vehicle type within the admin-set matching radius, straight line × 1.3 at `ROUTE_AVERAGE_SPEED_KMPH`, rounded to whole minutes, at least 1 minute. It is `null` when there is none; the app then shows "No drivers nearby right now" and booking still works, because dispatch keeps searching.
   - `driversNearby`: the count of those drivers.
   - A supply lookup failure never fails the quote.
 - The promo code row lives on this screen too; a promo is re-validated on booking.

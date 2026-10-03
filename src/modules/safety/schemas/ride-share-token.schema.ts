@@ -22,6 +22,18 @@ export class RideShareToken {
   tokenHash!: string;
 
   /**
+   * SHARE: made by the rider from the share sheet (the rider can stop it).
+   * SOS: made for an incident, to give emergency contacts a live link. It
+   * ends when the incident closes, not when the rider stops sharing.
+   */
+  @Prop({ enum: ["SHARE", "SOS"], default: "SHARE" })
+  purpose!: "SHARE" | "SOS";
+
+  /** The incident an SOS link belongs to. */
+  @Prop({ type: SchemaTypes.ObjectId, ref: "SosEvent" })
+  sosEventId?: Types.ObjectId;
+
+  /**
    * Hard expiry. Set to creation + SHARE_RIDE_MAX_HOURS, then pulled in to
    * ride end + SHARE_RIDE_GRACE_MINUTES when the ride finishes.
    */

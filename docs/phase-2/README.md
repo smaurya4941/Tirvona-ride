@@ -110,7 +110,7 @@ by changing one binding in `LocationsModule`.
 
 **Matching.** `$geoNear` over a 2dsphere index finds approved, online,
 available and unreserved drivers with the right vehicle type, within
-`MATCHING_RADIUS_KM`, who were heard from in the last
+the admin-set matching radius (`docs/ride-config/README.md`), who were heard from in the last
 `MATCHING_DRIVER_HEARTBEAT_SECONDS`. The nearest driver wins. The first attempt runs inline on
 booking. A background sweep (`MATCHING_SWEEP_INTERVAL_MS`) retries open
 searches and applies the timeouts. Every sweep step is idempotent, so several API

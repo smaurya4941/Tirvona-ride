@@ -20,6 +20,31 @@ export class RideLocation {
 const RideLocationSchema = SchemaFactory.createForClass(RideLocation);
 
 /**
+ * The trip-distance limits this ride was accepted under, frozen at booking.
+ * Later admin edits to the ride type's limits never touch it. Rides booked
+ * before limits became admin-controlled have no snapshot.
+ */
+@Schema({ _id: false })
+export class RideDistancePolicy {
+  @Prop({ required: true })
+  rideType!: string;
+
+  @Prop({ required: true, min: 0 })
+  minDistanceMeters!: number;
+
+  @Prop({ required: true, min: 0 })
+  maxDistanceMeters!: number;
+
+  /** RideDistanceConfig._id and its version when the ride was booked. */
+  @Prop({ required: true })
+  configId!: string;
+
+  @Prop({ required: true, min: 1 })
+  configVersion!: number;
+}
+const RideDistancePolicySchema = SchemaFactory.createForClass(RideDistancePolicy);
+
+/**
  * The bill as priced at completion, frozen: the trip measured, the tariff
  * applied (the booking snapshot, `pricingVersion`), each component, the
  * customer-protection cap and the discount. Payments and earnings read this,
@@ -323,6 +348,10 @@ export class Ride {
 
   @Prop({ required: true, min: 0 })
   durationSeconds!: number;
+
+  /** Limits applied when this ride was booked (see RideDistancePolicy). */
+  @Prop({ type: RideDistancePolicySchema })
+  distancePolicy?: RideDistancePolicy;
 
   @Prop({ required: true })
   routeProvider!: string;

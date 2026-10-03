@@ -6,6 +6,7 @@ import { CommissionService } from "./commission.service";
 import { EarningsAdminService } from "./earnings-admin.service";
 import { EarningsController } from "./earnings.controller";
 import { EarningsService } from "./earnings.service";
+import { RideType, RideTypeSchema } from "../ride-types/schemas/ride-type.schema";
 import { CommissionConfig, CommissionConfigSchema } from "./schemas/commission-config.schema";
 import { DriverEarning, DriverEarningSchema } from "./schemas/driver-earning.schema";
 import { DriverPayout, DriverPayoutSchema } from "./schemas/driver-payout.schema";
@@ -18,6 +19,8 @@ import { DriverEarningAdjustment, DriverEarningAdjustmentSchema } from "./schema
     MongooseModule.forFeature([
       { name: DriverEarning.name, schema: DriverEarningSchema },
       { name: CommissionConfig.name, schema: CommissionConfigSchema },
+      // Read-only: commission is keyed by ride type code.
+      { name: RideType.name, schema: RideTypeSchema },
       { name: DriverPayout.name, schema: DriverPayoutSchema },
       { name: DriverEarningAdjustment.name, schema: DriverEarningAdjustmentSchema },
     ]),

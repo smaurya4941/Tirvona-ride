@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Query } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
@@ -50,6 +50,13 @@ export class AdminSosController {
     @Body() dto: UpdateSosDto,
   ): Promise<ApiSuccessBody<AdminSosDetail>> {
     return ok(await this.sos.adminUpdate(admin.userId, id, dto));
+  }
+
+  @Post(":id/notify-contacts")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Send the WhatsApp alert again to emergency contacts it did not reach" })
+  async notifyContacts(@Param("id", ParseObjectIdPipe) id: string): Promise<ApiSuccessBody<AdminSosDetail>> {
+    return ok(await this.sos.resendContactAlerts(id));
   }
 }
 

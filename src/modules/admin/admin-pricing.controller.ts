@@ -9,10 +9,13 @@ import type { ApiSuccessBody } from "../../common/http/api-response";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
 import { AuditLogService } from "../audit/audit-log.service";
+import { CommissionService } from "../earnings/commission.service";
 import { UpdatePricingDto } from "../pricing/dto/update-pricing.dto";
 import { PricingService } from "../pricing/pricing.service";
 import type { PricingSummary } from "../pricing/pricing.service";
 import { CreateRideTypeDto, UpdateRideTypeDto } from "../ride-types/dto/update-ride-type.dto";
+import { distanceLimitsProblem } from "../ride-config/distance-policy";
+import { RideDistanceConfigService } from "../ride-config/ride-distance-config.service";
 import { RideTypesService } from "../ride-types/ride-types.service";
 import type { RideTypeSummary } from "../ride-types/ride-types.service";
 import { RIDE_TYPE_CODE_PATTERN } from "../ride-types/schemas/ride-type.schema";
@@ -42,6 +45,8 @@ export class AdminPricingController {
     private readonly pricing: PricingService,
     private readonly rideTypes: RideTypesService,
     private readonly audit: AuditLogService,
+    private readonly commission: CommissionService,
+    private readonly distanceConfigs: RideDistanceConfigService,
   ) {}
 
   // ── Pricing ───────────────────────────────────────────────────────────
@@ -101,19 +106,33 @@ export class AdminPricingController {
   ): Promise<ApiSuccessBody<PricingRow>> {
     if (dto.isActive && !dto.pricing)
       throw apiBadRequest("Set a tariff to create the ride type as active", "RIDE_TYPE_PRICING_REQUIRED");
+    if (dto.isActive && !dto.distance)
+      throw apiBadRequest("Set the trip distance limits to create the ride type as active", "RIDE_TYPE_DISTANCE_REQUIRED");
     if ((await this.rideTypes.findByCode(dto.code)) || (await this.pricing.findConfig(dto.code)))
       throw apiConflict(`A ride type with code ${dto.code} already exists`, "RIDE_TYPE_ALREADY_EXISTS");
 
-    const { pricing: tariff, ...fields } = dto;
+    // Reject bad limits before anything is created, so an active ride type never exists without sound ones.
+    const distanceProblem = dto.distance ? distanceLimitsProblem(dto.distance) : null;
+    if (distanceProblem) throw apiBadRequest(distanceProblem, "VALIDATION_FAILED");
+
+    const { pricing: tariff, distance, ...fields } = dto;
     const rideType = await this.rideTypes.create(fields);
+    if (distance) await this.distanceConfigs.save(rideType.code, distance, admin.userId);
     const config = tariff ? await this.pricing.create(rideType.code, tariff, admin.userId) : null;
+    // Every ride type has a commission from the start (admins can change it on the Commission page).
+    await this.commission.ensureForRideType(rideType.code);
     await this.audit.record({
       adminId: admin.userId,
       action: "ride_type.create",
       targetType: "RIDE_TYPE",
       targetId: rideType.code,
       targetLabel: rideType.displayName,
-      metadata: { vehicleType: rideType.vehicleType, isActive: rideType.isActive, tariff: tariff ? { ...tariff } : null },
+      metadata: {
+        vehicleType: rideType.vehicleType,
+        isActive: rideType.isActive,
+        tariff: tariff ? { ...tariff } : null,
+        distance: distance ? { ...distance } : null,
+      },
     });
     return ok({
       rideType: this.rideTypes.toSummary(rideType),
@@ -133,6 +152,12 @@ export class AdminPricingController {
       throw apiBadRequest(
         `Set a tariff for ${before.displayName} before making it bookable`,
         "RIDE_TYPE_PRICING_REQUIRED",
+      );
+
+    if (dto.isActive === true && !before.isActive && !(await this.distanceConfigs.hasUsable(code)))
+      throw apiBadRequest(
+        `Set the trip distance limits for ${before.displayName} before making it bookable`,
+        "RIDE_TYPE_DISTANCE_REQUIRED",
       );
 
     const { reason, ...changes } = dto;

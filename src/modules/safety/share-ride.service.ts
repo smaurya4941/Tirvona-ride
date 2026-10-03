@@ -107,11 +107,46 @@ export class ShareRideService implements OnModuleInit {
     };
   }
 
-  /** Stops every live link of the ride. */
+  /** The public URL for a token. */
+  linkFor(token: string): string {
+    return `${this.linkBaseUrl}/${token}`;
+  }
+
+  /**
+   * A live-tracking link for an SOS, made on the rider's or driver's behalf
+   * and sent to their emergency contacts. Same public page as a share link,
+   * but it belongs to the incident: stopping sharing does not end it.
+   */
+  async createForSos(ride: RideDocument, sosEventId: Types.ObjectId): Promise<{ url: string; token: string; expiresAt: Date }> {
+    const token = randomBytes(24).toString("base64url");
+    const expiresAt = new Date(Date.now() + this.maxHours * 60 * 60_000);
+    await this.tokenModel.create({
+      rideId: ride._id,
+      customerId: ride.customerId,
+      tokenHash: hashToken(token),
+      expiresAt,
+      isActive: true,
+      purpose: "SOS",
+      sosEventId,
+    });
+    return { url: `${this.linkBaseUrl}/${token}`, token, expiresAt };
+  }
+
+  /** Ends the incident's tracking link (the incident is resolved or cancelled). */
+  async revokeForSos(sosEventId: Types.ObjectId): Promise<void> {
+    await this.tokenModel
+      .updateMany({ sosEventId, isActive: true }, { $set: { isActive: false, revokedAt: new Date() } })
+      .exec();
+  }
+
+  /** Stops every live link of the ride that the rider made (SOS links belong to the incident). */
   async revoke(customerUserId: string, rideId: string): Promise<{ revoked: number }> {
     const ride = await this.customerRide(customerUserId, rideId);
     const result = await this.tokenModel
-      .updateMany({ rideId: ride._id, isActive: true }, { $set: { isActive: false, revokedAt: new Date() } })
+      .updateMany(
+        { rideId: ride._id, isActive: true, purpose: { $ne: "SOS" } },
+        { $set: { isActive: false, revokedAt: new Date() } },
+      )
       .exec();
     return { revoked: result.modifiedCount };
   }
@@ -119,7 +154,7 @@ export class ShareRideService implements OnModuleInit {
   async activeLinkCount(customerUserId: string, rideId: string): Promise<{ active: number }> {
     const ride = await this.customerRide(customerUserId, rideId);
     const active = await this.tokenModel
-      .countDocuments({ rideId: ride._id, isActive: true, expiresAt: { $gt: new Date() } })
+      .countDocuments({ rideId: ride._id, isActive: true, purpose: { $ne: "SOS" }, expiresAt: { $gt: new Date() } })
       .exec();
     return { active };
   }
@@ -191,7 +226,7 @@ export class ShareRideService implements OnModuleInit {
 
   private async retireExcess(rideId: Types.ObjectId): Promise<void> {
     const excess = await this.tokenModel
-      .find({ rideId, isActive: true })
+      .find({ rideId, isActive: true, purpose: { $ne: "SOS" } })
       .sort({ createdAt: -1 })
       .skip(MAX_ACTIVE_LINKS_PER_RIDE)
       .select("_id")

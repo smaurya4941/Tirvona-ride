@@ -5,6 +5,7 @@ import type { Model, Types } from "mongoose";
 import { DriverProfile, DriverStatus } from "../drivers/schemas/driver-profile.schema";
 import { toGeoJsonPoint } from "../locations/geo";
 import type { GeoCoordinates } from "../locations/geo";
+import { PlatformSettingsService } from "../ride-config/platform-settings.service";
 import type { VehicleType } from "../vehicles/schemas/vehicle.schema";
 
 export interface DriverCandidate {
@@ -38,14 +39,13 @@ export interface CandidateQuery {
  */
 @Injectable()
 export class MatchingService {
-  private readonly radiusMeters: number;
   private readonly locationStaleMs: number;
 
   constructor(
     @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
+    private readonly settings: PlatformSettingsService,
     config: ConfigService,
   ) {
-    this.radiusMeters = config.getOrThrow<number>("matchingRadiusKm") * 1000;
     this.locationStaleMs = config.getOrThrow<number>("driverLocationStaleSeconds") * 1000;
   }
 
@@ -60,6 +60,8 @@ export class MatchingService {
    * still true.
    */
   async findCandidates(query: CandidateQuery): Promise<DriverCandidate[]> {
+    // The admin's current matching radius, read per search (no restart to change it).
+    const radiusMeters = await this.settings.matchingRadiusMeters();
     return this.driverModel
       .aggregate<DriverCandidate>([
         {
@@ -67,7 +69,7 @@ export class MatchingService {
             near: toGeoJsonPoint(query.pickup),
             key: "currentLocation",
             distanceField: "distanceMeters",
-            maxDistance: this.radiusMeters,
+            maxDistance: radiusMeters,
             spherical: true,
             query: {
               driverStatus: DriverStatus.APPROVED,

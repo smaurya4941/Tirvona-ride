@@ -19,6 +19,9 @@ import type { Page } from "../rides/rides.service";
 import { User } from "../users/schemas/user.schema";
 import type { ListSosQueryDto, TriggerSosDto, UpdateSosDto } from "./dto/sos.dto";
 import { EmergencyContactsService } from "./emergency-contacts.service";
+import { SosContactAlertService } from "./sos-contact-alert.service";
+import type { SosContactStatus } from "./sos-contact-alert.service";
+import { ShareRideService } from "./share-ride.service";
 import { SosEvent } from "./schemas/sos-event.schema";
 import type { SosEventDocument, SosLocation } from "./schemas/sos-event.schema";
 import { OPEN_SOS_STATUSES, SosLocationSource, SosStatus, canTransitionSos, sosAllowed } from "./sos-lifecycle";
@@ -42,6 +45,8 @@ export interface SosView {
   resolvedAt?: Date;
   /** True: the safety team has taken the incident (acknowledged or later). */
   handled: boolean;
+  /** Whether the emergency contacts were messaged on WhatsApp (no phone numbers). */
+  contacts: SosContactStatus[];
 }
 
 export interface SosTriggerResult {
@@ -76,6 +81,18 @@ export interface AdminSosDetail extends AdminSosListItem {
   locationUpdates: SosLocation[];
   emergencyContacts: Array<{ name: string; phone: string; relationship?: string; isPrimary: boolean }>;
   contactsNotification: string;
+  /** Every WhatsApp message sent to the contacts, oldest first. */
+  contactAlerts: Array<{
+    name: string;
+    phone: string;
+    kind: "ALERT" | "UPDATE";
+    status: "SENT" | "FAILED";
+    failure?: string;
+    attempts: number;
+    at: Date;
+  }>;
+  /** True while the contacts' live-tracking link works. */
+  trackingActive: boolean;
   resolutionNote?: string;
   handledBy: { id: string; name: string } | null;
   timeline: Array<{ status: SosStatus; at: Date; byRole: UserRole; by: string | null; note?: string }>;
@@ -142,6 +159,8 @@ export class SosService {
     private readonly contacts: EmergencyContactsService,
     private readonly driverLocations: DriverLocationService,
     private readonly notifications: NotificationsService,
+    private readonly contactAlerts: SosContactAlertService,
+    private readonly share: ShareRideService,
     config: ConfigService,
   ) {
     this.graceMinutes = config.getOrThrow<number>("sosPostRideGraceMinutes");
@@ -164,7 +183,12 @@ export class SosService {
 
     // Pressed again while an alert is open: add the new fix, keep one incident.
     const updated = await this.appendToOpen(ride._id, owner, location, dto.message);
-    if (updated) return { sos: this.toView(updated), created: false };
+    if (updated) {
+      // The newer position goes to the contacts (rate limited and capped there);
+      // a contact the first alert did not reach is tried again.
+      this.contactAlerts.dispatch(updated._id);
+      return { sos: this.toView(updated), created: false };
+    }
 
     const contacts = await this.contacts.snapshot(owner);
     const now = new Date();
@@ -195,7 +219,10 @@ export class SosService {
         if (isDuplicateKey(error, "uniq_open_sos_per_ride_user")) {
           // A concurrent press created it first.
           const existing = await this.appendToOpen(ride._id, owner, location, dto.message);
-          if (existing) return { sos: this.toView(existing), created: false };
+          if (existing) {
+            this.contactAlerts.dispatch(existing._id);
+            return { sos: this.toView(existing), created: false };
+          }
         }
         if (!isDuplicateKey(error, "sosCode")) throw error;
       }
@@ -206,6 +233,9 @@ export class SosService {
       `SOS ${sos.sosCode} raised by ${role} ${user.userId} on ride ${ride.rideCode} at ` +
         `${location.latitude.toFixed(5)},${location.longitude.toFixed(5)} (${location.source})`,
     );
+    // Contacts first: the one message that can bring help to the person's side
+    // must not wait for admin notifications. It runs in the background.
+    this.contactAlerts.dispatch(sos._id);
     await this.alert(sos, ride);
     return { sos: this.toView(sos), created: true };
   }
@@ -313,8 +343,26 @@ export class SosService {
       throw apiConflict("This incident was just updated by someone else — reload it", "SOS_INVALID_TRANSITION");
 
     this.logger.log(`SOS ${updated.sosCode}: ${sos.status} → ${dto.status} by admin ${adminUserId}`);
+    // The incident is over: the contacts' live link stops working.
+    if (!updated.isOpen) await this.share.revokeForSos(updated._id);
     await this.notifyRaiser(updated);
     return this.buildDetail(updated);
+  }
+
+  /**
+   * Sends the WhatsApp alert again to every contact that has not received it
+   * (the safety team's "try again" after a failure). Returns at once; the
+   * outcome appears on the incident.
+   */
+  async resendContactAlerts(id: string): Promise<AdminSosDetail> {
+    const sos = await this.sosModel.findById(id).exec();
+    if (!sos) throw apiNotFound("SOS incident not found", "SOS_NOT_FOUND");
+    if (!sos.isOpen) throw apiConflict("This incident is closed", "SOS_INVALID_TRANSITION");
+    if (sos.emergencyContacts.length === 0)
+      throw apiBadRequest("This user has no emergency contacts", "VALIDATION_FAILED");
+    this.contactAlerts.dispatch(sos._id, { force: true });
+    await this.contactAlerts.drain();
+    return this.buildDetail((await this.sosModel.findById(id).exec()) ?? sos);
   }
 
   // ── Internals ────────────────────────────────────────────────────────
@@ -523,6 +571,16 @@ export class SosService {
         isPrimary: contact.isPrimary,
       })),
       contactsNotification: sos.contactsNotification,
+      contactAlerts: sos.contactAlerts.map((entry) => ({
+        name: entry.name,
+        phone: entry.phone,
+        kind: entry.kind,
+        status: entry.status,
+        failure: entry.failure,
+        attempts: entry.attempts,
+        at: entry.at,
+      })),
+      trackingActive: sos.isOpen && (await this.sosModelHasTracking(sos._id)),
       resolutionNote: sos.resolutionNote,
       handledBy: admin ? { id: admin._id.toString(), name: fullName(admin) } : null,
       timeline: sos.timeline.map((entry) => ({
@@ -583,6 +641,11 @@ export class SosService {
       acknowledgedAt: sos.acknowledgedAt,
       resolvedAt: sos.resolvedAt,
       handled: sos.status !== SosStatus.TRIGGERED,
+      contacts: SosContactAlertService.statusFor(sos),
     };
+  }
+
+  private async sosModelHasTracking(sosId: Types.ObjectId): Promise<boolean> {
+    return Boolean(await this.sosModel.exists({ _id: sosId, trackingToken: { $exists: true } }));
   }
 }

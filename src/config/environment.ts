@@ -64,14 +64,10 @@ export interface Environment {
   routesFailureCooldownSeconds: number;
   routesLiveRefreshSeconds: number;
   routesLiveRefreshMeters: number;
-  rideMinDistanceMeters: number;
-  rideMaxDistanceKm: number;
   rideSearchTimeoutSeconds: number;
   rideAssignmentTimeoutSeconds: number;
   rideOtpTtlMinutes: number;
   rideOtpMaxAttempts: number;
-  matchingRadiusKm: number;
-  nearbyDriversRadiusKm: number;
   nearbyDriversLimit: number;
   matchingSweepIntervalMs: number;
   matchingReactiveDispatch: boolean;
@@ -116,6 +112,14 @@ export interface Environment {
   shareRideLinkBaseUrl: string;
   shareRideMaxHours: number;
   shareRideGraceMinutes: number;
+  // SOS alerts to emergency contacts over WhatsApp (docs/safety/sos-whatsapp.md)
+  sosContactAlertsEnabled: boolean;
+  sosContactUpdateMinSeconds: number;
+  sosContactUpdateMax: number;
+  sosContactRetryDelayMs: number;
+  whatsappSosTemplateName: string;
+  whatsappSosUpdateTemplateName: string;
+  whatsappSosTemplateLanguage: string;
   placesProvider: PlacesProviderName;
   placesFallback: PlacesFallbackName;
   placesFailureThreshold: number;
@@ -282,8 +286,6 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
   // or sooner once the driver has moved this far from where it was computed.
   routesLiveRefreshSeconds: integer(env.ROUTES_LIVE_REFRESH_SECONDS, 90),
   routesLiveRefreshMeters: integer(env.ROUTES_LIVE_REFRESH_METERS, 300),
-  rideMinDistanceMeters: integer(env.RIDE_MIN_DISTANCE_METERS, 200),
-  rideMaxDistanceKm: integer(env.RIDE_MAX_DISTANCE_KM, 80),
   rideSearchTimeoutSeconds: integer(
     env.RIDE_SEARCH_TIMEOUT_SECONDS,
     120,
@@ -294,9 +296,9 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
   ),
   rideOtpTtlMinutes: integer(env.RIDE_OTP_TTL_MINUTES, 15),
   rideOtpMaxAttempts: integer(env.RIDE_OTP_MAX_ATTEMPTS, 5),
-  matchingRadiusKm: decimal(env.MATCHING_RADIUS_KM, 8),
-  // Cars drawn on the rider Home map (approximate positions, no identities).
-  nearbyDriversRadiusKm: decimal(env.NEARBY_DRIVERS_RADIUS_KM, 3),
+  // Trip distance limits and the matching / nearby-drivers radii are admin
+  // settings stored in MongoDB (modules/ride-config), not environment.
+  // Cars drawn on the rider Home map (approximate positions, no identities):
   nearbyDriversLimit: integer(env.NEARBY_DRIVERS_LIMIT, 12),
   // 0 disables the background sweep (the e2e suite drives it explicitly).
   // Phase 3 keeps it only as a safety net behind the reactive dispatch below.
@@ -449,6 +451,20 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
   // Hard cap on a link's life, and how long it outlives the ride.
   shareRideMaxHours: integer(env.SHARE_RIDE_MAX_HOURS, 12),
   shareRideGraceMinutes: integer(env.SHARE_RIDE_GRACE_MINUTES, 30),
+  // An SOS messages the user's emergency contacts on WhatsApp (an approved
+  // template is required: docs/safety/sos-whatsapp.md). Off switch for
+  // environments without the templates.
+  sosContactAlertsEnabled: boolean(env.SOS_CONTACT_WHATSAPP_ENABLED, true),
+  // While an SOS stays open, a newer position is re-sent to the contacts at
+  // most this often, and at most this many times (each one is a paid message).
+  sosContactUpdateMinSeconds: integer(env.SOS_CONTACT_UPDATE_MIN_SECONDS, 120),
+  sosContactUpdateMax: integer(env.SOS_CONTACT_UPDATE_MAX, 8),
+  // Pause before retrying a WhatsApp send that failed for a transient reason (×attempt).
+  sosContactRetryDelayMs: integer(env.SOS_CONTACT_RETRY_DELAY_MS, 1500),
+  whatsappSosTemplateName: (env.WHATSAPP_SOS_TEMPLATE_NAME || "tirvona_sos_alert").trim(),
+  // Empty = no location updates after the first alert (only the first template exists).
+  whatsappSosUpdateTemplateName: (env.WHATSAPP_SOS_UPDATE_TEMPLATE_NAME || "").trim(),
+  whatsappSosTemplateLanguage: (env.WHATSAPP_SOS_TEMPLATE_LANGUAGE || "en").trim(),
 
   // ── Place search (autocomplete, reverse geocoding) ────────────────────
   // Proxied through the API so map keys never ship inside the app and every
@@ -561,8 +577,6 @@ const POSITIVE_INTEGERS = [
   "ROUTES_FAILURE_COOLDOWN_SECONDS",
   "ROUTES_LIVE_REFRESH_SECONDS",
   "ROUTES_LIVE_REFRESH_METERS",
-  "RIDE_MIN_DISTANCE_METERS",
-  "RIDE_MAX_DISTANCE_KM",
   "RIDE_SEARCH_TIMEOUT_SECONDS",
   "RIDE_ASSIGNMENT_TIMEOUT_SECONDS",
   "RIDE_OTP_TTL_MINUTES",
@@ -587,6 +601,9 @@ const POSITIVE_INTEGERS = [
   "RATING_WINDOW_DAYS",
   "EMERGENCY_CONTACTS_MAX",
   "SOS_POST_RIDE_GRACE_MINUTES",
+  "SOS_CONTACT_UPDATE_MIN_SECONDS",
+  "SOS_CONTACT_UPDATE_MAX",
+  "SOS_CONTACT_RETRY_DELAY_MS",
   "SHARE_RIDE_MAX_HOURS",
   "SHARE_RIDE_GRACE_MINUTES",
   "PLACES_TIMEOUT_MS",
@@ -625,7 +642,6 @@ const POSITIVE_INTEGERS = [
 const POSITIVE_DECIMALS = [
   "ROUTE_AVERAGE_SPEED_KMPH",
   "ROUTE_DISTANCE_FACTOR",
-  "MATCHING_RADIUS_KM",
   "PLACES_BIAS_RADIUS_KM",
   "PLACES_FEATURED_RADIUS_KM",
 ];
@@ -864,6 +880,14 @@ export function validateEnvironment(
     throw new Error("WHATSAPP_OTP_TEMPLATE_NAME must contain only lowercase letters, digits and underscores");
   if (!/^[a-z]{2,3}(_[A-Z]{2})?$/.test(resolved.whatsappOtpTemplateLanguage))
     throw new Error("WHATSAPP_OTP_TEMPLATE_LANGUAGE must be a Meta language code such as en or en_US");
+  for (const [name, value] of [
+    ["WHATSAPP_SOS_TEMPLATE_NAME", resolved.whatsappSosTemplateName],
+    ["WHATSAPP_SOS_UPDATE_TEMPLATE_NAME", resolved.whatsappSosUpdateTemplateName],
+  ] as const)
+    if (value && !/^[a-z0-9_]{1,512}$/.test(value))
+      throw new Error(`${name} must contain only lowercase letters, digits and underscores`);
+  if (!/^[a-z]{2,3}(_[A-Z]{2})?$/.test(resolved.whatsappSosTemplateLanguage))
+    throw new Error("WHATSAPP_SOS_TEMPLATE_LANGUAGE must be a Meta language code such as en or en_US");
   if (isSet(input.WHATSAPP_API_BASE_URL)) {
     let protocol = "";
     try {

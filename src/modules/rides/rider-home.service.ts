@@ -6,6 +6,7 @@ import type { Model } from "mongoose";
 import type { GeoCoordinates } from "../locations/geo";
 import { haversineMeters } from "../locations/geo";
 import { MatchingService } from "../matching/matching.service";
+import { PlatformSettingsService } from "../ride-config/platform-settings.service";
 import type { VehicleType } from "../vehicles/schemas/vehicle.schema";
 import { Ride } from "./schemas/ride.schema";
 
@@ -32,20 +33,21 @@ export interface RecentDestinationView {
 /** Read-only data for the rider's Home and "Where to?" screens. */
 @Injectable()
 export class RiderHomeService {
-  private readonly nearbyRadiusMeters: number;
   private readonly nearbyLimit: number;
 
   constructor(
     @InjectModel(Ride.name) private readonly rides: Model<Ride>,
     private readonly matching: MatchingService,
+    private readonly settings: PlatformSettingsService,
     config: ConfigService,
   ) {
-    this.nearbyRadiusMeters = config.getOrThrow<number>("nearbyDriversRadiusKm") * 1000;
     this.nearbyLimit = config.getOrThrow<number>("nearbyDriversLimit");
   }
 
   async nearbyDrivers(point: GeoCoordinates): Promise<NearbyDriversView> {
-    const found = await this.matching.nearbyAvailable(point, this.nearbyRadiusMeters, this.nearbyLimit);
+    // The admin's current nearby-drivers radius, read per request.
+    const radiusMeters = await this.settings.nearbyDriversRadiusMeters();
+    const found = await this.matching.nearbyAvailable(point, radiusMeters, this.nearbyLimit);
     const round = (value: number) => Number(value.toFixed(DRIVER_POSITION_DECIMALS));
     return {
       drivers: found.map((driver) => ({
@@ -53,7 +55,7 @@ export class RiderHomeService {
         longitude: round(driver.longitude),
         vehicleType: driver.vehicleType ?? null,
       })),
-      radiusMeters: this.nearbyRadiusMeters,
+      radiusMeters,
     };
   }
 

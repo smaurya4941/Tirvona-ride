@@ -9,7 +9,8 @@ import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { DriversService } from "../drivers/drivers.service";
 import { DriverStatus } from "../drivers/schemas/driver-profile.schema";
 import type { DriverProfileDocument } from "../drivers/schemas/driver-profile.schema";
-import { LocationsService } from "../locations/locations.service";
+import { PlatformSettingsService } from "../ride-config/platform-settings.service";
+import { TripPolicyService } from "../ride-config/trip-policy.service";
 import type { GeoCoordinates } from "../locations/geo";
 import type { RouteEstimate } from "../locations/route-estimator";
 import { MatchingService } from "../matching/matching.service";
@@ -100,14 +101,12 @@ const isDuplicateKey = (error: unknown, index?: string): boolean => {
 export class RidesService {
   private readonly logger = new Logger(RidesService.name);
   private readonly searchTimeoutMs: number;
-  private readonly matchingRadiusMeters: number;
   private readonly averageSpeedMps: number;
 
   constructor(
     @InjectModel(Ride.name) private readonly rideModel: Model<Ride>,
     private readonly rideTypes: RideTypesService,
     private readonly pricing: PricingService,
-    private readonly locations: LocationsService,
     private readonly users: UsersService,
     private readonly drivers: DriversService,
     private readonly matching: MatchingService,
@@ -117,10 +116,11 @@ export class RidesService {
     private readonly events: RideEventsService,
     private readonly zones: ZonesService,
     private readonly promotions: PromotionsService,
+    private readonly tripPolicy: TripPolicyService,
+    private readonly platformSettings: PlatformSettingsService,
     config: ConfigService,
   ) {
     this.searchTimeoutMs = config.getOrThrow<number>("rideSearchTimeoutSeconds") * 1000;
-    this.matchingRadiusMeters = config.getOrThrow<number>("matchingRadiusKm") * 1000;
     this.averageSpeedMps = (config.getOrThrow<number>("routeAverageSpeedKmph") * 1000) / 3600;
   }
 
@@ -129,8 +129,9 @@ export class RidesService {
   async estimate(dto: RideRequestDto): Promise<FareEstimateView> {
     await this.zones.assertServiceable(dto.pickup);
     const rideType = await this.rideTypes.getBookable(dto.rideType);
-    const [route, supply] = await Promise.all([
-      this.locations.estimateTrip(dto.pickup, dto.destination),
+    // The ride type's current admin-set distance limits are judged first (400 short/long).
+    const [{ route }, supply] = await Promise.all([
+      this.tripPolicy.estimateTrip(rideType.code, dto.pickup, dto.destination),
       this.driverSupply(dto.pickup),
     ]);
     const fare = await this.pricing.priceTrip(rideType.code, route.distanceMeters, route.durationSeconds);
@@ -140,13 +141,19 @@ export class RidesService {
   /** One route calculation, priced for every bookable ride type. */
   async estimateAll(dto: TripDto): Promise<FareEstimateView[]> {
     await this.zones.assertServiceable(dto.pickup);
-    const [route, rideTypes, supply] = await Promise.all([
-      this.locations.estimateTrip(dto.pickup, dto.destination),
-      this.rideTypes.listActive(),
-      this.driverSupply(dto.pickup),
-    ]);
+    const [rideTypes, supply] = await Promise.all([this.rideTypes.listActive(), this.driverSupply(dto.pickup)]);
+    // Each ride type is judged by its own distance limits; the route is fetched once.
+    const outcomes = await this.tripPolicy.estimateTripForAll(
+      rideTypes.map((rideType) => rideType.code),
+      dto.pickup,
+      dto.destination,
+    );
+    const trips = new Map(outcomes.map((outcome) => [outcome.ok ? outcome.policy.rideType : outcome.rideType, outcome]));
     const estimates = await Promise.all(
       rideTypes.map(async (rideType) => {
+        const outcome = trips.get(rideType.code);
+        if (!outcome?.ok) return null;
+        const { route } = outcome;
         try {
           const fare = await this.pricing.priceTrip(rideType.code, route.distanceMeters, route.durationSeconds);
           return this.toEstimate(rideType, route, fare, supply);
@@ -157,7 +164,13 @@ export class RidesService {
         }
       }),
     );
-    return estimates.filter((estimate): estimate is FareEstimateView => estimate !== null);
+    const quoted = estimates.filter((estimate): estimate is FareEstimateView => estimate !== null);
+    // Nothing fits (too short / too long for every ride type, or no limits on file): say why.
+    if (quoted.length === 0) {
+      const failure = outcomes.find((outcome) => !outcome.ok);
+      if (failure && !failure.ok) throw failure.error;
+    }
+    return quoted;
   }
 
   // ── Booking ───────────────────────────────────────────────────────────
@@ -172,7 +185,8 @@ export class RidesService {
 
     // Re-price from scratch: whatever estimate the app showed is advisory.
     const rideType = await this.rideTypes.getBookable(dto.rideType);
-    const route = await this.locations.estimateTrip(dto.pickup, dto.destination);
+    // Distance limits are re-read and re-checked now: an earlier estimate proves nothing.
+    const { route, policy } = await this.tripPolicy.estimateTrip(rideType.code, dto.pickup, dto.destination);
     const fare = await this.pricing.priceTrip(rideType.code, route.distanceMeters, route.durationSeconds);
     // Service availability: once zones are defined, pickups must lie in one.
     const zone = await this.zones.assertServiceable(dto.pickup);
@@ -202,6 +216,7 @@ export class RidesService {
         destination: dto.destination,
         distanceMeters: route.distanceMeters,
         durationSeconds: route.durationSeconds,
+        distancePolicy: policy,
         routeProvider: route.provider,
         ...(route.polyline ? { routePolyline: route.polyline } : {}),
         fare: {
@@ -434,7 +449,7 @@ export class RidesService {
   private async driverSupply(pickup: GeoCoordinates): Promise<DriverSupply> {
     const supply: DriverSupply = new Map();
     try {
-      const drivers = await this.matching.nearbyAvailable(pickup, this.matchingRadiusMeters, SUPPLY_SCAN_LIMIT);
+      const drivers = await this.matching.nearbyAvailable(pickup, await this.platformSettings.matchingRadiusMeters(), SUPPLY_SCAN_LIMIT);
       for (const driver of drivers) {
         if (!driver.vehicleType) continue;
         const entry = supply.get(driver.vehicleType);

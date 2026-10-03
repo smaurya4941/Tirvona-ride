@@ -10,6 +10,7 @@ import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
 import { AuditLogService } from "../audit/audit-log.service";
 import { CommissionService } from "../earnings/commission.service";
+import { ParseRideTypeCodePipe } from "./admin-pricing.controller";
 import { UpdateCommissionDto } from "../earnings/dto/commission.dto";
 import {
   AdminDriverLedgerQueryDto,
@@ -28,6 +29,7 @@ import type {
   AdminEarningsTotals,
   CommissionView,
   Paged,
+  RideTypeCommissionView,
   PayoutView,
 } from "../earnings/interfaces/earning-views";
 import { AdminPaymentsQueryDto } from "../payments/dto/payment.dto";
@@ -234,27 +236,59 @@ export class AdminPaymentsController {
 @Roles(UserRole.ADMIN)
 @Controller({ path: "admin/commission", version: "1" })
 export class AdminCommissionController {
-  constructor(private readonly commission: CommissionService) {}
+  constructor(
+    private readonly commission: CommissionService,
+    private readonly audit: AuditLogService,
+  ) {}
 
   @Get()
-  @ApiOperation({ summary: "The commission in force now, plus any scheduled change" })
-  async current(): Promise<ApiSuccessBody<{ current: CommissionView; scheduled: CommissionView[] }>> {
-    return ok(await this.commission.current());
+  @ApiOperation({ summary: "Every ride type with its commission in force now and any scheduled change" })
+  async overview(): Promise<ApiSuccessBody<RideTypeCommissionView[]>> {
+    return ok(await this.commission.overview());
   }
 
-  @Patch()
-  @ApiOperation({ summary: "Set a new commission (a new version; history is kept, past earnings unchanged)" })
+  @Get(":rideType")
+  @ApiOperation({ summary: "One ride type: current rate, scheduled changes and the full version history" })
+  async forRideType(
+    @Param("rideType", ParseRideTypeCodePipe) rideType: string,
+  ): Promise<ApiSuccessBody<RideTypeCommissionView & { history: CommissionView[] }>> {
+    return ok(await this.commission.forRideType(rideType));
+  }
+
+  @Get(":rideType/history")
+  @ApiOperation({ summary: "A ride type's commission versions, newest first" })
+  async history(@Param("rideType", ParseRideTypeCodePipe) rideType: string): Promise<ApiSuccessBody<CommissionView[]>> {
+    return ok(await this.commission.history(rideType));
+  }
+
+  @Patch(":rideType")
+  @ApiOperation({
+    summary:
+      "Set a ride type's commission (a new version; history is kept, finalised rides keep their rate). Leave effectiveFrom empty to apply now.",
+  })
   async update(
+    @Param("rideType", ParseRideTypeCodePipe) rideType: string,
     @Body() dto: UpdateCommissionDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApiSuccessBody<CommissionView>> {
-    return ok(await this.commission.update(dto, admin.userId));
-  }
-
-  @Get("history")
-  @ApiOperation({ summary: "Every commission version, newest first" })
-  async history(): Promise<ApiSuccessBody<CommissionView[]>> {
-    return ok(await this.commission.history());
+    const { commission, previousValue } = await this.commission.update(rideType, dto, admin.userId);
+    await this.audit.record({
+      adminId: admin.userId,
+      action: "commission.update",
+      targetType: "COMMISSION",
+      targetId: rideType,
+      targetLabel: rideType,
+      reason: dto.note,
+      metadata: {
+        rideType,
+        oldRate: previousValue,
+        newRate: commission.value,
+        version: commission.version,
+        effectiveFrom: commission.effectiveFrom,
+        scheduled: commission.phase === "SCHEDULED",
+      },
+    });
+    return ok(commission);
   }
 
   @Post(":id/cancel")
@@ -264,7 +298,21 @@ export class AdminCommissionController {
     @Param("id", ParseObjectIdPipe) id: string,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApiSuccessBody<CommissionView>> {
-    return ok(await this.commission.cancelScheduled(id, admin.userId));
+    const cancelled = await this.commission.cancelScheduled(id, admin.userId);
+    await this.audit.record({
+      adminId: admin.userId,
+      action: "commission.cancel",
+      targetType: "COMMISSION",
+      targetId: cancelled.rideType ?? id,
+      targetLabel: cancelled.rideType,
+      metadata: {
+        rideType: cancelled.rideType,
+        version: cancelled.version,
+        cancelledRate: cancelled.value,
+        effectiveFrom: cancelled.effectiveFrom,
+      },
+    });
+    return ok(cancelled);
   }
 }
 

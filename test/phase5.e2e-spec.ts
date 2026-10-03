@@ -739,7 +739,8 @@ describe("Phase 5 — ratings, notifications, safety, complaints (e2e)", () => {
         driver: { phone: PHONES.driverA },
         vehiclePlate: "UP85CC0001",
         message: "Driver is rude",
-        contactsNotification: "NOT_SENT",
+        // The dev log gateway "delivers" the WhatsApp alert (docs/safety/sos-whatsapp.md).
+        contactsNotification: "SENT",
         ride: { pickup: { address: PREM_MANDIR.address }, destination: { address: BANKE_BIHARI.address } },
       });
       expect(detail.emergencyContacts.map((contact: { name: string }) => contact.name)).toEqual(["Papa", "Mummy"]);

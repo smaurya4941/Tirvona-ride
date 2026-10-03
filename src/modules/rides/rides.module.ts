@@ -4,6 +4,7 @@ import { DriversModule } from "../drivers/drivers.module";
 import { EarningsModule } from "../earnings/earnings.module";
 import { LocationsModule } from "../locations/locations.module";
 import { MatchingModule } from "../matching/matching.module";
+import { RideConfigModule } from "../ride-config/ride-config.module";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { PricingModule } from "../pricing/pricing.module";
 import { RideTypesModule } from "../ride-types/ride-types.module";
@@ -49,6 +50,7 @@ import { RideStatusHistory, RideStatusHistorySchema } from "./schemas/ride-statu
     RideTypesModule,
     PricingModule,
     LocationsModule,
+    RideConfigModule,
     MatchingModule,
     RealtimeModule,
     EarningsModule,

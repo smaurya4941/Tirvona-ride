@@ -7,7 +7,7 @@ import type { ApiSuccessBody } from "../../common/http/api-response";
 import { ThrottlePolicy } from "../../common/throttle/throttle-policies";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
-import { LocationsService } from "../locations/locations.service";
+import { TripPolicyService } from "../ride-config/trip-policy.service";
 import { PricingService } from "../pricing/pricing.service";
 import { RideTypesService } from "../ride-types/ride-types.service";
 import { CheckPromoDto, ValidatePromoDto } from "./dto/promo.dto";
@@ -33,7 +33,7 @@ export class PromotionsController {
   constructor(
     private readonly promotions: PromotionsService,
     private readonly rideTypes: RideTypesService,
-    private readonly locations: LocationsService,
+    private readonly tripPolicy: TripPolicyService,
     private readonly pricing: PricingService,
   ) {}
 
@@ -67,7 +67,7 @@ export class PromotionsController {
     @Body() dto: ValidatePromoDto,
   ): Promise<ApiSuccessBody<PromoQuote>> {
     const rideType = await this.rideTypes.getBookable(dto.rideType);
-    const route = await this.locations.estimateTrip(dto.pickup, dto.destination);
+    const { route } = await this.tripPolicy.estimateTrip(rideType.code, dto.pickup, dto.destination);
     const fare = await this.pricing.priceTrip(rideType.code, route.distanceMeters, route.durationSeconds);
     const { promo, result } = await this.promotions.evaluate(user.userId, dto.code, rideType.code, fare.total);
     if (!result.ok || !promo) throw this.promotions.rejection(result);

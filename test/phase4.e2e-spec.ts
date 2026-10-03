@@ -701,29 +701,30 @@ describe("Phase 4 — payments & earnings (e2e)", () => {
   // ── Commission configuration ──────────────────────────────────────────
 
   describe("Commission", () => {
-    it("starts at the seeded 20%", async () => {
+    // Commission is per ride type (docs/commission/ride-type-commission.md); every ride here is an AUTO.
+    const auto = "/api/v1/admin/commission/AUTO";
+
+    it("starts every ride type at the seeded 20%", async () => {
       const data = (await api().get("/api/v1/admin/commission").set(as("admin")).expect(200)).body.data;
-      expect(data.current).toMatchObject({ value: 20, type: "PERCENTAGE", phase: "CURRENT", version: 1 });
+      expect(data.map((row: { rideType: { code: string } }) => row.rideType.code).sort()).toEqual(
+        expect.arrayContaining(["AUTO", "BIKE", "CAB"]),
+      );
+      for (const row of data)
+        expect(row.current).toMatchObject({ rideType: row.rideType.code, value: 20, type: "PERCENTAGE", phase: "CURRENT", version: 1 });
     });
 
     it("drivers and customers cannot change it", async () => {
-      await api().patch("/api/v1/admin/commission").set(as("driverA")).send({ value: 1 }).expect(403);
+      await api().patch(auto).set(as("driverA")).send({ value: 1 }).expect(403);
     });
 
     it("rejects back-dated or out-of-range values", async () => {
-      await api().patch("/api/v1/admin/commission").set(as("admin")).send({ value: 120 }).expect(400);
-      await api()
-        .patch("/api/v1/admin/commission")
-        .set(as("admin"))
-        .send({ value: 10, effectiveFrom: "2020-01-01T00:00:00Z" })
-        .expect(400);
+      await api().patch(auto).set(as("admin")).send({ value: 120 }).expect(400);
+      await api().patch(auto).set(as("admin")).send({ value: 10, effectiveFrom: "2020-01-01T00:00:00Z" }).expect(400);
     });
 
     it("a new rate applies to new earnings only; history keeps both", async () => {
-      const updated = (
-        await api().patch("/api/v1/admin/commission").set(as("admin")).send({ value: 15, note: "Launch offer" }).expect(200)
-      ).body.data;
-      expect(updated).toMatchObject({ value: 15, version: 2, phase: "CURRENT" });
+      const updated = (await api().patch(auto).set(as("admin")).send({ value: 15, note: "Launch offer" }).expect(200)).body.data;
+      expect(updated).toMatchObject({ rideType: "AUTO", value: 15, version: 2, phase: "CURRENT" });
 
       const ride = await completedRide("customerA");
       const checkout = await createPayment("customerA", ride.id);
@@ -742,23 +743,26 @@ describe("Phase 4 — payments & earnings (e2e)", () => {
       const rates = (await earningModel.find().sort({ createdAt: 1 }).lean()).map((earning) => earning.commissionRate);
       expect(rates).toEqual([20, 20, 20, 20, 15]);
 
-      const history = (await api().get("/api/v1/admin/commission/history").set(as("admin")).expect(200)).body.data;
+      const history = (await api().get(`${auto}/history`).set(as("admin")).expect(200)).body.data;
       expect(history.map((entry: { version: number; phase: string }) => [entry.version, entry.phase])).toEqual([
         [2, "CURRENT"],
         [1, "SUPERSEDED"],
       ]);
+      // The other ride types were not touched.
+      const cab = (await api().get("/api/v1/admin/commission/CAB").set(as("admin")).expect(200)).body.data;
+      expect(cab.current).toMatchObject({ value: 20, version: 1 });
     });
 
     it("a scheduled change can be cancelled before it takes effect", async () => {
       const scheduled = (
         await api()
-          .patch("/api/v1/admin/commission")
+          .patch(auto)
           .set(as("admin"))
           .send({ value: 18, effectiveFrom: new Date(Date.now() + 7 * 86_400_000).toISOString() })
           .expect(200)
       ).body.data;
       expect(scheduled.phase).toBe("SCHEDULED");
-      const current = (await api().get("/api/v1/admin/commission").set(as("admin")).expect(200)).body.data;
+      const current = (await api().get(auto).set(as("admin")).expect(200)).body.data;
       expect(current.current.value).toBe(15);
       expect(current.scheduled).toHaveLength(1);
       await api().post(`/api/v1/admin/commission/${scheduled.id}/cancel`).set(as("admin")).expect(200);

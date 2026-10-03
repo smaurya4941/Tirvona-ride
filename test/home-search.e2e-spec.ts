@@ -85,7 +85,6 @@ describe("Rider home & search data (e2e)", () => {
       PAYMENT_RECONCILE_INTERVAL_MS: "0",
       BROADCAST_WORKER_INTERVAL_MS: "0",
       PLACES_PROVIDER: "none",
-      NEARBY_DRIVERS_RADIUS_KM: "3",
     });
 
     const { AppModule } = await import("../src/app.module");

@@ -5,6 +5,41 @@ export interface AuthenticationCodeMessage {
   code: string;
 }
 
+/** Where the person was when the alert was raised (shown as a map pin in the message). */
+export interface SosAlertLocation {
+  latitude: number;
+  longitude: number;
+  /** Pin title, e.g. "Asha's location". */
+  name: string;
+  /** Pin subtitle: street address or "Live position at 10:42 PM". */
+  address: string;
+}
+
+/**
+ * An emergency alert to one of a user's emergency contacts. WhatsApp only
+ * lets a business start a conversation with an approved template, so this is
+ * the data for two templates (see docs/safety/sos-whatsapp.md): the first
+ * alert, and later location updates.
+ */
+export interface SosAlertMessage {
+  /** The emergency contact, E.164. */
+  to: string;
+  /** ALERT: the first message. UPDATE: a newer position for the same incident. */
+  kind: "ALERT" | "UPDATE";
+  /** The person who pressed SOS. */
+  personName: string;
+  personPhone: string;
+  rideCode: string;
+  /** "UP85 CC 0001 · White Maruti Dzire", or a placeholder when none is assigned yet. */
+  vehicle: string;
+  /** The SOS reference the safety team quotes ("SOS-RZ4H2Y"). */
+  reference: string;
+  location: SosAlertLocation;
+  /** The live-tracking link: token (template button suffix) and the full URL. */
+  trackingToken: string;
+  trackingUrl: string;
+}
+
 export interface WhatsAppSendResult {
   /** Meta's message id (wamid.…); "log-…" for the development gateway. */
   messageId: string;
@@ -50,4 +85,13 @@ export abstract class WhatsAppGateway {
    * accepted the message; otherwise throws [WhatsAppDeliveryError].
    */
   abstract sendAuthenticationCode(message: AuthenticationCodeMessage): Promise<WhatsAppSendResult>;
+
+  /**
+   * Sends an SOS template (location pin + live-tracking button) to an
+   * emergency contact. Gateways that cannot do this report MISCONFIGURED so
+   * the SOS record shows the contact was not reached.
+   */
+  async sendSosAlert(_message: SosAlertMessage): Promise<WhatsAppSendResult> {
+    throw new WhatsAppDeliveryError("MISCONFIGURED", `The ${this.provider} WhatsApp gateway cannot send SOS alerts`);
+  }
 }

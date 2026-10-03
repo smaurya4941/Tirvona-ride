@@ -184,7 +184,10 @@ export interface AdminPaymentDetail extends AdminPaymentListItem {
   earning: {
     id: string;
     grossFare: number;
+    /** The ride type the commission was resolved for. */
+    rideType: string;
     commissionRate: number;
+    commissionVersion: number;
     commissionAmount: number;
     netEarning: number;
     status: string;

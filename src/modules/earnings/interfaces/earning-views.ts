@@ -13,6 +13,9 @@ import type {
 
 export interface CommissionView {
   id: string;
+  /** Absent on legacy global versions (before commission was per ride type). */
+  rideType?: string;
+  /** Counts up per ride type. */
   version: number;
   type: CommissionType;
   /** Percent of the gross fare. */
@@ -24,6 +27,20 @@ export interface CommissionView {
   createdBy?: string;
   createdAt: Date;
   cancelledAt?: Date;
+}
+
+/** One ride type's commission: what applies now and what is scheduled. */
+export interface RideTypeCommissionView {
+  rideType: { code: string; displayName: string; isActive: boolean };
+  /** The rate in force now; null only if the ride type has no commission yet (never after boot). */
+  current: CommissionView | null;
+  scheduled: CommissionView[];
+}
+
+export interface CommissionChangeResult {
+  commission: CommissionView;
+  /** The rate that was in force when the new one takes over, for the audit trail. */
+  previousValue: number | null;
 }
 
 export interface EarningView {
@@ -42,6 +59,8 @@ export interface EarningView {
   commissionType: CommissionType;
   /** Percent captured when the earning was recorded. */
   commissionRate: number;
+  /** The ride type's commission version applied (traceable in the Commission history). */
+  commissionVersion: number;
   commissionAmount: number;
   netEarning: number;
   /** CASH: the driver collected the fare; ONLINE: paid via Razorpay. */

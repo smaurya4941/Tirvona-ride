@@ -2,7 +2,12 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { maskPhone, toWhatsAppRecipient } from "../../common/phone/phone-number";
 import { WhatsAppDeliveryError, WhatsAppGateway } from "./whatsapp.gateway";
-import type { AuthenticationCodeMessage, WhatsAppFailureReason, WhatsAppSendResult } from "./whatsapp.gateway";
+import type {
+  AuthenticationCodeMessage,
+  SosAlertMessage,
+  WhatsAppFailureReason,
+  WhatsAppSendResult,
+} from "./whatsapp.gateway";
 
 interface MetaErrorBody {
   error?: {
@@ -73,6 +78,9 @@ export class MetaWhatsAppGateway extends WhatsAppGateway {
   private readonly templateName: string;
   private readonly templateLanguage: string;
   private readonly codeButton: boolean;
+  private readonly sosTemplateName: string;
+  private readonly sosUpdateTemplateName: string;
+  private readonly sosTemplateLanguage: string;
   private readonly timeoutMs: number;
 
   constructor(config: ConfigService) {
@@ -85,12 +93,31 @@ export class MetaWhatsAppGateway extends WhatsAppGateway {
     this.templateName = config.getOrThrow<string>("whatsappOtpTemplateName");
     this.templateLanguage = config.getOrThrow<string>("whatsappOtpTemplateLanguage");
     this.codeButton = config.get<boolean>("whatsappOtpTemplateCodeButton") ?? true;
+    // The SOS templates are optional for the OTP flow, so they have defaults
+    // instead of hard requirements.
+    this.sosTemplateName = config.get<string>("whatsappSosTemplateName") ?? "tirvona_sos_alert";
+    this.sosUpdateTemplateName = config.get<string>("whatsappSosUpdateTemplateName") ?? "";
+    this.sosTemplateLanguage = config.get<string>("whatsappSosTemplateLanguage") ?? "en";
     this.timeoutMs = config.getOrThrow<number>("whatsappTimeoutMs");
   }
 
   async sendAuthenticationCode(message: AuthenticationCodeMessage): Promise<WhatsAppSendResult> {
-    const body = JSON.stringify(this.templatePayload(message));
-    const recipient = maskPhone(message.to);
+    return this.submit(this.templatePayload(message), maskPhone(message.to), "OTP");
+  }
+
+  async sendSosAlert(message: SosAlertMessage): Promise<WhatsAppSendResult> {
+    const name = message.kind === "ALERT" ? this.sosTemplateName : this.sosUpdateTemplateName;
+    if (!name) throw new WhatsAppDeliveryError("MISCONFIGURED", `No WhatsApp template is configured for SOS ${message.kind}`);
+    return this.submit(this.sosPayload(message, name), maskPhone(message.to), `SOS ${message.kind}`);
+  }
+
+  /**
+   * One POST to the Cloud API with a quick retry for transport failures and
+   * 5xx answers. Retried sends are safe: an SOS or code delivered twice is
+   * harmless, one lost is not. `label` only tags the log lines.
+   */
+  private async submit(payload: Record<string, unknown>, recipient: string, label: string): Promise<WhatsAppSendResult> {
+    const body = JSON.stringify(payload);
     let lastError: WhatsAppDeliveryError | undefined;
 
     for (let attempt = 1; attempt <= 2; attempt += 1) {
@@ -115,7 +142,7 @@ export class MetaWhatsAppGateway extends WhatsAppGateway {
       if (response.ok) {
         const parsed = (await response.json().catch(() => ({}))) as MetaSendBody;
         const messageId = parsed.messages?.[0]?.id ?? "";
-        this.logger.log(`WhatsApp OTP accepted for ${recipient} (${messageId || "no message id"})`);
+        this.logger.log(`WhatsApp ${label} accepted for ${recipient} (${messageId || "no message id"})`);
         return { messageId };
       }
 
@@ -128,12 +155,68 @@ export class MetaWhatsAppGateway extends WhatsAppGateway {
         `HTTP ${response.status} code=${error.code ?? "?"} subcode=${error.error_subcode ?? "-"} ` +
         `trace=${error.fbtrace_id ?? "-"}: ${(error.error_data?.details ?? error.message ?? "request failed").slice(0, 200)}`;
       const log = reason === "MISCONFIGURED" ? this.logger.error.bind(this.logger) : this.logger.warn.bind(this.logger);
-      log(`WhatsApp OTP rejected for ${recipient} [${reason}] ${detail}`);
+      log(`WhatsApp ${label} rejected for ${recipient} [${reason}] ${detail}`);
       lastError = new WhatsAppDeliveryError(reason, `WhatsApp API rejected the message: ${reason}`);
       if (reason !== "UNAVAILABLE") break;
     }
 
     throw lastError ?? new WhatsAppDeliveryError("UNAVAILABLE", "WhatsApp API request failed");
+  }
+
+  /**
+   * The SOS template: a LOCATION header (the map pin), body variables, and a
+   * URL button whose variable is the live-tracking token. Template variables
+   * may not be empty and may not contain line breaks, tabs or runs of four
+   * spaces (Meta error 132018), so every value is flattened first.
+   */
+  private sosPayload(message: SosAlertMessage, templateName: string): Record<string, unknown> {
+    const text = (value: string, fallback: string): { type: "text"; text: string } => ({
+      type: "text",
+      text: value.replace(/\s+/g, " ").trim().slice(0, 120) || fallback,
+    });
+    const body =
+      message.kind === "ALERT"
+        ? [
+            text(message.personName, "A Tirvona rider"),
+            text(message.personPhone, "not available"),
+            text(message.rideCode, "-"),
+            text(message.vehicle, "not assigned yet"),
+            text(message.reference, "-"),
+          ]
+        : [text(message.personName, "A Tirvona rider"), text(message.reference, "-")];
+    return {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: toWhatsAppRecipient(message.to),
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: this.sosTemplateLanguage },
+        components: [
+          {
+            type: "header",
+            parameters: [
+              {
+                type: "location",
+                location: {
+                  latitude: String(message.location.latitude),
+                  longitude: String(message.location.longitude),
+                  name: message.location.name.replace(/\s+/g, " ").trim().slice(0, 100),
+                  address: message.location.address.replace(/\s+/g, " ").trim().slice(0, 200),
+                },
+              },
+            ],
+          },
+          { type: "body", parameters: body },
+          {
+            type: "button",
+            sub_type: "url",
+            index: "0",
+            parameters: [{ type: "text", text: message.trackingToken }],
+          },
+        ],
+      },
+    };
   }
 
   private templatePayload(message: AuthenticationCodeMessage): Record<string, unknown> {

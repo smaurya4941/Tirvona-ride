@@ -458,6 +458,7 @@ describe("Phase 7 — admin completion & hardening (e2e)", () => {
           seatCapacity: 3,
           isActive: true,
           pricing: { baseFare: 20, perKmRate: 7, perMinuteRate: 1, minimumFare: 30 },
+          distance: { minDistanceMeters: 200, maxDistanceKm: 80 },
         })
         .expect(201);
       expect(created.body.data).toMatchObject({ rideType: { code: "AUTO_SHARE", isActive: true }, pricing: { version: 1 } });

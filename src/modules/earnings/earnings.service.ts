@@ -146,8 +146,11 @@ export class EarningsService {
     const existing = await this.earningModel.findOne({ rideId: input.rideId }).exec();
     if (existing) return { earning: existing, created: false };
 
-    // The rate in force now is captured on the line; later changes never touch it.
-    const commission = await this.commission.effectiveAt(new Date());
+    // The ride type's rate in force when the ride was finalised (completed) is
+    // captured on the line; later changes never touch it. Resolving at
+    // completion, not at payment, keeps a ride that finished before a rate
+    // change at its own rate even if it is paid after the change.
+    const commission = await this.commission.resolve(input.rideType, input.rideCompletedAt);
     const split = splitFare(input.grossFarePaise, commission.value);
     const now = new Date();
     const cash = input.paymentMode === PaymentMode.CASH;
@@ -437,6 +440,7 @@ export class EarningsService {
       promoDiscount: toRupees(earning.promoDiscountPaise ?? 0),
       commissionType: earning.commissionType,
       commissionRate: earning.commissionRate,
+      commissionVersion: earning.commissionVersion,
       commissionAmount: toRupees(earning.commissionPaise),
       netEarning: toRupees(earning.netEarningPaise),
       paymentMode: earning.paymentMode ?? PaymentMode.ONLINE,

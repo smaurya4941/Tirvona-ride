@@ -15,6 +15,7 @@ import { Payment, PaymentSchema } from "../payments/schemas/payment.schema";
 import { PricingModule } from "../pricing/pricing.module";
 import { PromotionsModule } from "../promotions/promotions.module";
 import { ReportsModule } from "../reports/reports.module";
+import { RideConfigModule } from "../ride-config/ride-config.module";
 import { RideTypesModule } from "../ride-types/ride-types.module";
 import { RidesModule } from "../rides/rides.module";
 import { Ride, RideSchema } from "../rides/schemas/ride.schema";
@@ -38,6 +39,7 @@ import { AdminPopularPlacesController } from "./admin-places.controller";
 import { AdminLiveController } from "./admin-live.controller";
 import { AdminLiveService } from "./admin-live.service";
 import { AdminPeakPricingController } from "./admin-peak-pricing.controller";
+import { AdminRideConfigController } from "./admin-ride-config.controller";
 import { AdminPeopleService } from "./admin-people.service";
 import { AdminPricingController } from "./admin-pricing.controller";
 import { AdminComplaintsController, AdminSosController } from "./admin-safety.controller";
@@ -77,6 +79,7 @@ import { AdminService } from "./admin.service";
     BrandingModule,
     PlacesModule,
     LocationsModule,
+    RideConfigModule,
   ],
   controllers: [
     AdminController,
@@ -84,6 +87,7 @@ import { AdminService } from "./admin.service";
     AdminPeakPricingController,
     AdminRidesController,
     AdminPricingController,
+    AdminRideConfigController,
     AdminPaymentsController,
     AdminCommissionController,
     AdminEarningsController,

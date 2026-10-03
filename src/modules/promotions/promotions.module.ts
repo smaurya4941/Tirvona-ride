@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
-import { LocationsModule } from "../locations/locations.module";
+import { RideConfigModule } from "../ride-config/ride-config.module";
 import { PricingModule } from "../pricing/pricing.module";
 import { RideTypesModule } from "../ride-types/ride-types.module";
 import { PromoRideEventsListener } from "./promo-ride-events.listener";
@@ -17,7 +17,7 @@ import { PromoCode, PromoCodeSchema, PromoRedemption, PromoRedemptionSchema } fr
       { name: PromoRedemption.name, schema: PromoRedemptionSchema },
     ]),
     RideTypesModule,
-    LocationsModule,
+    RideConfigModule,
     PricingModule,
   ],
   controllers: [PromotionsController],

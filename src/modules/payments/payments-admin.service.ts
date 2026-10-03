@@ -159,7 +159,9 @@ export class PaymentsAdminService {
         ? {
             id: earning.id,
             grossFare: earning.grossFare,
+            rideType: earning.rideType,
             commissionRate: earning.commissionRate,
+            commissionVersion: earning.commissionVersion,
             commissionAmount: earning.commissionAmount,
             netEarning: earning.netEarning,
             status: earning.status,
