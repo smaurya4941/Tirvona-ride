@@ -70,7 +70,6 @@ deactivated automatically.
 | `FIREBASE_SERVICE_ACCOUNT_BASE64` | — | Service-account JSON, base64. Or the three below |
 | `FIREBASE_PROJECT_ID` / `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY` | — | All or none. Unset → push off, in-app still works |
 | `FCM_TIMEOUT_MS` | 10000 | Hard timeout per FCM / OAuth call |
-| `PUSH_ANDROID_CHANNEL_ID` | `tirvona_rides` | Must match `MainActivity.kt` |
 | `DEVICE_TOKENS_MAX_PER_USER` | 10 | Oldest extra tokens are retired |
 | `RATING_WINDOW_DAYS` | 30 | |
 | `EMERGENCY_CONTACTS_MAX` | 5 | |

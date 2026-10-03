@@ -1,18 +1,19 @@
 import { applyDecorators } from "@nestjs/common";
-import { IsString, Length, Matches } from "class-validator";
+import { IsString, Length } from "class-validator";
 
-/** At least 8 characters with a lowercase and an uppercase letter, a digit and a symbol. */
-export const STRONG_PASSWORD = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\da-zA-Z]).{8,}$/;
+export const PASSWORD_MIN_LENGTH = 6;
+export const PASSWORD_MAX_LENGTH = 128;
 
 /**
  * The password policy every "choose a password" field shares (sign-up,
  * change password, reset password), so the apps see one rule and one message.
+ * Only the length is checked: any characters are allowed, with no required
+ * digit, symbol or letter case.
  */
 export const IsStrongPassword = (field: string): PropertyDecorator =>
   applyDecorators(
     IsString(),
-    Length(8, 128),
-    Matches(STRONG_PASSWORD, {
-      message: `${field} must contain an uppercase letter, a lowercase letter, a number and a symbol`,
+    Length(PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH, {
+      message: `${field} must be between ${PASSWORD_MIN_LENGTH} and ${PASSWORD_MAX_LENGTH} characters`,
     }),
   );

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { PUSH_CHANNEL_IDS } from "../notification-types";
 import { GOOGLE_TOKEN_URL, serviceAccountAssertion } from "./google-oauth";
 import { PushGateway } from "./push.gateway";
 import type { PushMessage, PushResult } from "./push.gateway";
@@ -29,7 +30,6 @@ export class FcmHttpGateway extends PushGateway {
   private readonly clientEmail: string;
   private readonly privateKey: string;
   private readonly timeoutMs: number;
-  private readonly channelId: string;
   private accessToken?: { value: string; expiresAt: number };
   private tokenRequest?: Promise<string>;
 
@@ -39,7 +39,6 @@ export class FcmHttpGateway extends PushGateway {
     this.clientEmail = config.get<string>("firebaseClientEmail") ?? "";
     this.privateKey = config.get<string>("firebasePrivateKey") ?? "";
     this.timeoutMs = config.getOrThrow<number>("fcmTimeoutMs");
-    this.channelId = config.getOrThrow<string>("pushAndroidChannelId");
     if (!this.isConfigured)
       this.logger.warn("Firebase credentials are not set: push notifications are disabled (in-app only)");
   }
@@ -104,8 +103,9 @@ export class FcmHttpGateway extends PushGateway {
       android: {
         priority: message.highPriority ? "HIGH" : "NORMAL",
         notification: {
-          channel_id: this.channelId,
-          sound: "default",
+          channel_id: PUSH_CHANNEL_IDS[message.sound],
+          // Android 8+ plays the channel's sound; this covers older phones.
+          sound: message.sound,
           ...(message.collapseKey ? { tag: message.collapseKey } : {}),
         },
       },
@@ -114,7 +114,7 @@ export class FcmHttpGateway extends PushGateway {
           "apns-priority": message.highPriority ? "10" : "5",
           ...(message.collapseKey ? { "apns-collapse-id": message.collapseKey.slice(0, 64) } : {}),
         },
-        payload: { aps: { sound: "default" } },
+        payload: { aps: { sound: `${message.sound}.wav` } },
       },
     };
   }

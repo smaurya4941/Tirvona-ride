@@ -109,7 +109,6 @@ export interface Environment {
   firebaseClientEmail: string;
   firebasePrivateKey: string;
   fcmTimeoutMs: number;
-  pushAndroidChannelId: string;
   deviceTokensMaxPerUser: number;
   ratingWindowDays: number;
   emergencyContactsMax: number;
@@ -435,8 +434,6 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
     };
   })(),
   fcmTimeoutMs: integer(env.FCM_TIMEOUT_MS, 10_000),
-  // Must match the channel the app creates (heads-up ride alerts).
-  pushAndroidChannelId: env.PUSH_ANDROID_CHANNEL_ID || "tirvona_rides",
   // Oldest active tokens beyond this are retired (phones, tablets, reinstalls).
   deviceTokensMaxPerUser: integer(env.DEVICE_TOKENS_MAX_PER_USER, 10),
   // A paid ride can be rated this long after completion.

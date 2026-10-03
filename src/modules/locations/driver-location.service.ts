@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
 import { Types } from "mongoose";
+import type { GeoPoint } from "../../common/schemas/geo-point.schema";
 import { DriverProfile, DriverStatus } from "../drivers/schemas/driver-profile.schema";
 import { DRIVER_ENGAGED_STATUSES, RideStatus } from "../rides/ride-state-machine";
 import { Ride } from "../rides/schemas/ride.schema";
@@ -248,6 +249,36 @@ export class DriverLocationService {
     const driver = await this.driverModel.findById(driverId).select("currentLocation locationUpdatedAt").lean().exec();
     if (!driver?.currentLocation) return undefined;
     return { ...fromGeoJsonPoint(driver.currentLocation), updatedAt: driver.locationUpdatedAt ?? new Date(0) };
+  }
+
+  /**
+   * Like {@link lastKnown}, for callers that already hold the driver's
+   * profile (admin live map: many drivers, no extra query per driver).
+   * `fresh` is false once the position is older than the staleness window.
+   */
+  positionFor(
+    driverId: string,
+    persisted: { currentLocation?: GeoPoint | null; locationUpdatedAt?: Date | null },
+  ): (GeoCoordinates & { heading?: number; speed?: number; updatedAt: Date; source: "live" | "saved"; fresh: boolean }) | undefined {
+    const live = this.store.latest(driverId, this.staleMs);
+    if (live)
+      return {
+        latitude: live.latitude,
+        longitude: live.longitude,
+        heading: live.heading,
+        speed: live.speed,
+        updatedAt: live.receivedAt,
+        source: "live",
+        fresh: true,
+      };
+    if (!persisted.currentLocation) return undefined;
+    const updatedAt = persisted.locationUpdatedAt ?? new Date(0);
+    return {
+      ...fromGeoJsonPoint(persisted.currentLocation),
+      updatedAt,
+      source: "saved",
+      fresh: Date.now() - updatedAt.getTime() <= this.staleMs,
+    };
   }
 
   /** Called when a driver goes online with coordinates via REST. */

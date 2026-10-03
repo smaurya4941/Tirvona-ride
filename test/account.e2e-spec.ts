@@ -244,7 +244,7 @@ describe("Account self-service (e2e)", () => {
     it("validates the new password and rejects the current one without spending the token", async () => {
       const { user } = await signUp();
       const token = await resetTokenFor(user.phone);
-      await reset(token, "weakpass").expect(400);
+      await reset(token, "abc12").expect(400);
       await reset(token, PASSWORD).expect(400, /PASSWORD_UNCHANGED/);
       await reset(token, NEW_PASSWORD).expect(200);
     });

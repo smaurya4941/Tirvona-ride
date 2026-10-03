@@ -10,7 +10,7 @@ import type { Page } from "../rides/rides.service";
 import { User, UserStatus } from "../users/schemas/user.schema";
 import { DeviceTokensService } from "./device-tokens.service";
 import type { NotificationDraft } from "./notification-plan";
-import { PushStatus, isHighPriority, isRideStatusType } from "./notification-types";
+import { PushStatus, isHighPriority, isRideStatusType, pushSoundFor } from "./notification-types";
 import type { NotificationType } from "./notification-types";
 import { PushGateway } from "./push/push.gateway";
 import { Notification } from "./schemas/notification.schema";
@@ -211,6 +211,7 @@ export class NotificationsService {
       return;
     }
 
+    const sound = pushSoundFor(notification.type);
     const results = await this.push.send(tokens, {
       title: notification.title,
       body: notification.message,
@@ -218,10 +219,12 @@ export class NotificationsService {
         ...notification.data,
         notificationId: notification._id.toString(),
         type: notification.type,
+        sound,
         ...(notification.rideId ? { rideId: notification.rideId.toString() } : {}),
         ...(notification.referenceId ? { referenceId: notification.referenceId } : {}),
       },
       highPriority: isHighPriority(notification.type),
+      sound,
       collapseKey:
         notification.rideId && isRideStatusType(notification.type) ? `ride-${notification.rideId.toString()}` : undefined,
     });

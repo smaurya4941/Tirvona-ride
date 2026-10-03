@@ -46,3 +46,5 @@ export const VehicleSchema = SchemaFactory.createForClass(Vehicle);
 
 VehicleSchema.index({ registrationNumber: 1 }, { unique: true });
 VehicleSchema.index({ driverId: 1, isActive: 1 });
+// One active vehicle per driver account.
+VehicleSchema.index({ driverId: 1 }, { unique: true, partialFilterExpression: { isActive: true } });

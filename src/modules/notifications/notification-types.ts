@@ -81,3 +81,38 @@ const RIDE_TYPES: ReadonlySet<NotificationType> = new Set([
 ]);
 
 export const isRideStatusType = (type: NotificationType): boolean => RIDE_TYPES.has(type);
+
+/**
+ * The alert sound a push plays. Android takes the sound from the
+ * notification channel (a channel's sound cannot change once it exists on a
+ * phone), so each sound has its own channel, created by the app at start-up
+ * (MainActivity.kt and push_notifications.dart). The files ship inside the
+ * app: res/raw/<sound>.wav on Android, <sound>.wav in the iOS bundle.
+ */
+export enum PushSound {
+  /** A new ride offer for a driver: loud, repeating, hard to miss. */
+  RIDE_REQUEST = "ride_request",
+  /** Ride progress and payments: a short friendly chime. */
+  RIDE_UPDATE = "ride_update",
+  /** Safety alerts: a siren. */
+  SOS_ALERT = "sos_alert",
+}
+
+/** Android channel id per sound. Keep in sync with the app. */
+export const PUSH_CHANNEL_IDS: Record<PushSound, string> = {
+  [PushSound.RIDE_REQUEST]: "tirvona_ride_requests",
+  [PushSound.RIDE_UPDATE]: "tirvona_rides_v2",
+  [PushSound.SOS_ALERT]: "tirvona_sos",
+};
+
+export function pushSoundFor(type: NotificationType): PushSound {
+  switch (type) {
+    case NotificationType.RIDE_REQUEST:
+      return PushSound.RIDE_REQUEST;
+    case NotificationType.SOS_CREATED:
+    case NotificationType.SOS_UPDATED:
+      return PushSound.SOS_ALERT;
+    default:
+      return PushSound.RIDE_UPDATE;
+  }
+}

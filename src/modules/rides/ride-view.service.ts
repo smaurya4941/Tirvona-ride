@@ -248,6 +248,10 @@ export class RideViewService {
       view.driver = await this.driverInfo(ride.driverId, ride.vehicle);
       if (view.driver && DRIVER_ENGAGED_STATUSES.includes(ride.status))
         view.driver.location = await this.driverLocations.lastKnown(ride.driverId);
+      // Like the customer's number for the driver, the driver's number is
+      // shared only while the driver is committed to the ride (accepted →
+      // started): not while an offer is pending, and not after it ends.
+      else if (view.driver) view.driver.phone = "";
     }
     if (ride.status === RideStatus.DRIVER_ARRIVED && ride.otpCode)
       view.otp = { code: ride.otpCode, expiresAt: ride.otpExpiresAt };

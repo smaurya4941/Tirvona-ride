@@ -53,7 +53,7 @@ App flow: Sign in → "Forgot password?" → `/forgot-password` (number) → `/f
 
 The mobile number is the sign-in identity and cannot be changed here.
 
-`PATCH /users/me/password` takes `{ currentPassword, newPassword }`. A wrong current password returns 400 `AUTH_INVALID_CREDENTIALS`, and reusing the current one returns `PASSWORD_UNCHANGED`. The new password must meet the shared policy in `src/common/validation/password.ts` (8+ characters, upper and lower case, a digit and a symbol), which sign-up and reset also use. The Flutter copy is in `widgets/password_field.dart`.
+`PATCH /users/me/password` takes `{ currentPassword, newPassword }`. A wrong current password returns 400 `AUTH_INVALID_CREDENTIALS`, and reusing the current one returns `PASSWORD_UNCHANGED`. The new password must meet the shared policy in `src/common/validation/password.ts` (6–128 characters of any kind, no digit/symbol/case requirement), which sign-up and reset also use. The Flutter copy is in `widgets/password_field.dart`.
 
 ## Profile photo
 

@@ -1,9 +1,13 @@
+import type { PushSound } from "../notification-types";
+
 export interface PushMessage {
   title: string;
   body: string;
   /** String-only map delivered to the app (routing: type, rideId, …). */
   data: Record<string, string>;
   highPriority: boolean;
+  /** Which bundled alert sound (and Android channel) the push uses. */
+  sound: PushSound;
   /** Same tag = replaces the previous notification in the Android tray. */
   collapseKey?: string;
 }

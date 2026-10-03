@@ -27,6 +27,13 @@ export interface VehicleSummary {
   isActive: boolean;
 }
 
+function vehicleLimitReached() {
+  return apiConflict(
+    "You already have a vehicle on this account. To change it, send a change request from Account → Vehicle and an admin will review it.",
+    "DRIVER_VEHICLE_LIMIT",
+  );
+}
+
 @Injectable()
 export class VehiclesService {
   constructor(
@@ -61,16 +68,29 @@ export class VehiclesService {
         "VEHICLE_ALREADY_EXISTS",
       );
 
-    return this.vehicleModel.create({
-      driverId: driver._id,
-      vehicleType: dto.vehicleType,
-      registrationNumber,
-      make: dto.make,
-      vehicleModel: dto.model,
-      color: dto.color,
-      manufactureYear: dto.manufactureYear,
-      isActive: true,
-    });
+    // One driver account, one vehicle. To drive another vehicle the driver
+    // sends a change request (POST /drivers/me/change-requests/vehicle),
+    // which an admin reviews.
+    if (await this.vehicleModel.exists({ driverId: driver._id, isActive: true })) throw vehicleLimitReached();
+
+    try {
+      return await this.vehicleModel.create({
+        driverId: driver._id,
+        vehicleType: dto.vehicleType,
+        registrationNumber,
+        make: dto.make,
+        vehicleModel: dto.model,
+        color: dto.color,
+        manufactureYear: dto.manufactureYear,
+        isActive: true,
+      });
+    } catch (error) {
+      // Two concurrent requests: the partial unique index on driverId lets
+      // only one through.
+      const keyPattern = (error as { code?: number; keyPattern?: Record<string, unknown> }).keyPattern;
+      if ((error as { code?: number }).code === 11000 && keyPattern && "driverId" in keyPattern) throw vehicleLimitReached();
+      throw error;
+    }
   }
 
   async findMine(userId: string): Promise<VehicleDocument[]> {
