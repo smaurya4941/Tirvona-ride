@@ -72,6 +72,8 @@ const EXPECTED_PUBLIC_ROUTES = [
   "GET /branding/assets/:kind",
   // Popular-place photos: rendered with a plain image request; admin-published only.
   "GET /places/popular/:id/image",
+  // Circuit cover images (marketing material, like branding images).
+  "GET /circuit-packages/:id/cover",
 ].sort();
 
 const HTTP_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "ALL", "OPTIONS", "HEAD", "SEARCH"];

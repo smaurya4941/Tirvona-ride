@@ -8,6 +8,9 @@ import { DriverLocationService } from "../locations/driver-location.service";
 import { LocationsService } from "../locations/locations.service";
 import { User } from "../users/schemas/user.schema";
 import type { UserDocument } from "../users/schemas/user.schema";
+import { circuitView } from "../circuit-rides/circuit-view";
+import type { CircuitView } from "../circuit-rides/circuit-view";
+import { RideKind } from "../circuit-rides/circuit-ride.types";
 import { effectivePaymentStatus } from "./ride-payment-status";
 import type { RidePaymentStatus } from "./ride-payment-status";
 import { DRIVER_ENGAGED_STATUSES, RideStatus } from "./ride-state-machine";
@@ -100,6 +103,10 @@ export interface RideView {
   status: RideStatus;
   /** Monotonic per ride; clients keep the snapshot with the highest value. */
   stateVersion: number;
+  /** NORMAL or CIRCUIT. */
+  kind: RideKind;
+  /** Circuit rides only: package, stops with progress, usage and the running bill. */
+  circuit?: CircuitView;
   rideType: string;
   vehicleType: string;
   pickup: RideLocation;
@@ -189,6 +196,8 @@ export class RideViewService {
       rideCode: ride.rideCode,
       status: ride.status,
       stateVersion: ride.stateVersion ?? 0,
+      kind: ride.kind ?? RideKind.NORMAL,
+      circuit: ride.kind === RideKind.CIRCUIT && ride.circuit ? circuitView(ride.circuit, ride) : undefined,
       rideType: ride.rideType,
       vehicleType: ride.vehicleType,
       pickup: { address: ride.pickup.address, latitude: ride.pickup.latitude, longitude: ride.pickup.longitude },

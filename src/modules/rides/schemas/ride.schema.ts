@@ -5,6 +5,8 @@ import { VehicleType } from "../../vehicles/schemas/vehicle.schema";
 import { RidePaymentStatus } from "../ride-payment-status";
 import { RideActorType, RideStatus } from "../ride-state-machine";
 import { PromoDiscountType } from "../../promotions/promo-rules";
+import { RideKind } from "../../circuit-rides/circuit-ride.types";
+import { RideCircuit, RideCircuitSchema } from "../../circuit-rides/schemas/ride-circuit.schema";
 
 @Schema({ _id: false })
 export class RideLocation {
@@ -329,6 +331,18 @@ export class Ride {
   @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "User" })
   customerId!: Types.ObjectId;
 
+  /** NORMAL (pickup → destination) or CIRCUIT (a package of fixed stops). Rides booked before circuits are NORMAL. */
+  @Prop({ required: true, enum: RideKind, default: RideKind.NORMAL })
+  kind!: RideKind;
+
+  /**
+   * Circuit rides only: the package snapshot, stop progress, usage and
+   * warnings. For a circuit, `destination` is the last stop and
+   * `distanceMeters`/`durationSeconds` are the route estimate.
+   */
+  @Prop({ type: RideCircuitSchema })
+  circuit?: RideCircuit;
+
   /** Ride type code at booking; historical codes stay valid even if retired. */
   @Prop({ required: true })
   rideType!: string;
@@ -507,6 +521,14 @@ RideSchema.index({ "promo.promoId": 1 }, { partialFilterExpression: { "promo.pro
 // Sweeper scans.
 RideSchema.index({ status: 1, assignmentExpiresAt: 1 });
 RideSchema.index({ status: 1, searchExpiresAt: 1 });
+// Circuit lists (admin bookings, live circuits) and per-package analytics.
+RideSchema.index({ kind: 1, requestedAt: -1 });
+RideSchema.index({ "circuit.packageId": 1, requestedAt: -1 }, { partialFilterExpression: { "circuit.packageId": { $exists: true } } });
+// A repeated "Confirm & Book" (same Idempotency-Key) never creates a second circuit.
+RideSchema.index(
+  { customerId: 1, "circuit.bookingKey": 1 },
+  { unique: true, partialFilterExpression: { "circuit.bookingKey": { $type: "string" } }, name: "uniq_circuit_booking_key" },
+);
 // One active ride per customer, enforced by the database under concurrency.
 RideSchema.index(
   { customerId: 1 },

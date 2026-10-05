@@ -2,6 +2,7 @@ import { UserRole } from "../../common/types/user-role.enum";
 import type {
   EarningsAdjustedEvent,
   PaymentRefundUpdatedEvent,
+  CircuitNoticeEvent,
   RideSnapshot,
   RideTransitionedEvent,
 } from "../../infrastructure/events/domain-events";
@@ -91,7 +92,9 @@ export function planRideNotifications(
       if (driver)
         drafts.push(
           draft(ride, driver, NotificationType.RIDE_REQUEST, "New ride request",
-            `Pickup at ${shortPlace(ride.pickupAddress)} · ${formatRupees(ride.estimatedFare)}. Respond quickly to accept.`, key),
+            ride.circuitName
+              ? `${ride.circuitName}: pickup at ${shortPlace(ride.pickupAddress)} · package ${formatRupees(ride.estimatedFare)}. Respond quickly to accept.`
+              : `Pickup at ${shortPlace(ride.pickupAddress)} · ${formatRupees(ride.estimatedFare)}. Respond quickly to accept.`, key),
         );
       break;
     case RideStatus.DRIVER_ACCEPTED:
@@ -109,18 +112,24 @@ export function planRideNotifications(
     case RideStatus.RIDE_STARTED:
       drafts.push(
         draft(ride, customer, NotificationType.RIDE_STARTED, "Ride started",
-          `Your trip to ${shortPlace(ride.destinationAddress)} has started. Have a peaceful journey.`, key),
+          ride.circuitName
+          ? `Your ${ride.circuitName} has started. Your included time begins now.`
+          : `Your trip to ${shortPlace(ride.destinationAddress)} has started. Have a peaceful journey.`, key),
       );
       if (driver)
         drafts.push(
           draft(ride, driver, NotificationType.RIDE_STARTED, "Trip started",
-            `Drop the customer at ${shortPlace(ride.destinationAddress)}.`, key),
+            ride.circuitName
+              ? `${ride.circuitName} started. Take the customer to each stop in order.`
+              : `Drop the customer at ${shortPlace(ride.destinationAddress)}.`, key),
         );
       break;
     case RideStatus.COMPLETED:
       drafts.push(
         draft(ride, customer, NotificationType.RIDE_COMPLETED, "Ride completed",
-          `You have arrived. Trip fare ${formatRupees(ride.finalFare ?? ride.estimatedFare)} — tap to pay.`, key),
+          ride.circuitName
+          ? `${ride.circuitName} is complete. Final fare ${formatRupees(ride.finalFare ?? ride.estimatedFare)} — tap to pay.`
+          : `You have arrived. Trip fare ${formatRupees(ride.finalFare ?? ride.estimatedFare)} — tap to pay.`, key),
       );
       if (driver)
         drafts.push(
@@ -272,4 +281,83 @@ export function planEarningAdjustedNotification(event: EarningsAdjustedEvent): N
     data: { rideId: event.rideId, rideCode: event.rideCode, adjustmentId: event.adjustmentId },
     dedupeKey: `adjustment:${event.adjustmentId}`,
   };
+}
+
+
+function circuitDraft(
+  ride: RideSnapshot,
+  recipient: { userId: string; role: UserRole },
+  type: NotificationType,
+  title: string,
+  message: string,
+  key: string,
+): NotificationDraft {
+  return {
+    userId: recipient.userId,
+    recipientRole: recipient.role,
+    type,
+    title,
+    message,
+    rideId: ride.rideId,
+    data: { rideId: ride.rideId, rideCode: ride.rideCode, circuit: "1" },
+    dedupeKey: `circuit:${ride.rideId}:${key}:${recipient.userId}`,
+  };
+}
+
+/**
+ * Circuit progress and usage warnings. Each fires once per circuit (the
+ * dedupe key is the notice itself), for the customer and the driver as
+ * their roles need.
+ */
+export function planCircuitNotifications(event: CircuitNoticeEvent): NotificationDraft[] {
+  const { ride } = event;
+  const customer = { userId: ride.customerId, role: UserRole.CUSTOMER };
+  const driver = ride.driverUserId ? { userId: ride.driverUserId, role: UserRole.DRIVER } : undefined;
+  const name = ride.circuitName ?? "Your circuit";
+  const stop = event.stopName ?? "the stop";
+  const key = `${event.kind}:${event.stopOrder ?? 0}`;
+  const drafts: NotificationDraft[] = [];
+  const both = (type: NotificationType, title: string, customerMessage: string, driverMessage = customerMessage): void => {
+    drafts.push(circuitDraft(ride, customer, type, title, customerMessage, key));
+    if (driver) drafts.push(circuitDraft(ride, driver, type, title, driverMessage, key));
+  };
+
+  switch (event.kind) {
+    case "STOP_ARRIVED":
+      drafts.push(circuitDraft(ride, customer, NotificationType.CIRCUIT_STOP, `Arrived at ${stop}`, `You have reached ${stop}. Take your time — your included time keeps running.`, key));
+      break;
+    case "NEXT_STOP":
+      both(NotificationType.CIRCUIT_STOP, `Next stop: ${event.nextStopName ?? "your next stop"}`, `Heading to ${event.nextStopName ?? "the next stop"} next.`);
+      break;
+    case "STOP_SKIPPED":
+      both(NotificationType.CIRCUIT_STOP, `${stop} skipped`, `${stop} was skipped by Tirvona support.${event.nextStopName ? ` Next: ${event.nextStopName}.` : ""}`);
+      break;
+    case "STOP_BLOCKED":
+      both(
+        NotificationType.CIRCUIT_EXCEPTION,
+        `${stop} is not reachable`,
+        `Your driver reported that ${stop} cannot be reached. Tirvona support is looking into it.`,
+        `You reported ${stop} as blocked. Support will decide whether to continue or skip it.`,
+      );
+      break;
+    case "EXCEPTION_RESOLVED":
+      both(NotificationType.CIRCUIT_EXCEPTION, "Issue resolved", `${name} can continue.`);
+      break;
+    case "TIME_30_MIN":
+      both(NotificationType.CIRCUIT_WARNING, "30 minutes left", `Your included circuit time expires in 30 minutes.`, `Circuit package time remaining: 30 minutes.`);
+      break;
+    case "TIME_10_MIN":
+      both(NotificationType.CIRCUIT_WARNING, "10 minutes left", `Your included circuit time expires in 10 minutes. Extra time is charged after that.`, `Circuit package time remaining: 10 minutes.`);
+      break;
+    case "TIME_EXHAUSTED":
+      both(NotificationType.CIRCUIT_WARNING, "Included time used up", "Your included time is over. Additional time charges may apply.", "Included package time is over. Extra time is now being charged to the customer.");
+      break;
+    case "DISTANCE_80":
+      both(NotificationType.CIRCUIT_WARNING, "Included distance running low", "You have used most of your included distance.", "Most of the included package distance is used.");
+      break;
+    case "DISTANCE_EXHAUSTED":
+      both(NotificationType.CIRCUIT_WARNING, "Included distance used up", "Included distance exhausted. Additional distance charges may apply.", "Included package distance is exhausted. Extra distance is now being charged.");
+      break;
+  }
+  return drafts;
 }

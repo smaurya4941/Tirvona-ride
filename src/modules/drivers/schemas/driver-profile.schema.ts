@@ -115,6 +115,13 @@ export class DriverProfile {
 
   @Prop()
   wentOnlineAt?: Date;
+
+  /**
+   * Whether this driver may be offered circuit rides (a whole-day package with
+   * several stops). Absent means eligible; Admin switches it off per driver.
+   */
+  @Prop({ default: true })
+  circuitEligible?: boolean;
 }
 
 export type DriverProfileDocument = HydratedDocument<DriverProfile>;

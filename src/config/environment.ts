@@ -82,6 +82,12 @@ export interface Environment {
   driverLocationMaxFixAgeSeconds: number;
   driverArrivingRadiusMeters: number;
   rideCheckpointIntervalSeconds: number;
+  /** Circuits: how close (m) the driver must be to mark a stop arrived; 0 = do not check. */
+  circuitStopArrivalRadiusMeters: number;
+  /** Circuits: usage/warning monitor period; 0 disables the background monitor. */
+  circuitMonitorIntervalMs: number;
+  /** Circuits: the pickup may be at most this far (straight line) from the first stop. */
+  circuitMaxPickupDistanceKm: number;
   finalFareMode: FinalFareMode;
   finalFareMaxEstimateMultiplier: number;
   tripMeterMaxGapSeconds: number;
@@ -368,6 +374,11 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
     env.RIDE_CHECKPOINT_INTERVAL_SECONDS,
     15,
   ),
+
+  // ── Circuits ──────────────────────────────────────────────────────────
+  circuitStopArrivalRadiusMeters: integer(env.CIRCUIT_STOP_ARRIVAL_RADIUS_METERS, 1000),
+  circuitMonitorIntervalMs: integer(env.CIRCUIT_MONITOR_INTERVAL_MS, 30_000),
+  circuitMaxPickupDistanceKm: integer(env.CIRCUIT_MAX_PICKUP_DISTANCE_KM, 60),
 
   // ── Final fare (Razorpay integration v2) ──────────────────────────────
   // actual = actual trip time + GPS-trail distance (booked distance when the

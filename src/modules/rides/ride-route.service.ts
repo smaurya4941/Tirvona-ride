@@ -8,6 +8,7 @@ import { DriverLocationService } from "../locations/driver-location.service";
 import { LiveRouteService } from "../locations/live-route.service";
 import type { LiveRouteStage } from "../locations/live-route.service";
 import type { RouteProvider } from "../locations/route-estimator";
+import { RideKind } from "../circuit-rides/circuit-ride.types";
 import { rideNotFound } from "./ride-errors";
 import { RideStatus } from "./ride-state-machine";
 import { RidesService } from "./rides.service";
@@ -15,7 +16,7 @@ import { Ride } from "./schemas/ride.schema";
 
 export interface LiveRouteView {
   rideId: string;
-  /** APPROACH = driver → pickup, TRIP = driver → destination. */
+  /** APPROACH = driver → pickup, TRIP = driver → destination (a circuit: driver → current stop). */
   stage: LiveRouteStage;
   origin: { latitude: number; longitude: number };
   destination: { latitude: number; longitude: number };
@@ -58,7 +59,7 @@ export class RideRouteService {
         : { customerId: new Types.ObjectId(user.userId) };
     const ride = await this.rideModel
       .findOne({ _id: new Types.ObjectId(rideId), ...owner })
-      .select("status driverId pickup destination")
+      .select("status driverId pickup destination kind circuit.stops circuit.currentStopOrder")
       .lean()
       .exec();
     if (!ride) throw rideNotFound();
@@ -68,7 +69,10 @@ export class RideRouteService {
     const driver = await this.driverLocations.lastKnown(ride.driverId);
     if (!driver) return null;
 
-    const target = stage === "APPROACH" ? ride.pickup : ride.destination;
+    // A circuit is driven stop by stop: the trip leg leads to the current stop.
+    const currentStop =
+      ride.kind === RideKind.CIRCUIT ? ride.circuit?.stops.find((stop) => stop.order === ride.circuit?.currentStopOrder) : undefined;
+    const target = stage === "APPROACH" ? ride.pickup : (currentStop ?? ride.destination);
     const destination = { latitude: target.latitude, longitude: target.longitude };
     const route = await this.liveRoutes.forRide(
       rideId,

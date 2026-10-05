@@ -393,7 +393,8 @@ export class RidesService {
     return driver;
   }
 
-  private async assertNoActiveRide(customerId: Types.ObjectId): Promise<void> {
+  /** A customer may have one active ride at a time, normal or circuit. */
+  async assertNoActiveRide(customerId: Types.ObjectId): Promise<void> {
     const active = await this.rideModel.findOne({ customerId, isActive: true }).select("_id status").exec();
     if (active) throw this.alreadyActive(active._id);
   }
@@ -407,7 +408,8 @@ export class RidesService {
     );
   }
 
-  private async insertRide(fields: Partial<Ride> & { _id?: Types.ObjectId }): Promise<RideDocument> {
+  /** Inserts a ride with a fresh code; the partial unique indexes are the real one-active-ride guard. */
+  async insertRide(fields: Partial<Ride> & { _id?: Types.ObjectId }): Promise<RideDocument> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         return await this.rideModel.create({ ...fields, rideCode: generateRideCode() });
@@ -461,6 +463,18 @@ export class RidesService {
       this.logger.warn(`Driver supply lookup failed: ${(error as Error).message}`);
     }
     return supply;
+  }
+
+  /** Advisory only (never blocks a booking): how soon the nearest free driver of this vehicle type could arrive. */
+  async pickupSupply(
+    pickup: GeoCoordinates,
+    vehicleType: VehicleType,
+  ): Promise<{ pickupEtaSeconds: number | null; driversNearby: number }> {
+    const available = (await this.driverSupply(pickup)).get(vehicleType);
+    return {
+      pickupEtaSeconds: available ? this.pickupEtaSeconds(available.nearestMeters) : null,
+      driversNearby: available?.count ?? 0,
+    };
   }
 
   private pickupEtaSeconds(nearestMeters: number): number {

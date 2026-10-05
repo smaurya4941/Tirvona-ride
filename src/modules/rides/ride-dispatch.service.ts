@@ -5,6 +5,7 @@ import { InjectModel } from "@nestjs/mongoose";
 import type { Model, Types } from "mongoose";
 import { MatchingService } from "../matching/matching.service";
 import { Vehicle } from "../vehicles/schemas/vehicle.schema";
+import { RideKind } from "../circuit-rides/circuit-ride.types";
 import { RideActorType, RideStatus } from "./ride-state-machine";
 import { RideTransitionService } from "./ride-transition.service";
 import type { RideActor } from "./ride-transition.service";
@@ -105,6 +106,7 @@ export class RideDispatchService implements OnModuleDestroy {
       vehicleType: ride.vehicleType,
       excludeDriverIds: ride.rejectedDriverIds,
       limit: CANDIDATES_PER_ATTEMPT,
+      circuitEligible: ride.kind === RideKind.CIRCUIT,
     });
 
     for (const candidate of candidates) {

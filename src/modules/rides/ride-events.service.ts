@@ -5,6 +5,8 @@ import { Types } from "mongoose";
 import { DomainEventsService } from "../../infrastructure/events/domain-events.service";
 import { rideSnapshot } from "../../infrastructure/events/ride-snapshot";
 import { DriverProfile } from "../drivers/schemas/driver-profile.schema";
+import type { CircuitEventName } from "../circuit-rides/circuit-ride.types";
+import type { CircuitNoticeKind } from "../../infrastructure/events/domain-events";
 import { RideEvent } from "../realtime/realtime.constants";
 import type { RideEventName } from "../realtime/realtime.constants";
 import { RealtimeService } from "../realtime/realtime.service";
@@ -113,6 +115,43 @@ export class RideEventsService {
     });
   }
 
+  /**
+   * A circuit-specific event (stop arrived, time warning, …). Both participants
+   * get their own ride view with the new circuit state, so an app just renders
+   * it. `notice` also raises the matching push notification, which must work
+   * with no socket attached.
+   */
+  circuitEvent(
+    committed: RideDocument,
+    event: CircuitEventName,
+    data: Record<string, unknown> = {},
+    notice?: { kind: CircuitNoticeKind; stopName?: string; stopOrder?: number; nextStopName?: string; remainingMinutes?: number },
+  ): void {
+    if (notice) this.domainEvents.emit("circuit.notice", { ride: rideSnapshot(committed), ...notice });
+    const rideId = committed._id;
+    this.enqueue(rideId, async () => {
+      const ride = await this.rideModel.findById(rideId).exec();
+      if (!ride) return;
+      const deliveries: RideDelivery[] = [
+        {
+          userId: ride.customerId.toString(),
+          room: "keep",
+          envelope: this.envelope(event, ride, data, await this.views.forCustomer(ride)),
+        },
+      ];
+      if (ride.driverId && ride.driverUserId) {
+        const driver = await this.driverModel.findById(ride.driverId).exec();
+        if (driver)
+          deliveries.push({
+            userId: ride.driverUserId.toString(),
+            room: "keep",
+            envelope: this.envelope(event, ride, data, await this.views.forDriver(ride, driver)),
+          });
+      }
+      await this.realtime.deliver(ride._id.toString(), deliveries);
+    });
+  }
+
   /** Resolves when every queued publication has run (tests, shutdown). */
   async drain(): Promise<void> {
     while (this.queues.size) await Promise.all([...this.queues.values()]);
@@ -183,7 +222,7 @@ export class RideEventsService {
   }
 
   private envelope(
-    event: RideEventName,
+    event: RideEventName | CircuitEventName,
     ride: RideDocument,
     data: Record<string, unknown>,
     view: unknown,

@@ -22,5 +22,6 @@ export function rideSnapshot(ride: RideDocument): RideSnapshot {
     payableFare: ride.fare.payableFare,
     cancellationFee: ride.cancellation?.feeAmount,
     zoneId: ride.zoneId?.toString(),
+    circuitName: ride.kind === "CIRCUIT" ? ride.circuit?.name : undefined,
   };
 }

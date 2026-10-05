@@ -15,6 +15,8 @@ import { RedisModule } from "./infrastructure/redis/redis.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { AuditModule } from "./modules/audit/audit.module";
 import { AuthModule } from "./modules/auth/auth.module";
+import { CircuitRidesModule } from "./modules/circuit-rides/circuit-rides.module";
+import { CircuitPackagesModule } from "./modules/circuit-packages/circuit-packages.module";
 import { BrandingModule } from "./modules/branding/branding.module";
 import { DriverChangesModule } from "./modules/driver-changes/driver-changes.module";
 import { CancellationsModule } from "./modules/cancellations/cancellations.module";
@@ -135,6 +137,8 @@ const ENV_FILES: Record<string, string[]> = {
     HealthModule,
     AuthModule,
     BrandingModule,
+    CircuitPackagesModule,
+    CircuitRidesModule,
     DriverChangesModule,
     UsersModule,
     DriversModule,

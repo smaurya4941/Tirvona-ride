@@ -28,6 +28,8 @@ export interface RideSnapshot {
   payableFare?: number;
   cancellationFee?: number;
   zoneId?: string;
+  /** Set for circuit rides: the package name, so messages say "your circuit" rather than "your trip to <last stop>". */
+  circuitName?: string;
 }
 
 export interface RideTransitionedEvent {
@@ -124,6 +126,28 @@ export interface UserSessionsRevokedEvent {
   exceptDeviceId?: string;
 }
 
+/** Something happened inside a circuit that the customer and/or driver should be told about. */
+export type CircuitNoticeKind =
+  | "STOP_ARRIVED"
+  | "NEXT_STOP"
+  | "STOP_SKIPPED"
+  | "STOP_BLOCKED"
+  | "EXCEPTION_RESOLVED"
+  | "TIME_30_MIN"
+  | "TIME_10_MIN"
+  | "TIME_EXHAUSTED"
+  | "DISTANCE_80"
+  | "DISTANCE_EXHAUSTED";
+
+export interface CircuitNoticeEvent {
+  ride: RideSnapshot;
+  kind: CircuitNoticeKind;
+  stopName?: string;
+  stopOrder?: number;
+  nextStopName?: string;
+  remainingMinutes?: number;
+}
+
 /**
  * Every in-process domain event. Producers publish *after* MongoDB has
  * committed the change; consumers must be idempotent and must never be
@@ -133,6 +157,7 @@ export interface DomainEventMap {
   "ride.transitioned": RideTransitionedEvent;
   "ride.driver_arriving": RideDriverArrivingEvent;
   "ride.payment_updated": RidePaymentUpdatedEvent;
+  "circuit.notice": CircuitNoticeEvent;
   "payment.refund_updated": PaymentRefundUpdatedEvent;
   "earnings.adjusted": EarningsAdjustedEvent;
   "driver.reviewed": DriverReviewedEvent;

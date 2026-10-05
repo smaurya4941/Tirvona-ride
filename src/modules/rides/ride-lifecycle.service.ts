@@ -16,6 +16,7 @@ import { CancellationsService } from "../cancellations/cancellations.service";
 import type { CancellationPreview, ResolvedReason } from "../cancellations/cancellations.service";
 import { CancellationFeeStatus } from "../cancellations/schemas/cancellation.schemas";
 import { computeDiscount } from "../promotions/promo-rules";
+import { CircuitEvent, CircuitStopStatus, RideKind } from "../circuit-rides/circuit-ride.types";
 import { RideDispatchService } from "./ride-dispatch.service";
 import { rideConflict, rideNotFound } from "./ride-errors";
 import { RideEventsService } from "./ride-events.service";
@@ -192,13 +193,21 @@ export class RideLifecycleService {
       // Guarded on the exact code verified, so a concurrent rotation or a
       // second verify of the same code cannot also start the ride.
       where: { driverId: driver._id, otpCode: expectedCode },
-      set: { startedAt: new Date(), otpVerifiedAt: new Date() },
+      set: {
+        startedAt: new Date(),
+        otpVerifiedAt: new Date(),
+        // The circuit clock is startedAt; the first stop becomes the one being driven to.
+        ...(ride.kind === RideKind.CIRCUIT
+          ? { "circuit.currentStopOrder": 1, "circuit.stops.0.status": CircuitStopStatus.ARRIVING }
+          : {}),
+      },
       unset: ["otpCode", "otpExpiresAt"],
       actor: this.actorFor(driverUserId, RideActorType.DRIVER),
       metadata: { otpVerified: true },
     });
     if (started) {
       void this.locations.recordCheckpoint(started._id, driver._id, CheckpointKind.STARTED);
+      if (started.kind === RideKind.CIRCUIT) this.events.circuitEvent(started, CircuitEvent.STARTED);
       return this.views.forDriver(started, driver);
     }
     throw await this.explainDriverActionFailure(rideId, driver, "start");
@@ -210,6 +219,9 @@ export class RideLifecycleService {
     if (!ride) throw rideNotFound();
     if (ride.status !== RideStatus.RIDE_STARTED)
       throw rideConflict(this.wrongStateMessage("complete", ride.status), ride.status);
+    // A circuit ends only when its stops are done, priced by its package: POST /circuit-rides/:id/complete.
+    if (ride.kind === RideKind.CIRCUIT)
+      throw rideConflict("Finish the circuit from its own screen", ride.status, "CIRCUIT_COMPLETE_REQUIRED");
 
     // Priced with the tariff snapshotted at booking (never today's tariff) on
     // the actual trip: server-timed duration and the GPS-trail distance, with

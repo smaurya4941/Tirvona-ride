@@ -34,6 +34,8 @@ export interface DriverSummary {
   totalRides: number;
   isOnline: boolean;
   isAvailable: boolean;
+  /** May be offered circuit rides (Admin can switch it off per driver). */
+  circuitEligible: boolean;
   approvedAt?: Date;
   rejectionReason?: string;
   suspensionReason?: string;
@@ -88,6 +90,7 @@ export class DriversService {
       totalRides: driver.totalRides,
       isOnline: driver.isOnline,
       isAvailable: driver.isAvailable,
+      circuitEligible: driver.circuitEligible !== false,
       approvedAt: driver.approvedAt,
       rejectionReason: driver.rejectionReason,
       suspensionReason: driver.suspensionReason,

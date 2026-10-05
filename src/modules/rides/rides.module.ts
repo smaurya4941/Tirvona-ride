@@ -74,6 +74,15 @@ import { RideStatusHistory, RideStatusHistorySchema } from "./schemas/ride-statu
     RideRouteService,
     RiderHomeService,
   ],
-  exports: [RidesAdminService, RideDispatchService, RidePaymentStateService, RideViewService],
+  exports: [
+    RidesService,
+    RidesAdminService,
+    RideDispatchService,
+    RideEventsService,
+    RideLifecycleService,
+    RidePaymentStateService,
+    RideTransitionService,
+    RideViewService,
+  ],
 })
 export class RidesModule {}

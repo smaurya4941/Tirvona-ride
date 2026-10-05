@@ -32,6 +32,12 @@ export enum NotificationType {
   /** A change to verified driver/vehicle details or documents was approved. */
   DRIVER_UPDATE_APPROVED = "DRIVER_UPDATE_APPROVED",
   DRIVER_UPDATE_REJECTED = "DRIVER_UPDATE_REJECTED",
+  /** A circuit stop was reached, skipped or is next. */
+  CIRCUIT_STOP = "CIRCUIT_STOP",
+  /** Included circuit time or distance is running out / used up. */
+  CIRCUIT_WARNING = "CIRCUIT_WARNING",
+  /** A circuit exception (a blocked stop) was raised or resolved. */
+  CIRCUIT_EXCEPTION = "CIRCUIT_EXCEPTION",
   COMPLAINT_CREATED = "COMPLAINT_CREATED",
   COMPLAINT_UPDATED = "COMPLAINT_UPDATED",
   GENERAL = "GENERAL",
@@ -62,6 +68,7 @@ const HIGH_PRIORITY: ReadonlySet<NotificationType> = new Set([
   NotificationType.RIDE_DRIVER_ARRIVING,
   NotificationType.RIDE_DRIVER_ARRIVED,
   NotificationType.RIDE_CANCELLED,
+  NotificationType.CIRCUIT_EXCEPTION,
   NotificationType.SOS_CREATED,
   NotificationType.SOS_UPDATED,
 ]);

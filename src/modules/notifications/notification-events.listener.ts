@@ -11,6 +11,7 @@ import { User } from "../users/schemas/user.schema";
 import { DeviceTokensService } from "./device-tokens.service";
 import {
   planArrivingNotification,
+  planCircuitNotifications,
   planEarningAdjustedNotification,
   planPaymentNotifications,
   planRefundNotifications,
@@ -38,6 +39,11 @@ export class NotificationEventsListener implements OnModuleInit {
   onModuleInit(): void {
     this.events.on("ride.transitioned", async (event) => {
       const drafts = planRideNotifications(event, await this.context(event.ride));
+      if (drafts.length) await this.notifications.notify(drafts);
+    });
+
+    this.events.on("circuit.notice", async (event) => {
+      const drafts = planCircuitNotifications(event);
       if (drafts.length) await this.notifications.notify(drafts);
     });
 

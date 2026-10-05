@@ -27,6 +27,8 @@ export interface CandidateQuery {
   vehicleType: VehicleType;
   excludeDriverIds?: Types.ObjectId[];
   limit?: number;
+  /** A circuit ride: only drivers Admin has not switched off for circuits. */
+  circuitEligible?: boolean;
 }
 
 /**
@@ -78,6 +80,7 @@ export class MatchingService {
               currentRideId: null,
               activeVehicleType: query.vehicleType,
               locationUpdatedAt: { $gte: new Date(Date.now() - this.locationStaleMs) },
+              ...(query.circuitEligible ? { circuitEligible: { $ne: false } } : {}),
               ...(query.excludeDriverIds?.length
                 ? { _id: { $nin: query.excludeDriverIds } }
                 : {}),
