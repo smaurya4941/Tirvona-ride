@@ -295,6 +295,28 @@ describe("Tirvona Circuit (e2e)", () => {
       await api().patch(admin(`/${packageId}/status`)).set(as("admin")).send({ status: "DRAFT" }).expect(409);
     });
 
+    it("accepts cover images up to 5 MB and refuses larger ones", async () => {
+      /** A PNG whose header says width × height, padded to `bytes` (only the header is probed). */
+      const png = (width: number, height: number, bytes: number) => {
+        const header = Buffer.alloc(33);
+        Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(header, 0);
+        header.writeUInt32BE(13, 8);
+        header.write("IHDR", 12, "ascii");
+        header.writeUInt32BE(width, 16);
+        header.writeUInt32BE(height, 20);
+        return Buffer.concat([header, Buffer.alloc(bytes - header.length)]);
+      };
+      const rule = (await api().get(admin("/cover-rule")).set(as("admin")).expect(200)).body.data;
+      expect(rule).toMatchObject({ maxBytes: 5 * 1024 * 1024, minWidth: 640, minHeight: 360 });
+
+      const big = (await api().put(admin(`/${packageId}/cover`)).set(as("admin")).attach("file", png(1600, 1000, 2 * 1024 * 1024), "cover.png").expect(200)).body.data;
+      expect(big.coverPath).toMatch(/\/circuit-packages\/.+\/cover\?v=/);
+      await api().put(admin(`/${packageId}/cover`)).set(as("admin")).attach("file", png(400, 250, 50_000), "small.png").expect(400, /CIRCUIT_PACKAGE_INVALID_IMAGE/);
+      const tooLarge = await api().put(admin(`/${packageId}/cover`)).set(as("admin")).attach("file", png(1600, 1000, 6 * 1024 * 1024), "huge.png");
+      expect([400, 413]).toContain(tooLarge.status);
+      await api().delete(admin(`/${packageId}/cover`)).set(as("admin")).expect(200);
+    });
+
     it("records every change in the audit log with old and new values", async () => {
       const audit = (await api().get("/api/v1/admin/audit-logs").query({ targetType: "CIRCUIT_PACKAGE", targetId: packageId }).set(as("admin")).expect(200)).body.data;
       const actions = audit.items.map((row: { action: string }) => row.action);

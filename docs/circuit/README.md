@@ -134,7 +134,7 @@ package name for circuits.
 
 ## Admin panel
 
-Sidebar **Circuits**: Circuit packages (list, six-step editor: basics, stops from the maps search with reorder /
+Sidebar **Circuits**: Circuit packages (list, six-step editor that saves as you go — the first Next creates the draft, every later step change saves only what changed, a live package asks for a reason before saving, the last step shows Publish (or Save changes) instead of Next, and leaving with unsaved edits is warned; basics, stops from the maps search with reorder /
 replace / remove and a map, route preview, pricing with a worked example, vehicles & passengers, availability; cover
 image; publishing checklist; change history), Circuit bookings (filters: status, package, city, payment, dates,
 search), booking detail (route with stop states, map, usage bars, financials, people, merged status + stop timeline,
@@ -154,6 +154,12 @@ Driver: the request card shows the whole circuit (package, stops, price, passeng
 screen switches to the dedicated circuit panel: remaining time and distance, current stop with Navigate, one clear
 action at a time (Arrived → Continue / Customer is visiting → Continue …, "Can't reach this stop"), support banner
 while an exception is open, and "Complete circuit" after the last stop.
+
+## Cover images
+
+`GET /admin/circuit-packages/cover-rule` (`cover-image.ts`): landscape PNG / JPEG / WEBP, at least 640 × 360 px, up to
+5 MB, height 0.4–1.1 × width. The panel checks before uploading; the server re-checks the real bytes. Stored in
+MongoDB with the package; served publicly (immutable-cached by version) at `/circuit-packages/:id/cover`.
 
 ## Configuration
 

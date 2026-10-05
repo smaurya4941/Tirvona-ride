@@ -10,11 +10,11 @@ import { LocationsService } from "../locations/locations.service";
 import { joinLegs } from "../locations/polyline";
 import { AuditLogService } from "../audit/audit-log.service";
 import { PlacesService } from "../places/places.service";
-import { POPULAR_IMAGE_RULE, imageProblem } from "../places/popular-places.service";
 import { RideTypesService } from "../ride-types/ride-types.service";
 import { checkAvailability, distanceWarning, effectiveCapacity, publishProblems } from "./circuit-package.rules";
 import type { AvailabilityRule, PublishProblem } from "./circuit-package.rules";
 import { PACKAGE_STATUS_TRANSITIONS, CircuitPackageStatus } from "./circuit-package.types";
+import { CIRCUIT_COVER_RULE, coverProblem } from "./cover-image";
 import type {
   CircuitStopInputDto,
   CreateCircuitPackageDto,
@@ -25,7 +25,7 @@ import type {
 import { CircuitPackage, CircuitPackageCounter } from "./schemas/circuit-package.schema";
 import type { CircuitPackageDocument } from "./schemas/circuit-package.schema";
 
-export const CIRCUIT_COVER_RULE = POPULAR_IMAGE_RULE;
+export { CIRCUIT_COVER_RULE };
 
 export interface CircuitStopView {
   order: number;
@@ -384,7 +384,7 @@ export class CircuitPackagesService {
 
   async setCover(id: string, upload: { buffer: Buffer }, adminId: string): Promise<CircuitPackageAdminView> {
     const image = probeImage(upload.buffer);
-    const problem = imageProblem(upload.buffer.length, image);
+    const problem = coverProblem(upload.buffer.length, image);
     if (problem || !image)
       throw apiBadRequest(problem ?? "Unsupported image", "CIRCUIT_PACKAGE_INVALID_IMAGE", { hint: CIRCUIT_COVER_RULE.hint });
     const pkg = await this.requirePackage(id);

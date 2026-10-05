@@ -57,6 +57,12 @@ export class AdminCircuitPackagesController {
     return ok(await this.packages.placeResolve(query.id, query.sessionToken));
   }
 
+  @Get("cover-rule")
+  @ApiOperation({ summary: "What a cover image must be (the panel checks before uploading; the server re-checks the bytes)" })
+  coverRule(): ApiSuccessBody<typeof CIRCUIT_COVER_RULE> {
+    return ok(CIRCUIT_COVER_RULE);
+  }
+
   @Get()
   @ApiOperation({ summary: "Every package, any status" })
   async list(@Query() query: ListCircuitPackagesQueryDto): Promise<ApiSuccessBody<CircuitPackageAdminView[]>> {
