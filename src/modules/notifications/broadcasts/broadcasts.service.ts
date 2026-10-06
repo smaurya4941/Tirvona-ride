@@ -204,7 +204,7 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
     if (audience === BroadcastAudience.APPROVED_DRIVERS) {
       const approved = await this.driverModel.find({ driverStatus: DriverStatus.APPROVED }).select("userId").lean().exec();
       return this.userModel
-        .countDocuments({ _id: { $in: approved.map((driver) => driver.userId) }, status: { $ne: UserStatus.BLOCKED } })
+        .countDocuments({ _id: { $in: approved.map((driver) => driver.userId) }, status: { $nin: [UserStatus.BLOCKED, UserStatus.DELETED] } })
         .exec();
     }
     return this.userModel.countDocuments(this.userFilter(audience)).exec();
@@ -345,7 +345,7 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
         .exec();
       if (!drivers.length) return [];
       const active = await this.userModel
-        .find({ _id: { $in: drivers.map((driver) => driver.userId) }, status: { $ne: UserStatus.BLOCKED } })
+        .find({ _id: { $in: drivers.map((driver) => driver.userId) }, status: { $nin: [UserStatus.BLOCKED, UserStatus.DELETED] } })
         .select("_id")
         .lean()
         .exec();
@@ -374,7 +374,7 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
         : audience === BroadcastAudience.ALL_DRIVERS
           ? [UserRole.DRIVER]
           : [UserRole.CUSTOMER, UserRole.DRIVER];
-    return { role: { $in: roles }, status: { $ne: UserStatus.BLOCKED } };
+    return { role: { $in: roles }, status: { $nin: [UserStatus.BLOCKED, UserStatus.DELETED] } };
   }
 
   private assertFuture(date: Date): void {

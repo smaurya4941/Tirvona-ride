@@ -24,18 +24,25 @@ export interface PublishableStop {
   longitude?: number;
 }
 
+/** What one vehicle costs on a circuit. */
+export interface VehiclePriceRule {
+  rideType: string;
+  basePrice: number;
+  extraDistanceRatePerKm: number;
+  extraDurationRatePerHour: number;
+}
+
 export interface PublishablePackage {
   name?: string;
   city?: string;
   stops: readonly PublishableStop[];
+  /** Included distance and time, shared by every vehicle. */
   pricing?: {
-    basePrice: number;
     includedDistanceMeters: number;
     includedDurationSeconds: number;
-    extraDistanceRatePerKm: number;
-    extraDurationRatePerHour: number;
   };
   rideTypes: readonly string[];
+  vehiclePricing: readonly VehiclePriceRule[];
   maxPassengers: number;
   availability: AvailabilityRule;
 }
@@ -104,17 +111,15 @@ export function publishProblems(pkg: PublishablePackage, knownRideTypes: Readonl
 
   const { pricing } = pkg;
   if (!pricing) {
-    add("pricing", "Pricing is required");
+    add("pricing", "Included distance and duration are required");
   } else {
-    if (!(pricing.basePrice > 0)) add("pricing.basePrice", "Package price must be greater than 0");
     if (!(pricing.includedDistanceMeters > 0)) add("pricing.includedDistance", "Included distance must be greater than 0");
     if (!(pricing.includedDurationSeconds > 0)) add("pricing.includedDuration", "Included duration must be greater than 0");
-    if (!(pricing.extraDistanceRatePerKm >= 0)) add("pricing.extraDistanceRate", "Extra distance rate cannot be negative");
-    if (!(pricing.extraDurationRatePerHour >= 0)) add("pricing.extraDurationRate", "Extra duration rate cannot be negative");
   }
 
   if (pkg.rideTypes.length === 0) add("rideTypes", "Choose at least one vehicle type");
   for (const code of pkg.rideTypes) if (!knownRideTypes.has(code)) add("rideTypes", `${code} is not a ride type`);
+  problems.push(...vehiclePricingProblems(pkg.rideTypes, pkg.vehiclePricing));
   if (!Number.isInteger(pkg.maxPassengers) || pkg.maxPassengers < 1 || pkg.maxPassengers > MAX_PASSENGERS)
     add("maxPassengers", `Passenger limit must be between 1 and ${MAX_PASSENGERS}`);
 
@@ -134,6 +139,49 @@ export function publishProblems(pkg: PublishablePackage, knownRideTypes: Readonl
     add("availability.validUntil", "Valid until cannot be before valid from");
 
   return problems;
+}
+
+/**
+ * Every allowed vehicle needs exactly one valid price, and no price may exist
+ * for a vehicle that is not allowed.
+ */
+export function vehiclePricingProblems(rideTypes: readonly string[], prices: readonly VehiclePriceRule[]): PublishProblem[] {
+  const problems: PublishProblem[] = [];
+  const add = (field: string, message: string): void => void problems.push({ field, message });
+  const seen = new Set<string>();
+  for (const price of prices) {
+    if (seen.has(price.rideType)) add("vehiclePricing", `${price.rideType} is priced twice`);
+    seen.add(price.rideType);
+    if (!rideTypes.includes(price.rideType)) add("vehiclePricing", `${price.rideType} is priced but not an allowed vehicle`);
+  }
+  for (const code of rideTypes) {
+    const price = prices.find((entry) => entry.rideType === code);
+    if (!price) {
+      add("vehiclePricing", `Set a price for ${code}`);
+      continue;
+    }
+    if (!(price.basePrice > 0)) add("vehiclePricing.basePrice", `${code}: package price must be greater than 0`);
+    if (!(price.extraDistanceRatePerKm >= 0)) add("vehiclePricing.extraDistanceRate", `${code}: extra distance rate cannot be negative`);
+    if (!(price.extraDurationRatePerHour >= 0)) add("vehiclePricing.extraDurationRate", `${code}: extra duration rate cannot be negative`);
+  }
+  return problems;
+}
+
+/** The full tariff a customer is quoted for one vehicle, or undefined when it is not priced. */
+export function tariffFor(
+  pkg: Pick<PublishablePackage, "pricing" | "vehiclePricing">,
+  rideType: string,
+): (VehiclePriceRule & { includedDistanceMeters: number; includedDurationSeconds: number }) | undefined {
+  const price = pkg.vehiclePricing.find((entry) => entry.rideType === rideType);
+  if (!pkg.pricing || !price) return undefined;
+  return {
+    rideType,
+    basePrice: price.basePrice,
+    extraDistanceRatePerKm: price.extraDistanceRatePerKm,
+    extraDurationRatePerHour: price.extraDurationRatePerHour,
+    includedDistanceMeters: pkg.pricing.includedDistanceMeters,
+    includedDurationSeconds: pkg.pricing.includedDurationSeconds,
+  };
 }
 
 /** Seats the customer may book: the package limit, capped by the chosen vehicle's real capacity. */

@@ -40,7 +40,8 @@ export const apiNotFound = (
 export const apiConflict = (
   message: string,
   code: ErrorCode,
-): ConflictException => new ConflictException({ message, code });
+  data?: unknown,
+): ConflictException => new ConflictException({ message, code, data });
 
 export class ApiException extends HttpException {
   constructor(status: number, message: string, code: ErrorCode, data?: unknown) {

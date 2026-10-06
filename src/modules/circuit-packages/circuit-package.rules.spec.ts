@@ -1,4 +1,4 @@
-import { checkAvailability, distanceWarning, effectiveCapacity, localDate, localWeekday, publishProblems } from "./circuit-package.rules";
+import { checkAvailability, distanceWarning, effectiveCapacity, localDate, localWeekday, publishProblems, tariffFor } from "./circuit-package.rules";
 import type { PublishablePackage } from "./circuit-package.rules";
 
 const TZ = "Asia/Kolkata";
@@ -54,8 +54,12 @@ describe("publishProblems", () => {
     name: "Vrindavan Spiritual Circuit",
     city: "Vrindavan",
     stops: [stop(1, "prem-mandir"), stop(2, "iskcon")],
-    pricing: { basePrice: 600, includedDistanceMeters: 30_000, includedDurationSeconds: 18_000, extraDistanceRatePerKm: 15, extraDurationRatePerHour: 50 },
-    rideTypes: ["AUTO"],
+    pricing: { includedDistanceMeters: 30_000, includedDurationSeconds: 18_000 },
+    rideTypes: ["AUTO", "CAB"],
+    vehiclePricing: [
+      { rideType: "AUTO", basePrice: 600, extraDistanceRatePerKm: 15, extraDurationRatePerHour: 50 },
+      { rideType: "CAB", basePrice: 1200, extraDistanceRatePerKm: 22, extraDurationRatePerHour: 120 },
+    ],
     maxPassengers: 4,
     availability: { days: [0, 1, 2, 3, 4, 5, 6], opensAt: "06:00", closesAt: "20:00" },
   });
@@ -86,12 +90,47 @@ describe("publishProblems", () => {
     expect(publishProblems(twice, rideTypes).some((p) => p.message.includes("twice"))).toBe(true);
   });
 
-  it("validates pricing", () => {
+  it("validates the included distance and time", () => {
     const free = valid();
-    free.pricing = { ...free.pricing!, basePrice: 0, includedDistanceMeters: 0, includedDurationSeconds: 0, extraDistanceRatePerKm: -1 };
+    free.pricing = { includedDistanceMeters: 0, includedDurationSeconds: 0 };
     const fields = publishProblems(free, rideTypes).map((p) => p.field);
-    expect(fields).toEqual(expect.arrayContaining(["pricing.basePrice", "pricing.includedDistance", "pricing.includedDuration", "pricing.extraDistanceRate"]));
+    expect(fields).toEqual(expect.arrayContaining(["pricing.includedDistance", "pricing.includedDuration"]));
     expect(publishProblems({ ...valid(), pricing: undefined }, rideTypes).map((p) => p.field)).toContain("pricing");
+  });
+
+  it("needs one valid price per allowed vehicle and none for others", () => {
+    const missing = { ...valid(), vehiclePricing: valid().vehiclePricing.slice(0, 1) };
+    expect(publishProblems(missing, rideTypes).map((p) => p.message)).toContain("Set a price for CAB");
+
+    const bad = valid();
+    bad.vehiclePricing = [
+      { rideType: "AUTO", basePrice: 0, extraDistanceRatePerKm: -1, extraDurationRatePerHour: -1 },
+      bad.vehiclePricing[1],
+    ];
+    expect(publishProblems(bad, rideTypes).map((p) => p.field)).toEqual(
+      expect.arrayContaining(["vehiclePricing.basePrice", "vehiclePricing.extraDistanceRate", "vehiclePricing.extraDurationRate"]),
+    );
+
+    const stray = { ...valid(), rideTypes: ["AUTO"] };
+    expect(publishProblems(stray, rideTypes).some((p) => p.message.includes("CAB is priced but not an allowed vehicle"))).toBe(true);
+
+    const twice = valid();
+    twice.vehiclePricing = [...twice.vehiclePricing, { ...twice.vehiclePricing[0] }];
+    expect(publishProblems(twice, rideTypes).some((p) => p.message.includes("AUTO is priced twice"))).toBe(true);
+  });
+
+  it("builds each vehicle tariff from its own price and the shared allowance", () => {
+    expect(tariffFor(valid(), "CAB")).toEqual({
+      rideType: "CAB",
+      basePrice: 1200,
+      extraDistanceRatePerKm: 22,
+      extraDurationRatePerHour: 120,
+      includedDistanceMeters: 30_000,
+      includedDurationSeconds: 18_000,
+    });
+    expect(tariffFor(valid(), "AUTO")?.basePrice).toBe(600);
+    expect(tariffFor(valid(), "BIKE")).toBeUndefined();
+    expect(tariffFor({ ...valid(), pricing: undefined }, "AUTO")).toBeUndefined();
   });
 
   it("validates vehicles, passengers and the schedule", () => {

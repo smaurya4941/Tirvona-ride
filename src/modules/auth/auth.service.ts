@@ -76,6 +76,8 @@ export class AuthService {
   assertCanSignIn(user: Pick<UserDocument, "status">): void {
     if (user.status === UserStatus.BLOCKED)
       throw apiForbidden("This account has been blocked", "USER_BLOCKED");
+    if (user.status === UserStatus.DELETED)
+      throw apiForbidden("This account has been deleted", "ACCOUNT_DELETED");
   }
 
   /** Records the login and opens a session for a user who passed assertCanSignIn. */
@@ -88,9 +90,12 @@ export class AuthService {
   async refresh(refreshToken: string, device: DeviceMetadata): Promise<AuthSession> {
     const session = await this.tokens.verifyRefreshToken(refreshToken);
     const user = await this.users.findById(session.userId.toString());
-    if (user.status === UserStatus.BLOCKED) {
+    if (user.status === UserStatus.BLOCKED || user.status === UserStatus.DELETED) {
       await this.tokens.revokeSession(session._id);
-      throw apiForbidden("This account has been blocked", "USER_BLOCKED");
+      throw apiForbidden(
+        user.status === UserStatus.DELETED ? "This account has been deleted" : "This account has been blocked",
+        user.status === UserStatus.DELETED ? "ACCOUNT_DELETED" : "USER_BLOCKED",
+      );
     }
 
     // Rotation: the redeemed refresh token is single-use.

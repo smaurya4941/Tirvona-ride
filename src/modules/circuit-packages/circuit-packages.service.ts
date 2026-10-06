@@ -11,19 +11,20 @@ import { joinLegs } from "../locations/polyline";
 import { AuditLogService } from "../audit/audit-log.service";
 import { PlacesService } from "../places/places.service";
 import { RideTypesService } from "../ride-types/ride-types.service";
-import { checkAvailability, distanceWarning, effectiveCapacity, publishProblems } from "./circuit-package.rules";
+import { checkAvailability, distanceWarning, effectiveCapacity, publishProblems, tariffFor } from "./circuit-package.rules";
 import type { AvailabilityRule, PublishProblem } from "./circuit-package.rules";
 import { PACKAGE_STATUS_TRANSITIONS, CircuitPackageStatus } from "./circuit-package.types";
 import { CIRCUIT_COVER_RULE, coverProblem } from "./cover-image";
 import type {
   CircuitStopInputDto,
+  CircuitVehiclePriceDto,
   CreateCircuitPackageDto,
   ListCircuitPackagesQueryDto,
   RoutePreviewDto,
   UpdateCircuitPackageDto,
 } from "./dto/circuit-package.dto";
 import { CircuitPackage, CircuitPackageCounter } from "./schemas/circuit-package.schema";
-import type { CircuitPackageDocument } from "./schemas/circuit-package.schema";
+import type { CircuitPackageDocument, CircuitVehiclePrice } from "./schemas/circuit-package.schema";
 
 export { CIRCUIT_COVER_RULE };
 
@@ -36,12 +37,24 @@ export interface CircuitStopView {
   longitude: number;
 }
 
-export interface CircuitPricingView {
-  basePrice: number;
+/** What the package includes, whichever vehicle is booked. */
+export interface CircuitAllowanceView {
   includedDistanceKm: number;
   includedDurationHours: number;
   includedDistanceMeters: number;
   includedDurationSeconds: number;
+}
+
+export interface CircuitVehiclePriceView {
+  rideType: string;
+  basePrice: number;
+  extraDistanceRatePerKm: number;
+  extraDurationRatePerHour: number;
+}
+
+/** The full tariff of one vehicle: the shared allowance plus that vehicle's prices. */
+export interface CircuitPricingView extends CircuitAllowanceView {
+  basePrice: number;
   extraDistanceRatePerKm: number;
   extraDurationRatePerHour: number;
 }
@@ -62,8 +75,10 @@ export interface CircuitPackageAdminView {
   city: string;
   status: CircuitPackageStatus;
   stops: CircuitStopView[];
-  pricing?: CircuitPricingView;
+  pricing?: CircuitAllowanceView;
   rideTypes: string[];
+  /** One entry per priced vehicle, in `rideTypes` order. */
+  vehiclePricing: CircuitVehiclePriceView[];
   maxPassengers: number;
   availability: CircuitAvailabilityView;
   cancellationPolicy?: string;
@@ -85,6 +100,8 @@ export interface CircuitVehicleOption {
   seatCapacity: number;
   /** The most passengers this vehicle may carry on this circuit. */
   maxPassengers: number;
+  /** What this circuit costs with this vehicle. */
+  pricing: CircuitPricingView;
 }
 
 export interface CircuitPackageCustomerView {
@@ -94,6 +111,7 @@ export interface CircuitPackageCustomerView {
   description: string;
   city: string;
   stops: CircuitStopView[];
+  /** The cheapest vehicle's tariff: the "from" price. Each vehicle carries its own. */
   pricing: CircuitPricingView;
   vehicles: CircuitVehicleOption[];
   maxPassengers: number;
@@ -146,17 +164,34 @@ const stopView = (stop: StopSnapshot): CircuitStopView => ({
 const coverPath = (pkg: CircuitPackageDocument): string | null =>
   pkg.cover ? `/circuit-packages/${pkg._id.toString()}/cover?v=${pkg.cover.version}` : null;
 
-function pricingView(pricing: NonNullable<CircuitPackage["pricing"]>): CircuitPricingView {
-  return {
-    basePrice: pricing.basePrice,
-    includedDistanceKm: round1(pricing.includedDistanceMeters / 1000),
-    includedDurationHours: Math.round((pricing.includedDurationSeconds / 3600) * 100) / 100,
-    includedDistanceMeters: pricing.includedDistanceMeters,
-    includedDurationSeconds: pricing.includedDurationSeconds,
-    extraDistanceRatePerKm: pricing.extraDistanceRatePerKm,
-    extraDurationRatePerHour: pricing.extraDurationRatePerHour,
-  };
-}
+const allowanceView = (pricing: NonNullable<CircuitPackage["pricing"]>): CircuitAllowanceView => ({
+  includedDistanceKm: round1(pricing.includedDistanceMeters / 1000),
+  includedDurationHours: Math.round((pricing.includedDurationSeconds / 3600) * 100) / 100,
+  includedDistanceMeters: pricing.includedDistanceMeters,
+  includedDurationSeconds: pricing.includedDurationSeconds,
+});
+
+// Plain copies: spreading a hydrated subdocument loses its fields.
+const vehiclePriceView = (price: CircuitVehiclePrice): CircuitVehiclePriceView => ({
+  rideType: price.rideType,
+  basePrice: price.basePrice,
+  extraDistanceRatePerKm: price.extraDistanceRatePerKm,
+  extraDurationRatePerHour: price.extraDurationRatePerHour,
+});
+
+/** Prices in `rideTypes` order; prices for vehicles no longer allowed are left out. */
+const orderedVehiclePricing = (pkg: Pick<CircuitPackage, "rideTypes" | "vehiclePricing">): CircuitVehiclePriceView[] =>
+  pkg.rideTypes
+    .map((code) => (pkg.vehiclePricing ?? []).find((price) => price.rideType === code))
+    .filter((price): price is CircuitVehiclePrice => !!price)
+    .map(vehiclePriceView);
+
+const tariffView = (pricing: NonNullable<CircuitPackage["pricing"]>, price: CircuitVehiclePrice): CircuitPricingView => ({
+  ...allowanceView(pricing),
+  basePrice: price.basePrice,
+  extraDistanceRatePerKm: price.extraDistanceRatePerKm,
+  extraDurationRatePerHour: price.extraDurationRatePerHour,
+});
 
 const availabilityView = (pkg: CircuitPackage): CircuitAvailabilityView => ({
   days: [...pkg.availability.days].sort((a, b) => a - b),
@@ -213,6 +248,7 @@ export class CircuitPackagesService {
   async create(dto: CreateCircuitPackageDto, adminId: string): Promise<CircuitPackageAdminView> {
     const stops = dto.stops ? await this.resolveStops(dto.stops) : [];
     const rideTypes = dto.rideTypes ? await this.assertRideTypes(dto.rideTypes) : [];
+    const vehiclePricing = dto.vehiclePricing ? this.vehiclePricingFromDto(dto.vehiclePricing, rideTypes) : [];
     const created = await this.packages.create({
       code: await this.nextCode(),
       name: dto.name,
@@ -222,6 +258,7 @@ export class CircuitPackagesService {
       stops,
       ...(dto.pricing ? { pricing: this.pricingFromDto(dto.pricing) } : {}),
       rideTypes,
+      vehiclePricing,
       ...(dto.maxPassengers ? { maxPassengers: dto.maxPassengers } : {}),
       availability: this.availabilityFromDto(dto.availability),
       ...(dto.cancellationPolicy ? { cancellationPolicy: dto.cancellationPolicy } : {}),
@@ -283,13 +320,23 @@ export class CircuitPackagesService {
     }
     if (dto.pricing !== undefined) {
       const pricing = this.pricingFromDto(dto.pricing);
-      note("pricing", before.pricing ? pricingView(before.pricing) : undefined, pricingView(pricing), true);
+      note("pricing", before.pricing ? allowanceView(before.pricing) : undefined, allowanceView(pricing), true);
       set.pricing = pricing;
     }
+    const rideTypes = dto.rideTypes !== undefined ? await this.assertRideTypes(dto.rideTypes) : before.rideTypes;
     if (dto.rideTypes !== undefined) {
-      const rideTypes = await this.assertRideTypes(dto.rideTypes);
       note("rideTypes", before.rideTypes, rideTypes, true);
       set.rideTypes = rideTypes;
+    }
+    // Prices follow the allowed vehicles: sent prices must match them, and a
+    // vehicle that is no longer allowed loses its price.
+    if (dto.vehiclePricing !== undefined || dto.rideTypes !== undefined) {
+      const vehiclePricing =
+        dto.vehiclePricing !== undefined
+          ? this.vehiclePricingFromDto(dto.vehiclePricing, rideTypes)
+          : orderedVehiclePricing({ rideTypes, vehiclePricing: before.vehiclePricing });
+      note("vehiclePricing", orderedVehiclePricing(before), orderedVehiclePricing({ rideTypes, vehiclePricing }), true);
+      set.vehiclePricing = vehiclePricing;
     }
     if (dto.maxPassengers !== undefined) {
       note("maxPassengers", before.maxPassengers, dto.maxPassengers, true);
@@ -539,22 +586,62 @@ export class CircuitPackagesService {
     return pkg;
   }
 
-  /** The booking rules shared by estimate and booking: availability, vehicle and capacity. */
+  /**
+   * The booking rules shared by estimate and booking: availability, vehicle,
+   * its price and capacity. Returns the tariff for the chosen vehicle.
+   */
   async assertBookable(
     pkg: CircuitPackageDocument,
     rideType: { code: string; displayName: string; seatCapacity: number },
     passengers: number,
     now = new Date(),
-  ): Promise<void> {
+  ): Promise<CircuitPricingView> {
     const verdict = checkAvailability(pkg.availability as AvailabilityRule, now, this.timeZone);
     if (!verdict.open) throw apiBadRequest(verdict.message, "CIRCUIT_PACKAGE_UNAVAILABLE", { reason: verdict.reason });
     if (!pkg.rideTypes.includes(rideType.code))
       throw apiBadRequest(`${rideType.displayName} is not available for ${pkg.name}`, "CIRCUIT_VEHICLE_NOT_ALLOWED");
+    const tariff = tariffFor({ pricing: pkg.pricing, vehiclePricing: pkg.vehiclePricing ?? [] }, rideType.code);
+    if (!tariff || !pkg.pricing)
+      throw apiBadRequest(`${rideType.displayName} is not priced for ${pkg.name} yet`, "CIRCUIT_PACKAGE_UNAVAILABLE");
     const capacity = effectiveCapacity(pkg.maxPassengers, rideType.seatCapacity);
     if (passengers > capacity)
       throw apiBadRequest(`${rideType.displayName} can carry at most ${capacity} passengers on this circuit`, "CIRCUIT_PASSENGERS_EXCEEDED", {
         maxPassengers: capacity,
       });
+    return { ...allowanceView(pkg.pricing), basePrice: tariff.basePrice, extraDistanceRatePerKm: tariff.extraDistanceRatePerKm, extraDurationRatePerHour: tariff.extraDurationRatePerHour };
+  }
+
+  /**
+   * One-off upgrade of packages saved when a circuit had a single price: that
+   * price becomes every allowed vehicle's price, so nothing a customer is quoted
+   * changes. Idempotent (only rows still carrying `pricing.basePrice` match) and
+   * safe on every boot; the revision is left alone because the quote is the same.
+   */
+  async migrateLegacyPricing(): Promise<number> {
+    const legacy = await this.packages.collection
+      .find({ "pricing.basePrice": { $exists: true } }, { projection: { rideTypes: 1, pricing: 1, vehiclePricing: 1 } })
+      .toArray();
+    for (const row of legacy) {
+      const pricing = row.pricing as { basePrice: number; extraDistanceRatePerKm?: number; extraDurationRatePerHour?: number };
+      const existing = (row.vehiclePricing ?? []) as CircuitVehiclePrice[];
+      const vehiclePricing = ((row.rideTypes ?? []) as string[]).map(
+        (code) =>
+          existing.find((price) => price.rideType === code) ?? {
+            rideType: code,
+            basePrice: pricing.basePrice,
+            extraDistanceRatePerKm: pricing.extraDistanceRatePerKm ?? 0,
+            extraDurationRatePerHour: pricing.extraDurationRatePerHour ?? 0,
+          },
+      );
+      await this.packages.collection.updateOne(
+        { _id: row._id, "pricing.basePrice": { $exists: true } },
+        {
+          $set: { vehiclePricing },
+          $unset: { "pricing.basePrice": "", "pricing.extraDistanceRatePerKm": "", "pricing.extraDurationRatePerHour": "" },
+        },
+      );
+    }
+    return legacy.length;
   }
 
   /** Once any customer has booked it, a package can be archived but never deleted. */
@@ -610,12 +697,28 @@ export class CircuitPackagesService {
 
   private pricingFromDto(dto: NonNullable<CreateCircuitPackageDto["pricing"]>): NonNullable<CircuitPackage["pricing"]> {
     return {
-      basePrice: dto.basePrice,
       includedDistanceMeters: Math.round(dto.includedDistanceKm * 1000),
       includedDurationSeconds: Math.round(dto.includedDurationHours * 3600),
-      extraDistanceRatePerKm: dto.extraDistanceRatePerKm,
-      extraDurationRatePerHour: dto.extraDurationRatePerHour,
     };
+  }
+
+  /** One price per vehicle, only for allowed vehicles, stored in `rideTypes` order. */
+  private vehiclePricingFromDto(prices: CircuitVehiclePriceDto[], rideTypes: string[]): CircuitVehiclePrice[] {
+    const codes = prices.map((price) => price.rideType);
+    const twice = codes.filter((code, index) => codes.indexOf(code) !== index);
+    if (twice.length) throw apiBadRequest(`${twice[0]} is priced twice`, "CIRCUIT_PACKAGE_INVALID");
+    const notAllowed = codes.filter((code) => !rideTypes.includes(code));
+    if (notAllowed.length)
+      throw apiBadRequest(`${notAllowed.join(", ")} is priced but not an allowed vehicle`, "CIRCUIT_PACKAGE_INVALID");
+    return rideTypes
+      .map((code) => prices.find((price) => price.rideType === code))
+      .filter((price): price is CircuitVehiclePriceDto => !!price)
+      .map((price) => ({
+        rideType: price.rideType,
+        basePrice: price.basePrice,
+        extraDistanceRatePerKm: price.extraDistanceRatePerKm,
+        extraDurationRatePerHour: price.extraDurationRatePerHour,
+      }));
   }
 
   private availabilityFromDto(
@@ -653,8 +756,9 @@ export class CircuitPackagesService {
       city: pkg.city,
       status: pkg.status,
       stops: [...pkg.stops].sort((a, b) => a.order - b.order).map(stopView),
-      pricing: pkg.pricing ? pricingView(pkg.pricing) : undefined,
+      pricing: pkg.pricing ? allowanceView(pkg.pricing) : undefined,
       rideTypes: pkg.rideTypes,
+      vehiclePricing: orderedVehiclePricing(pkg),
       maxPassengers: pkg.maxPassengers,
       availability: availabilityView(pkg),
       cancellationPolicy: pkg.cancellationPolicy,
@@ -676,18 +780,22 @@ export class CircuitPackagesService {
     rideTypes: Map<string, { code: string; displayName: string; icon: string; seatCapacity: number; isActive: boolean }>,
     now: Date,
   ): CircuitPackageCustomerView | null {
-    if (!pkg.pricing) return null;
+    const { pricing } = pkg;
+    if (!pricing) return null;
     const verdict = checkAvailability(pkg.availability as AvailabilityRule, now, this.timeZone);
-    const vehicles = pkg.rideTypes
-      .map((code) => rideTypes.get(code))
-      .filter((type): type is NonNullable<typeof type> => !!type?.isActive)
-      .map((type) => ({
+    // Only active, priced vehicles are offered; cheapest first.
+    const vehicles: CircuitVehicleOption[] = orderedVehiclePricing(pkg)
+      .map((price) => ({ price, type: rideTypes.get(price.rideType) }))
+      .filter((entry): entry is { price: CircuitVehiclePriceView; type: NonNullable<typeof entry.type> } => !!entry.type?.isActive)
+      .map(({ price, type }) => ({
         rideType: type.code,
         displayName: type.displayName,
         icon: type.icon,
         seatCapacity: type.seatCapacity,
         maxPassengers: effectiveCapacity(pkg.maxPassengers, type.seatCapacity),
-      }));
+        pricing: tariffView(pricing, price),
+      }))
+      .sort((a, b) => a.pricing.basePrice - b.pricing.basePrice);
     if (vehicles.length === 0) return null;
     return {
       id: pkg._id.toString(),
@@ -696,7 +804,7 @@ export class CircuitPackagesService {
       description: pkg.description ?? "",
       city: pkg.city,
       stops: [...pkg.stops].sort((a, b) => a.order - b.order).map(stopView),
-      pricing: pricingView(pkg.pricing),
+      pricing: vehicles[0].pricing,
       vehicles,
       maxPassengers: Math.max(...vehicles.map((vehicle) => vehicle.maxPassengers)),
       availability: availabilityView(pkg),

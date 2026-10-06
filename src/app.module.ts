@@ -12,6 +12,8 @@ import type { Environment } from "./config/environment";
 import { DatabaseModule } from "./infrastructure/database/database.module";
 import { DomainEventsModule } from "./infrastructure/events/domain-events.module";
 import { RedisModule } from "./infrastructure/redis/redis.module";
+import { AccountDeletionModule } from "./modules/account-deletion/account-deletion.module";
+import { LegalModule } from "./modules/legal/legal.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { AuditModule } from "./modules/audit/audit.module";
 import { AuthModule } from "./modules/auth/auth.module";
@@ -167,6 +169,8 @@ const ENV_FILES: Record<string, string[]> = {
     PromotionsModule,
     CancellationsModule,
     ReportsModule,
+    AccountDeletionModule,
+    LegalModule,
     AdminModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: HttpThrottlerGuard }],

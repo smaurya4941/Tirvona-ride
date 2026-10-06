@@ -29,7 +29,7 @@ export class AccountStatusService {
 
     if (!isValidObjectId(userId)) return false;
     const user = await this.userModel.findById(userId).select("status").lean().exec();
-    const allowed = Boolean(user) && user!.status !== UserStatus.BLOCKED;
+    const allowed = Boolean(user) && user!.status !== UserStatus.BLOCKED && user!.status !== UserStatus.DELETED;
 
     if (this.cache.size >= CACHE_MAX_ENTRIES) this.cache.clear();
     this.cache.set(userId, { allowed, expiresAt: now + CACHE_TTL_MS });

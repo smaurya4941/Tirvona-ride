@@ -122,7 +122,7 @@ export interface UserLoggedOutEvent {
  */
 export interface UserSessionsRevokedEvent {
   userId: string;
-  reason: "PASSWORD_RESET" | "SIGN_OUT_EVERYWHERE";
+  reason: "PASSWORD_RESET" | "SIGN_OUT_EVERYWHERE" | "ACCOUNT_DELETED";
   exceptDeviceId?: string;
 }
 

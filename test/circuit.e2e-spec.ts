@@ -41,6 +41,9 @@ const STOP_COORDS = [
 ];
 const METERS_PER_DEGREE = 111_195;
 const HOUR = 3600;
+/** Each allowed vehicle has its own price on a circuit. */
+const AUTO_PRICE = { rideType: "AUTO", basePrice: 600, extraDistanceRatePerKm: 15, extraDurationRatePerHour: 50 };
+const BIKE_PRICE = { rideType: "BIKE", basePrice: 350, extraDistanceRatePerKm: 8, extraDurationRatePerHour: 30 };
 
 /** "HH:mm" in IST for an offset from now (wraps around midnight). */
 const istClock = (offsetMinutes: number): string => {
@@ -268,22 +271,45 @@ describe("Tirvona Circuit (e2e)", () => {
       expect(preview.warnings.join(" ")).toContain("lower than");
     });
 
-    it("configures pricing, vehicles and availability, then publishes", async () => {
-      const updated = (
+    it("configures vehicles, a price per vehicle and availability, then publishes", async () => {
+      // A price for a vehicle that is not allowed is refused outright.
+      await api()
+        .patch(admin(`/${packageId}`))
+        .set(as("admin"))
+        .send({ rideTypes: ["AUTO"], vehiclePricing: [AUTO_PRICE, BIKE_PRICE] })
+        .expect(400, /BIKE is priced but not an allowed vehicle/);
+      await api()
+        .patch(admin(`/${packageId}`))
+        .set(as("admin"))
+        .send({ rideTypes: ["AUTO"], vehiclePricing: [AUTO_PRICE, { ...AUTO_PRICE, basePrice: 1 }] })
+        .expect(400, /AUTO is priced twice/);
+
+      // A draft may miss a vehicle's price, but cannot be published like that.
+      const partial = (
         await api()
           .patch(admin(`/${packageId}`))
           .set(as("admin"))
           .send({
-            pricing: { basePrice: 600, includedDistanceKm: 30, includedDurationHours: 5, extraDistanceRatePerKm: 15, extraDurationRatePerHour: 50 },
+            pricing: { includedDistanceKm: 30, includedDurationHours: 5 },
             rideTypes: ["AUTO", "BIKE"],
+            vehiclePricing: [AUTO_PRICE],
             maxPassengers: 4,
             availability: { days: [0, 1, 2, 3, 4, 5, 6], opensAt: istClock(-180), closesAt: istClock(180) },
             cancellationPolicy: "Free cancellation before a driver is assigned.",
           })
           .expect(200)
       ).body.data;
-      expect(updated.revision).toBe(2);
-      expect(updated.pricing).toMatchObject({ basePrice: 600, includedDistanceMeters: 30_000, includedDurationSeconds: 18_000 });
+      expect(partial.revision).toBe(2);
+      expect(partial.pricing).toEqual({ includedDistanceKm: 30, includedDurationHours: 5, includedDistanceMeters: 30_000, includedDurationSeconds: 18_000 });
+      expect(partial.publishProblems.map((problem: { message: string }) => problem.message)).toEqual(["Set a price for BIKE"]);
+      await api().patch(admin(`/${packageId}/status`)).set(as("admin")).send({ status: "ACTIVE" }).expect(400, /Set a price for BIKE/);
+
+      // Sent in any order, stored in the allowed vehicles' order.
+      const updated = (
+        await api().patch(admin(`/${packageId}`)).set(as("admin")).send({ vehiclePricing: [BIKE_PRICE, AUTO_PRICE] }).expect(200)
+      ).body.data;
+      expect(updated.revision).toBe(3);
+      expect(updated.vehiclePricing).toEqual([AUTO_PRICE, BIKE_PRICE]);
       expect(updated.publishProblems).toEqual([]);
 
       const active = (await api().patch(admin(`/${packageId}/status`)).set(as("admin")).send({ status: "ACTIVE", reason: "Launch" }).expect(200)).body.data;
@@ -293,6 +319,55 @@ describe("Tirvona Circuit (e2e)", () => {
       await api().patch(admin(`/${packageId}`)).set(as("admin")).send({ rideTypes: [] }).expect(400, /CIRCUIT_PACKAGE_NOT_PUBLISHABLE/);
       // Illegal status moves are refused.
       await api().patch(admin(`/${packageId}/status`)).set(as("admin")).send({ status: "DRAFT" }).expect(409);
+    });
+
+    it("drops a vehicle's price with the vehicle, and a live package cannot gain an unpriced one", async () => {
+      const autoOnly = (await api().patch(admin(`/${packageId}`)).set(as("admin")).send({ rideTypes: ["AUTO"] }).expect(200)).body.data;
+      expect(autoOnly.vehiclePricing).toEqual([AUTO_PRICE]);
+      await api().patch(admin(`/${packageId}`)).set(as("admin")).send({ rideTypes: ["AUTO", "BIKE"] }).expect(400, /Set a price for BIKE/);
+      const restored = (
+        await api()
+          .patch(admin(`/${packageId}`))
+          .set(as("admin"))
+          .send({ rideTypes: ["AUTO", "BIKE"], vehiclePricing: [AUTO_PRICE, BIKE_PRICE] })
+          .expect(200)
+      ).body.data;
+      expect(restored.vehiclePricing).toEqual([AUTO_PRICE, BIKE_PRICE]);
+    });
+
+    it("moves packages saved with a single price onto every allowed vehicle", async () => {
+      const { CircuitPackage } = await import("../src/modules/circuit-packages/schemas/circuit-package.schema");
+      const { CircuitPackagesService } = await import("../src/modules/circuit-packages/circuit-packages.service");
+      const packages = app.get<Model<unknown>>(getModelToken(CircuitPackage.name), { strict: false });
+      const { insertedId } = await packages.collection.insertOne({
+        code: "CIR-900",
+        name: "Legacy circuit",
+        description: "",
+        city: "Vrindavan",
+        status: "INACTIVE",
+        stops: [],
+        pricing: { basePrice: 500, includedDistanceMeters: 20_000, includedDurationSeconds: 7200, extraDistanceRatePerKm: 12, extraDurationRatePerHour: 40 },
+        rideTypes: ["AUTO", "CAB"],
+        maxPassengers: 3,
+        availability: { days: [0, 1, 2, 3, 4, 5, 6], opensAt: "06:00", closesAt: "20:00" },
+        revision: 4,
+        hasBookings: false,
+      });
+      const service = app.get(CircuitPackagesService, { strict: false });
+      expect(await service.migrateLegacyPricing()).toBe(1);
+      expect(await service.migrateLegacyPricing()).toBe(0);
+
+      const migrated = (await api().get(admin(`/${insertedId.toString()}`)).set(as("admin")).expect(200)).body.data;
+      const legacyPrice = { basePrice: 500, extraDistanceRatePerKm: 12, extraDurationRatePerHour: 40 };
+      expect(migrated.vehiclePricing).toEqual([
+        { rideType: "AUTO", ...legacyPrice },
+        { rideType: "CAB", ...legacyPrice },
+      ]);
+      expect(migrated.pricing).toMatchObject({ includedDistanceMeters: 20_000, includedDurationSeconds: 7200 });
+      expect(migrated.revision).toBe(4);
+      const raw = (await packages.collection.findOne({ _id: insertedId })) as { pricing: Record<string, unknown> } | null;
+      expect(Object.keys(raw!.pricing).sort()).toEqual(["includedDistanceMeters", "includedDurationSeconds"]);
+      await packages.collection.deleteOne({ _id: insertedId });
     });
 
     it("accepts cover images up to 5 MB and refuses larger ones", async () => {
@@ -321,9 +396,16 @@ describe("Tirvona Circuit (e2e)", () => {
       const audit = (await api().get("/api/v1/admin/audit-logs").query({ targetType: "CIRCUIT_PACKAGE", targetId: packageId }).set(as("admin")).expect(200)).body.data;
       const actions = audit.items.map((row: { action: string }) => row.action);
       expect(actions).toEqual(expect.arrayContaining(["circuit_package.create", "circuit_package.update", "circuit_package.status"]));
-      const update = audit.items.find((row: { action: string }) => row.action === "circuit_package.update");
-      expect(update.metadata.changes.pricing.to).toMatchObject({ basePrice: 600 });
-      expect(update.metadata.changes.rideTypes).toEqual({ from: [], to: ["AUTO", "BIKE"] });
+      const updates = audit.items.filter((row: { action: string }) => row.action === "circuit_package.update");
+      const first = updates.find((row: { metadata: { changes: Record<string, unknown> } }) => row.metadata.changes.pricing);
+      expect(first.metadata.changes.pricing.to).toMatchObject({ includedDistanceMeters: 30_000 });
+      expect(first.metadata.changes.rideTypes).toEqual({ from: [], to: ["AUTO", "BIKE"] });
+      expect(first.metadata.changes.vehiclePricing).toEqual({ from: [], to: [AUTO_PRICE] });
+      const priced = updates.find(
+        (row: { metadata: { changes: { vehiclePricing?: { from: unknown[]; to: unknown[] } } } }) =>
+          row.metadata.changes.vehiclePricing?.from.length === 1 && row.metadata.changes.vehiclePricing.to.length === 2,
+      );
+      expect(priced.metadata.changes.vehiclePricing.to).toEqual([AUTO_PRICE, BIKE_PRICE]);
     });
   });
 
@@ -333,15 +415,25 @@ describe("Tirvona Circuit (e2e)", () => {
     it("lists the active package with its vehicles capped by real seat capacity", async () => {
       const [pkg] = (await api().get("/api/v1/circuit-packages").set(as("customer")).expect(200)).body.data;
       expect(pkg).toMatchObject({ id: packageId, name: "Vrindavan Spiritual Circuit", availableNow: true, maxPassengers: 3 });
+      // Cheapest first, each with its own price on the shared allowance.
+      expect(pkg.vehicles.map((vehicle: { rideType: string }) => vehicle.rideType)).toEqual(["BIKE", "AUTO"]);
       const auto = pkg.vehicles.find((vehicle: { rideType: string }) => vehicle.rideType === "AUTO");
-      expect(auto).toMatchObject({ seatCapacity: 3, maxPassengers: 3 });
+      expect(auto).toMatchObject({ seatCapacity: 3, maxPassengers: 3, pricing: { basePrice: 600, extraDistanceRatePerKm: 15, extraDurationRatePerHour: 50, includedDistanceMeters: 30_000 } });
+      const bike = pkg.vehicles.find((vehicle: { rideType: string }) => vehicle.rideType === "BIKE");
+      expect(bike.pricing).toMatchObject({ basePrice: 350, extraDistanceRatePerKm: 8, extraDurationRatePerHour: 30, includedDurationSeconds: 18_000 });
       expect(pkg.stops.map((stop: StopView) => stop.name)).toEqual(["Banke Bihari Temple", "Nidhivan", "Keshi Ghat"]);
-      expect(pkg.pricing).toMatchObject({ basePrice: 600, extraDistanceRatePerKm: 15, extraDurationRatePerHour: 50 });
+      // The package headline is the "from" price: the cheapest vehicle's.
+      expect(pkg.pricing).toMatchObject({ basePrice: 350, includedDistanceMeters: 30_000 });
     });
 
-    it("prices the circuit from the pickup on the server", async () => {
+    it("prices the circuit from the pickup on the server, with the chosen vehicle's price", async () => {
+      const bike = (await api().post(circuit("/estimate")).set(as("customer")).send(estimateBody({ rideType: "BIKE", passengers: 1 })).expect(200)).body.data;
+      expect(bike.fare).toMatchObject({ packagePrice: 350, estimatedTotal: 350 });
+      expect(bike.pricing).toMatchObject({ basePrice: 350, extraDistanceRatePerKm: 8, extraDurationRatePerHour: 30, includedDistanceMeters: 30_000 });
+
       const estimate = (await api().post(circuit("/estimate")).set(as("customer")).send(estimateBody()).expect(200)).body.data;
       expect(estimate.fare).toMatchObject({ packagePrice: 600, estimatedTotal: 600, isFinal: false, currency: "INR" });
+      expect(estimate.pricing).toMatchObject({ basePrice: 600, extraDistanceRatePerKm: 15, extraDurationRatePerHour: 50 });
       expect(estimate.route.legs).toHaveLength(3);
       expect(estimate.route.legs[0]).toMatchObject({ from: PICKUP.address, to: "Banke Bihari Temple" });
       expect(estimate.route.distanceMeters).toBeGreaterThan(estimate.route.pickupLeg.distanceMeters);
@@ -393,7 +485,7 @@ describe("Tirvona Circuit (e2e)", () => {
       await api()
         .patch(admin(`/${packageId}`))
         .set(as("admin"))
-        .send({ pricing: { basePrice: 650, includedDistanceKm: 30, includedDurationHours: 5, extraDistanceRatePerKm: 15, extraDurationRatePerHour: 50 }, reason: "Festival pricing" })
+        .send({ vehiclePricing: [{ ...AUTO_PRICE, basePrice: 650 }, BIKE_PRICE], reason: "Festival pricing" })
         .expect(200);
       const ride = (await api().get(circuit(`/${rideId}`)).set(as("customer")).expect(200)).body.data as CircuitRide;
       expect(ride.circuit.pricing.basePrice).toBe(600);

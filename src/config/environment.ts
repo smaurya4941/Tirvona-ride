@@ -107,6 +107,10 @@ export interface Environment {
   defaultCommissionPercent: number;
   earningsHoldHours: number;
   publicBaseUrl: string;
+  // Public legal pages (Play Store privacy policy / account deletion URLs)
+  legalEntityName: string;
+  supportEmail: string;
+  supportPhone: string;
   firebaseProjectId: string;
   firebaseClientEmail: string;
   firebasePrivateKey: string;
@@ -433,6 +437,10 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
   // ── Notifications, ratings, safety (Phase 5) ──────────────────────────
   // Where this API is reachable from the internet (share-ride links).
   publicBaseUrl: stripTrailingSlashes(env.PUBLIC_BASE_URL || "http://localhost:5100"),
+  // Shown on /api/v1/legal/* — the pages Google Play links to.
+  legalEntityName: (env.LEGAL_ENTITY_NAME || "Tirvona").trim(),
+  supportEmail: (env.SUPPORT_EMAIL || "").trim(),
+  supportPhone: (env.SUPPORT_PHONE || "").trim(),
   ...(() => {
     let account: FirebaseServiceAccount = { projectId: "", clientEmail: "", privateKey: "" };
     try {
@@ -944,10 +952,13 @@ export function validateEnvironment(
       "JWT_REFRESH_SECRET",
       ...(paymentsEnabled ? razorpayKeys : []),
       "PUBLIC_BASE_URL",
+      "SUPPORT_EMAIL",
     ]) {
       if (!isSet(input[name]))
         throw new Error(`${name} is required in production`);
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(input.SUPPORT_EMAIL).trim()))
+      throw new Error("SUPPORT_EMAIL must be an email address");
     if (isSet(input.RAZORPAY_WEBHOOK_SECRET) && String(input.RAZORPAY_WEBHOOK_SECRET).length < 12)
       throw new Error("RAZORPAY_WEBHOOK_SECRET must contain at least 12 characters");
     for (const name of ["JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET"]) {

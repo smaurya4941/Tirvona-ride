@@ -7,6 +7,8 @@ export enum UserStatus {
   ACTIVE = "ACTIVE",
   INACTIVE = "INACTIVE",
   BLOCKED = "BLOCKED",
+  /** The owner deleted the account: personal data erased, financial records kept (docs/account-deletion). */
+  DELETED = "DELETED",
 }
 
 @Schema({ timestamps: true, collection: "users" })
@@ -69,6 +71,10 @@ export class User {
 
   @Prop({ type: SchemaTypes.ObjectId, ref: "User" })
   statusChangedBy?: Types.ObjectId;
+
+  /** Set when the owner deleted the account (status DELETED). */
+  @Prop()
+  deletedAt?: Date;
 }
 
 export type UserDocument = HydratedDocument<User>;

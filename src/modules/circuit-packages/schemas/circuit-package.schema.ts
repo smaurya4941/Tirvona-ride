@@ -28,17 +28,29 @@ export class CircuitPackageStop {
 }
 const CircuitPackageStopSchema = SchemaFactory.createForClass(CircuitPackageStop);
 
+/**
+ * What the package includes, the same whichever vehicle is booked: the route
+ * decides how far and how long a circuit runs, the vehicle only what it costs.
+ */
 @Schema({ _id: false })
 export class CircuitPackagePricing {
-  /** What the customer pays for the included distance and time, rupees. */
-  @Prop({ required: true, min: 0 })
-  basePrice!: number;
-
   @Prop({ required: true, min: 0 })
   includedDistanceMeters!: number;
 
   @Prop({ required: true, min: 0 })
   includedDurationSeconds!: number;
+}
+const CircuitPackagePricingSchema = SchemaFactory.createForClass(CircuitPackagePricing);
+
+/** What one allowed vehicle costs on this circuit. Exactly one per ride type in `rideTypes` once published. */
+@Schema({ _id: false })
+export class CircuitVehiclePrice {
+  @Prop({ required: true, trim: true })
+  rideType!: string;
+
+  /** What the customer pays for the included distance and time, rupees. */
+  @Prop({ required: true, min: 0 })
+  basePrice!: number;
 
   /** Rupees per extra km, charged per started km. */
   @Prop({ required: true, min: 0 })
@@ -48,7 +60,7 @@ export class CircuitPackagePricing {
   @Prop({ required: true, min: 0 })
   extraDurationRatePerHour!: number;
 }
-const CircuitPackagePricingSchema = SchemaFactory.createForClass(CircuitPackagePricing);
+const CircuitVehiclePriceSchema = SchemaFactory.createForClass(CircuitVehiclePrice);
 
 @Schema({ _id: false })
 export class CircuitPackageAvailability {
@@ -140,6 +152,10 @@ export class CircuitPackage {
   /** Ride type codes (AUTO, E_RICKSHAW, CAB, …) the package can be booked with. */
   @Prop({ type: [String], default: [] })
   rideTypes!: string[];
+
+  /** Price per allowed vehicle. Entries only for codes in `rideTypes`; a draft may still miss some. */
+  @Prop({ type: [CircuitVehiclePriceSchema], default: [] })
+  vehiclePricing!: CircuitVehiclePrice[];
 
   @Prop({ required: true, min: 1, max: 8, default: 4 })
   maxPassengers!: number;

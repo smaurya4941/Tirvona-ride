@@ -1,4 +1,5 @@
-import { Module } from "@nestjs/common";
+import { Injectable, Logger, Module } from "@nestjs/common";
+import type { OnApplicationBootstrap } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 import { AuditModule } from "../audit/audit.module";
 import { LocationsModule } from "../locations/locations.module";
@@ -13,6 +14,19 @@ import {
   CircuitPackageCounterSchema,
   CircuitPackageSchema,
 } from "./schemas/circuit-package.schema";
+
+/** Moves packages saved with a single price onto per-vehicle prices (idempotent). */
+@Injectable()
+export class CircuitPackagesMigration implements OnApplicationBootstrap {
+  private readonly logger = new Logger(CircuitPackagesMigration.name);
+
+  constructor(private readonly packages: CircuitPackagesService) {}
+
+  async onApplicationBootstrap(): Promise<void> {
+    const migrated = await this.packages.migrateLegacyPricing();
+    if (migrated) this.logger.log(`Moved ${migrated} circuit package(s) onto per-vehicle pricing`);
+  }
+}
 
 /**
  * Circuit packages: what Admin sells. Depends only on leaf services (places,
@@ -31,7 +45,7 @@ import {
     AuditModule,
   ],
   controllers: [AdminCircuitPackagesController, CircuitPackagesController],
-  providers: [CircuitPackagesService],
+  providers: [CircuitPackagesService, CircuitPackagesMigration],
   exports: [CircuitPackagesService, MongooseModule],
 })
 export class CircuitPackagesModule {}

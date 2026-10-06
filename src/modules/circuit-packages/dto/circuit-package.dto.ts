@@ -43,13 +43,8 @@ export class CircuitStopInputDto {
   name?: string;
 }
 
+/** What the package includes; the same for every vehicle. Prices are per vehicle (`vehiclePricing`). */
 export class CircuitPricingDto {
-  @ApiProperty({ example: 600, description: "Package price, rupees" })
-  @IsNumber({ allowNaN: false, allowInfinity: false, maxDecimalPlaces: 2 })
-  @Min(0)
-  @Max(1_000_000)
-  basePrice!: number;
-
   @ApiProperty({ example: 30, description: "Included distance, km" })
   @IsNumber({ allowNaN: false, allowInfinity: false, maxDecimalPlaces: 1 })
   @Min(0)
@@ -61,6 +56,19 @@ export class CircuitPricingDto {
   @Min(0)
   @Max(72)
   includedDurationHours!: number;
+}
+
+/** What one allowed vehicle costs on this circuit. */
+export class CircuitVehiclePriceDto {
+  @ApiProperty({ example: "AUTO" })
+  @Matches(RIDE_TYPE_CODE_PATTERN, { message: "rideType must be a ride type code such as AUTO" })
+  rideType!: string;
+
+  @ApiProperty({ example: 600, description: "Package price for this vehicle, rupees" })
+  @IsNumber({ allowNaN: false, allowInfinity: false, maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(1_000_000)
+  basePrice!: number;
 
   @ApiProperty({ example: 15, description: "Rupees per extra km" })
   @IsNumber({ allowNaN: false, allowInfinity: false, maxDecimalPlaces: 2 })
@@ -165,6 +173,17 @@ export class CreateCircuitPackageDto {
   @ArrayUnique()
   @Matches(RIDE_TYPE_CODE_PATTERN, { each: true, message: "each ride type must be a ride type code such as AUTO" })
   rideTypes?: string[];
+
+  @ApiPropertyOptional({
+    type: [CircuitVehiclePriceDto],
+    description: "Price per allowed vehicle. Replaces all prices when sent; each ride type must be one of `rideTypes`.",
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => CircuitVehiclePriceDto)
+  vehiclePricing?: CircuitVehiclePriceDto[];
 
   @ApiPropertyOptional({ example: 4 })
   @IsOptional()

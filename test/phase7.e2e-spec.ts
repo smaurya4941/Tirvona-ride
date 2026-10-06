@@ -307,7 +307,7 @@ describe("Phase 7 — admin completion & hardening (e2e)", () => {
 
     it("exposes only the expected unauthenticated routes (health and share pages aside)", () => {
       const publicRoutes = routes
-        .filter((entry) => entry.isPublic && !/ \/health|\/shared-rides/.test(entry.route))
+        .filter((entry) => entry.isPublic && !/ \/health|\/shared-rides|\/legal/.test(entry.route))
         .map((entry) => entry.route)
         .sort();
       expect(publicRoutes).toEqual(EXPECTED_PUBLIC_ROUTES);

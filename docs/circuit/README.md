@@ -30,9 +30,38 @@ Admin configures packages. No client can set a status, a stop, a fare or a timer
 
 `DRAFT → ACTIVE ⇄ INACTIVE → ARCHIVED` (`DRAFT → ARCHIVED` too). Only ACTIVE packages are visible and bookable.
 Publishing (→ ACTIVE) runs every rule in `circuit-package.rules.ts#publishProblems` (name, ≥ 2 stops in order, each
-picked from the Places provider with a place id and coordinates, no duplicate place, price > 0, included distance and
-duration > 0, non-negative extra rates, valid ride types, passenger limit 1–8, a valid schedule). A live package can
-be edited only into another publishable state. A package that was ever booked (`hasBookings`) is archived, never
+picked from the Places provider with a place id and coordinates, no duplicate place, included distance and
+duration > 0, valid ride types, **a price for every allowed vehicle** (price > 0, non-negative extra rates, none for a
+vehicle that is not allowed), passenger limit 1–8, a valid schedule). A live package can be edited only into another
+publishable state.
+
+### Pricing per vehicle
+
+Each allowed vehicle has its own price; the allowance is shared, because the route decides how far and how long a
+circuit runs:
+
+| Field (package)                 | Scope                    | Meaning                                                    |
+| ------------------------------- | ------------------------ | ---------------------------------------------------------- |
+| `pricing.includedDistanceMeters` | every vehicle            | Included distance                                          |
+| `pricing.includedDurationSeconds` | every vehicle          | Included time                                              |
+| `vehiclePricing[].basePrice`    | one ride type            | Package price with that vehicle                            |
+| `vehiclePricing[].extraDistanceRatePerKm` | one ride type  | Per started extra km                                       |
+| `vehiclePricing[].extraDurationRatePerHour` | one ride type | Per started extra 15 min (÷ 4)                            |
+
+API: `PATCH /admin/circuit-packages/:id {pricing: {includedDistanceKm, includedDurationHours}, rideTypes, vehiclePricing:
+[{rideType, basePrice, extraDistanceRatePerKm, extraDurationRatePerHour}]}`. `vehiclePricing` replaces every price when
+sent; a duplicate ride type or one not in `rideTypes` is `400 CIRCUIT_PACKAGE_INVALID`. Removing a vehicle from
+`rideTypes` drops its price. A draft may leave a vehicle unpriced (the checklist says "Set a price for BIKE"); a live
+package cannot gain an unpriced vehicle. Price changes bump the revision and are audited as
+`changes.vehiclePricing {from, to}`.
+
+Customers get `vehicles[]` cheapest first, each with its full tariff in `vehicles[].pricing`; the package-level
+`pricing` is the cheapest vehicle's tariff (the "from" price on lists). The estimate and the booking snapshot
+(`ride.circuit.pricing`) use the chosen vehicle's tariff, so billing, warnings and receipts are unchanged.
+
+Migration: packages saved with one price (`pricing.basePrice`) are moved on boot by `CircuitPackagesMigration` —
+that price becomes every allowed vehicle's price and the old fields are removed. It is idempotent and leaves the
+revision alone (customers are quoted exactly what they were before). A package that was ever booked (`hasBookings`) is archived, never
 deleted; only an unused draft can be deleted.
 
 Stops are resolved by the server from the place id (`PlacesService.resolve`) — name, address and coordinates are
@@ -50,7 +79,7 @@ the shared Routes estimator and warns when the included distance is lower than t
 
 1. `POST /circuit-rides/estimate {packageId, rideType, pickup, passengers}` — validates package status,
    availability, vehicle, capacity, pickup within `CIRCUIT_MAX_PICKUP_DISTANCE_KM` of stop 1 and the service zone;
-   routes pickup → stop 1 → … → last stop; returns the package price, the rules for extras, and `estimatedTotal`
+   routes pickup → stop 1 → … → last stop; returns the chosen vehicle's package price, its rules for extras, and `estimatedTotal`
    (package + extras the planned route already implies). **Never the final fare.**
 2. `POST /circuit-rides` (same body + `Idempotency-Key` header or `idempotencyKey`) — re-quotes from scratch, then
    inserts the ride in `SEARCHING` with `kind: CIRCUIT` and the frozen snapshot: package code / revision, name, stops,
@@ -135,7 +164,7 @@ package name for circuits.
 ## Admin panel
 
 Sidebar **Circuits**: Circuit packages (list, six-step editor that saves as you go — the first Next creates the draft, every later step change saves only what changed, a live package asks for a reason before saving, the last step shows Publish (or Save changes) instead of Next, and leaving with unsaved edits is warned; basics, stops from the maps search with reorder /
-replace / remove and a map, route preview, pricing with a worked example, vehicles & passengers, availability; cover
+replace / remove and a map, route preview, vehicles & passengers, pricing (shared included distance / time, then one card per allowed vehicle with its price, extra rates, a worked example and "Copy to all vehicles"), availability; the package list shows each vehicle's price; cover
 image; publishing checklist; change history), Circuit bookings (filters: status, package, city, payment, dates,
 search), booking detail (route with stop states, map, usage bars, financials, people, merged status + stop timeline,
 resolve / end / cancel), Live circuits (map + list, 5 s refresh), Circuit reports (bookings, revenue split into
@@ -144,8 +173,9 @@ package). Driver detail has a "Circuit rides" eligibility toggle.
 
 ## Apps
 
-Customer: Home → **Ride Circuit** card → package list → package details (stops, price, extras explained, vehicles,
-schedule, cancellation policy) → booking (pickup, vehicle, passengers, server estimate, "Confirm & Book" with an
+Customer: Home → **Ride Circuit** card → package list ("from ₹…" when vehicles differ) → package details (stops, what
+is included, each vehicle with its own price and extra rates, schedule, cancellation policy) → booking (pickup, vehicle
+with its price, passengers, server estimate, "Confirm & Book" with an
 idempotency key) → the normal ride screen, which for a circuit shows the package, live time / distance gauges
 (ticking from the server's elapsed time), the stop timeline, the current stop on the map, warnings as snackbars, and
 an itemised final bill; then the normal payment and rating screens. History shows the package and its stops.

@@ -11,6 +11,7 @@ const productionInput = (): Record<string, unknown> => ({
   RAZORPAY_KEY_SECRET: "live-secret-value",
   RAZORPAY_WEBHOOK_SECRET: "webhook-secret-value",
   PUBLIC_BASE_URL: "https://ride-api.tirvona.com",
+  SUPPORT_EMAIL: "support@tirvona.com",
   WHATSAPP_PHONE_NUMBER_ID: "123456789012345",
   WHATSAPP_ACCESS_TOKEN: "EAAG-permanent-system-user-token",
   OTP_HASH_SECRET: "c".repeat(32),

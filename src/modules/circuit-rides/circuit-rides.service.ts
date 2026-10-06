@@ -236,8 +236,8 @@ export class CircuitRidesService {
   private async quote(dto: CircuitEstimateDto) {
     const pkg = await this.packages.findActive(dto.packageId);
     const rideType = await this.rideTypes.getBookable(dto.rideType);
-    await this.packages.assertBookable(pkg, rideType, dto.passengers);
-    if (!pkg.pricing) throw apiBadRequest("This circuit is not priced yet", "CIRCUIT_PACKAGE_UNAVAILABLE");
+    // Each vehicle has its own price on a circuit: the tariff is the chosen one's.
+    const tariff = await this.packages.assertBookable(pkg, rideType, dto.passengers);
     const stops = [...pkg.stops].sort((a, b) => a.order - b.order);
 
     if (haversineMeters(dto.pickup, stops[0]) > this.maxPickupDistanceMeters)
@@ -258,7 +258,7 @@ export class CircuitRidesService {
     const distanceMeters = routes.reduce((sum, route) => sum + route.distanceMeters, 0);
     const durationSeconds = routes.reduce((sum, route) => sum + route.durationSeconds, 0);
 
-    const projected = calculateCircuitFare(pkg.pricing, distanceMeters, durationSeconds);
+    const projected = calculateCircuitFare(tariff, distanceMeters, durationSeconds);
     const supply = await this.rides.pickupSupply(dto.pickup, rideType.vehicleType);
     const notices: string[] = [];
     if (projected.extraKm > 0)
@@ -293,15 +293,15 @@ export class CircuitRidesService {
         })),
       },
       pricing: {
-        basePrice: pkg.pricing.basePrice,
-        includedDistanceMeters: pkg.pricing.includedDistanceMeters,
-        includedDurationSeconds: pkg.pricing.includedDurationSeconds,
-        extraDistanceRatePerKm: pkg.pricing.extraDistanceRatePerKm,
-        extraDurationRatePerHour: pkg.pricing.extraDurationRatePerHour,
+        basePrice: tariff.basePrice,
+        includedDistanceMeters: tariff.includedDistanceMeters,
+        includedDurationSeconds: tariff.includedDurationSeconds,
+        extraDistanceRatePerKm: tariff.extraDistanceRatePerKm,
+        extraDurationRatePerHour: tariff.extraDurationRatePerHour,
       },
       fare: {
         currency: "INR",
-        packagePrice: pkg.pricing.basePrice,
+        packagePrice: tariff.basePrice,
         estimatedTotal: projected.total,
         expectedExtraDistanceCharge: projected.extraDistanceCharge,
         expectedExtraDurationCharge: projected.extraDurationCharge,
