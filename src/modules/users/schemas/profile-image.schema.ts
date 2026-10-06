@@ -3,9 +3,8 @@ import { SchemaTypes, Types } from "mongoose";
 import type { HydratedDocument } from "mongoose";
 
 /**
- * A user's profile photo, stored in MongoDB like the branding and popular
- * place images: no file storage to provision, and it moves with backups.
- * One per user; uploading replaces it. `users.profileImage` holds the
+ * A user's profile photo (metadata; the bytes are in file storage, see
+ * StorageService). One per user; uploading replaces it. `users.profileImage` holds the
  * versioned app path so clients refetch only when the photo changes.
  */
 @Schema({ collection: "profile_images", timestamps: true, versionKey: false })
@@ -16,9 +15,13 @@ export class ProfileImage {
   @Prop({ required: true })
   contentType!: string;
 
-  /** Never loaded unless asked for (`.select("+data")`). */
-  @Prop({ required: true, type: Buffer, select: false })
-  data!: Buffer;
+  /** StorageService reference to the photo (GridFS). Absent on rows from before GridFS. */
+  @Prop()
+  fileRef?: string;
+
+  /** Legacy: the bytes inline. Replaced by `fileRef` on the next upload or by the storage migration. */
+  @Prop({ type: Buffer, select: false })
+  data?: Buffer;
 
   @Prop({ required: true })
   bytes!: number;

@@ -34,20 +34,30 @@ export class RidePaymentStateService {
   ) {}
 
   /** The customer's own ride, or 404 (never confirms someone else's ride exists). */
-  async findForCustomer(customerUserId: string, rideId: string): Promise<RideDocument> {
+  async findForCustomer(
+    customerUserId: string,
+    rideId: string,
+  ): Promise<RideDocument> {
     const ride = await this.rideModel
-      .findOne({ _id: new Types.ObjectId(rideId), customerId: new Types.ObjectId(customerUserId) })
+      .findOne({
+        _id: new Types.ObjectId(rideId),
+        customerId: new Types.ObjectId(customerUserId),
+      })
       .exec();
     if (!ride) throw rideNotFound();
     return ride;
   }
 
-  async findById(rideId: Types.ObjectId | string): Promise<RideDocument | null> {
+  async findById(
+    rideId: Types.ObjectId | string,
+  ): Promise<RideDocument | null> {
     return this.rideModel.findById(rideId).exec();
   }
 
   async findManyByIds(rideIds: Types.ObjectId[]): Promise<RideDocument[]> {
-    return rideIds.length ? this.rideModel.find({ _id: { $in: rideIds } }).exec() : [];
+    return rideIds.length
+      ? this.rideModel.find({ _id: { $in: rideIds } }).exec()
+      : [];
   }
 
   /** Rides matching a ride code prefix or an exact id (admin search). */
@@ -83,7 +93,15 @@ export class RidePaymentStateService {
             },
           },
         },
-        { $group: { _id: null, rides: { $sum: 1 }, amount: { $sum: { $ifNull: ["$fare.payableFare", "$fare.finalFare"] } } } },
+        {
+          $group: {
+            _id: null,
+            rides: { $sum: 1 },
+            amount: {
+              $sum: { $ifNull: ["$fare.payableFare", "$fare.finalFare"] },
+            },
+          },
+        },
       ])
       .exec();
     return { rides: row?.rides ?? 0, amount: row?.amount ?? 0 };
@@ -97,14 +115,17 @@ export class RidePaymentStateService {
   async apply(change: RidePaymentChange): Promise<RideDocument | null> {
     const from = new Set(change.from);
     // Rides completed before Phase 4 still hold the schema default.
-    if (from.has(RidePaymentStatus.PENDING)) from.add(RidePaymentStatus.NOT_REQUIRED);
+    if (from.has(RidePaymentStatus.PENDING))
+      from.add(RidePaymentStatus.NOT_REQUIRED);
 
     const set: Record<string, unknown> = { paymentStatus: change.to };
     for (const [key, value] of Object.entries(change.payment ?? {}))
       if (value !== undefined) set[`payment.${key}`] = value;
     const update: UpdateQuery<Ride> = { $set: set, $inc: { stateVersion: 1 } };
     if (change.clear?.length)
-      update.$unset = Object.fromEntries(change.clear.map((key) => [`payment.${key}`, 1]));
+      update.$unset = Object.fromEntries(
+        change.clear.map((key) => [`payment.${key}`, 1]),
+      );
 
     const filter: QueryFilter<Ride> = {
       _id: change.rideId,
@@ -112,9 +133,17 @@ export class RidePaymentStateService {
       paymentStatus: { $in: [...from] },
     };
     const ride = await this.rideModel
-      .findOneAndUpdate(filter, update, { returnDocument: "after", runValidators: true })
+      .findOneAndUpdate(filter, update, {
+        returnDocument: "after",
+        runValidators: true,
+      })
       .exec();
-    if (ride) this.events.paymentUpdated(ride._id, { paymentStatus: ride.paymentStatus }, ride);
+    if (ride)
+      this.events.paymentUpdated(
+        ride._id,
+        { paymentStatus: ride.paymentStatus },
+        ride,
+      );
     return ride;
   }
 }

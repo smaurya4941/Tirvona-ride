@@ -1,6 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
-import { IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import {
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from "class-validator";
 
 export class CreateRatingDto {
   @ApiProperty({ minimum: 1, maximum: 5, description: "Whole stars" })
@@ -12,12 +20,15 @@ export class CreateRatingDto {
   @ApiPropertyOptional({ maxLength: 500 })
   @IsOptional()
   @IsString()
-  @Transform(({ value }) => (typeof value === "string" ? value.trim() || undefined : value))
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.trim() || undefined : value,
+  )
   @MaxLength(500)
   comment?: string;
 }
 
-const toBoolean = ({ value }: { value: unknown }) => (value === "true" ? true : value === "false" ? false : value);
+const toBoolean = ({ value }: { value: unknown }) =>
+  value === "true" ? true : value === "false" ? false : value;
 
 /** GET /drivers/me/ratings/reviews — newest first, cursor-paginated. */
 export class DriverReviewsQueryDto {
@@ -35,7 +46,11 @@ export class DriverReviewsQueryDto {
   @Max(50)
   limit = 20;
 
-  @ApiPropertyOptional({ minimum: 1, maximum: 5, description: "Only ratings with this many stars" })
+  @ApiPropertyOptional({
+    minimum: 1,
+    maximum: 5,
+    description: "Only ratings with this many stars",
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
@@ -43,7 +58,9 @@ export class DriverReviewsQueryDto {
   @Max(5)
   stars?: number;
 
-  @ApiPropertyOptional({ description: "Only ratings that came with a written comment" })
+  @ApiPropertyOptional({
+    description: "Only ratings that came with a written comment",
+  })
   @IsOptional()
   @Transform(toBoolean)
   @IsBoolean()

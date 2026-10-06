@@ -84,7 +84,9 @@ export abstract class WhatsAppGateway {
    * Sends the signup authentication template. Resolves only once Meta has
    * accepted the message; otherwise throws [WhatsAppDeliveryError].
    */
-  abstract sendAuthenticationCode(message: AuthenticationCodeMessage): Promise<WhatsAppSendResult>;
+  abstract sendAuthenticationCode(
+    message: AuthenticationCodeMessage,
+  ): Promise<WhatsAppSendResult>;
 
   /**
    * Sends an SOS template (location pin + live-tracking button) to an
@@ -92,6 +94,9 @@ export abstract class WhatsAppGateway {
    * the SOS record shows the contact was not reached.
    */
   async sendSosAlert(_message: SosAlertMessage): Promise<WhatsAppSendResult> {
-    throw new WhatsAppDeliveryError("MISCONFIGURED", `The ${this.provider} WhatsApp gateway cannot send SOS alerts`);
+    throw new WhatsAppDeliveryError(
+      "MISCONFIGURED",
+      `The ${this.provider} WhatsApp gateway cannot send SOS alerts`,
+    );
   }
 }

@@ -18,22 +18,52 @@ import { AdjustmentStatus, AdjustmentType } from "../interfaces/earning-status";
  */
 @Schema({ timestamps: true, collection: "driver_earning_adjustments" })
 export class DriverEarningAdjustment {
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "DriverProfile", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "DriverProfile",
+    immutable: true,
+  })
   driverId!: Types.ObjectId;
 
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "User", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "User",
+    immutable: true,
+  })
   driverUserId!: Types.ObjectId;
 
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "DriverEarning", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "DriverEarning",
+    immutable: true,
+  })
   earningId!: Types.ObjectId;
 
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "Ride", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "Ride",
+    immutable: true,
+  })
   rideId!: Types.ObjectId;
 
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "Payment", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "Payment",
+    immutable: true,
+  })
   paymentId!: Types.ObjectId;
 
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "PaymentRefund", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "PaymentRefund",
+    immutable: true,
+  })
   refundId!: Types.ObjectId;
 
   @Prop({ required: true, immutable: true })
@@ -70,7 +100,11 @@ export class DriverEarningAdjustment {
   commissionRate!: number;
 
   // ── Recovery lifecycle ────────────────────────────────────────────────
-  @Prop({ required: true, enum: AdjustmentStatus, default: AdjustmentStatus.OUTSTANDING })
+  @Prop({
+    required: true,
+    enum: AdjustmentStatus,
+    default: AdjustmentStatus.OUTSTANDING,
+  })
   status!: AdjustmentStatus;
 
   @Prop({ type: SchemaTypes.ObjectId, ref: "DriverPayout" })
@@ -86,10 +120,16 @@ export class DriverEarningAdjustment {
   waiverNote?: string;
 }
 
-export type DriverEarningAdjustmentDocument = HydratedDocument<DriverEarningAdjustment>;
-export const DriverEarningAdjustmentSchema = SchemaFactory.createForClass(DriverEarningAdjustment);
+export type DriverEarningAdjustmentDocument =
+  HydratedDocument<DriverEarningAdjustment>;
+export const DriverEarningAdjustmentSchema = SchemaFactory.createForClass(
+  DriverEarningAdjustment,
+);
 
-DriverEarningAdjustmentSchema.index({ refundId: 1 }, { unique: true, name: "uniq_adjustment_per_refund" });
+DriverEarningAdjustmentSchema.index(
+  { refundId: 1 },
+  { unique: true, name: "uniq_adjustment_per_refund" },
+);
 DriverEarningAdjustmentSchema.index({ driverId: 1, status: 1, createdAt: 1 });
 DriverEarningAdjustmentSchema.index({ earningId: 1 });
 DriverEarningAdjustmentSchema.index({ payoutId: 1 }, { sparse: true });

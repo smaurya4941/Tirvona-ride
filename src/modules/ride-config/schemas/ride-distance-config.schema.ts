@@ -37,6 +37,7 @@ export class RideDistanceConfig {
 }
 
 export type RideDistanceConfigDocument = HydratedDocument<RideDistanceConfig>;
-export const RideDistanceConfigSchema = SchemaFactory.createForClass(RideDistanceConfig);
+export const RideDistanceConfigSchema =
+  SchemaFactory.createForClass(RideDistanceConfig);
 
 RideDistanceConfigSchema.index({ rideType: 1 }, { unique: true });

@@ -4,7 +4,11 @@ import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import type { Response } from "express";
 import { Public } from "../../common/decorators/public.decorator";
-import { renderDeleteAccount, renderPrivacyPolicy, renderTerms } from "./legal-pages";
+import {
+  renderDeleteAccount,
+  renderPrivacyPolicy,
+  renderTerms,
+} from "./legal-pages";
 import type { LegalContext } from "./legal-pages";
 
 /**

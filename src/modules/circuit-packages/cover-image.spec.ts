@@ -1,6 +1,11 @@
 import { CIRCUIT_COVER_RULE, coverProblem } from "./cover-image";
 
-const png = (width: number, height: number) => ({ format: "png" as const, contentType: "image/png" as const, width, height });
+const png = (width: number, height: number) => ({
+  format: "png" as const,
+  contentType: "image/png" as const,
+  width,
+  height,
+});
 const MB = 1024 * 1024;
 
 describe("circuit cover rule", () => {

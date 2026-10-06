@@ -1,4 +1,11 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -38,7 +45,9 @@ export class PromotionsController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: "Live offers the app may list (codes flagged 'show in app')" })
+  @ApiOperation({
+    summary: "Live offers the app may list (codes flagged 'show in app')",
+  })
   async offers(): Promise<ApiSuccessBody<CustomerPromoView[]>> {
     return ok(await this.promotions.listForCustomers());
   }
@@ -47,7 +56,8 @@ export class PromotionsController {
   @HttpCode(HttpStatus.OK)
   @ThrottlePolicy("promo")
   @ApiOperation({
-    summary: "Check a code before a trip is chosen (active, in date, uses left). The fare-based checks run at validate.",
+    summary:
+      "Check a code before a trip is chosen (active, in date, uses left). The fare-based checks run at validate.",
   })
   async check(
     @CurrentUser() user: AuthenticatedUser,
@@ -60,16 +70,30 @@ export class PromotionsController {
   @HttpCode(HttpStatus.OK)
   @ThrottlePolicy("promo")
   @ApiOperation({
-    summary: "Check a promo code for a trip. The server prices the trip; nothing is reserved until booking.",
+    summary:
+      "Check a promo code for a trip. The server prices the trip; nothing is reserved until booking.",
   })
   async validate(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: ValidatePromoDto,
   ): Promise<ApiSuccessBody<PromoQuote>> {
     const rideType = await this.rideTypes.getBookable(dto.rideType);
-    const { route } = await this.tripPolicy.estimateTrip(rideType.code, dto.pickup, dto.destination);
-    const fare = await this.pricing.priceTrip(rideType.code, route.distanceMeters, route.durationSeconds);
-    const { promo, result } = await this.promotions.evaluate(user.userId, dto.code, rideType.code, fare.total);
+    const { route } = await this.tripPolicy.estimateTrip(
+      rideType.code,
+      dto.pickup,
+      dto.destination,
+    );
+    const fare = await this.pricing.priceTrip(
+      rideType.code,
+      route.distanceMeters,
+      route.durationSeconds,
+    );
+    const { promo, result } = await this.promotions.evaluate(
+      user.userId,
+      dto.code,
+      rideType.code,
+      fare.total,
+    );
     if (!result.ok || !promo) throw this.promotions.rejection(result);
     return ok({
       code: promo.code,

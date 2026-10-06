@@ -1,9 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
-import { IsBoolean, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from "class-validator";
+import {
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from "class-validator";
 import { E164_PATTERN, normalizePhone } from "../phone";
 
-const trim = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value);
+const trim = ({ value }: { value: unknown }) =>
+  typeof value === "string" ? value.trim() : value;
 
 export class CreateEmergencyContactDto {
   @ApiProperty({ example: "Papa" })
@@ -13,15 +21,22 @@ export class CreateEmergencyContactDto {
   @MaxLength(80)
   name!: string;
 
-  @ApiProperty({ example: "+919876543210", description: "E.164; a 10-digit Indian mobile is accepted" })
+  @ApiProperty({
+    example: "+919876543210",
+    description: "E.164; a 10-digit Indian mobile is accepted",
+  })
   @Transform(({ value }) => normalizePhone(value))
   @IsString()
-  @Matches(E164_PATTERN, { message: "phone must be a valid mobile number, e.g. +919876543210" })
+  @Matches(E164_PATTERN, {
+    message: "phone must be a valid mobile number, e.g. +919876543210",
+  })
   phone!: string;
 
   @ApiPropertyOptional({ example: "Father" })
   @IsOptional()
-  @Transform(({ value }) => (typeof value === "string" ? value.trim() || undefined : value))
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.trim() || undefined : value,
+  )
   @IsString()
   @MaxLength(40)
   relationship?: string;
@@ -45,7 +60,9 @@ export class UpdateEmergencyContactDto {
   @IsOptional()
   @Transform(({ value }) => normalizePhone(value))
   @IsString()
-  @Matches(E164_PATTERN, { message: "phone must be a valid mobile number, e.g. +919876543210" })
+  @Matches(E164_PATTERN, {
+    message: "phone must be a valid mobile number, e.g. +919876543210",
+  })
   phone?: string;
 
   /** Empty string clears it. */

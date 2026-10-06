@@ -54,11 +54,19 @@ export function encodePolyline(points: readonly GeoCoordinates[]): string {
  * fallback) contributes its two end points, so the joined line is always
  * continuous. Returns undefined when no leg has a road path at all.
  */
-export function joinLegs(legs: ReadonlyArray<{ from: GeoCoordinates; to: GeoCoordinates; polyline?: string }>): string | undefined {
+export function joinLegs(
+  legs: ReadonlyArray<{
+    from: GeoCoordinates;
+    to: GeoCoordinates;
+    polyline?: string;
+  }>,
+): string | undefined {
   if (!legs.some((leg) => leg.polyline)) return undefined;
   const points: GeoCoordinates[] = [];
   for (const leg of legs) {
-    const path = leg.polyline ? decodePolyline(leg.polyline) : [leg.from, leg.to];
+    const path = leg.polyline
+      ? decodePolyline(leg.polyline)
+      : [leg.from, leg.to];
     points.push(...(points.length ? path.slice(1) : path));
   }
   return encodePolyline(points);

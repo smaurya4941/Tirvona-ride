@@ -25,7 +25,10 @@ export interface RouteEstimate {
  * and pricing only ever depend on this interface.
  */
 export interface RouteEstimator {
-  estimate(origin: GeoCoordinates, destination: GeoCoordinates): Promise<RouteEstimate>;
+  estimate(
+    origin: GeoCoordinates,
+    destination: GeoCoordinates,
+  ): Promise<RouteEstimate>;
 }
 
 export const ROUTE_ESTIMATOR = Symbol("ROUTE_ESTIMATOR");

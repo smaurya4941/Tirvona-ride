@@ -3,7 +3,11 @@ import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
 import { Types } from "mongoose";
-import { ApiException, apiBadRequest, apiForbidden } from "../../common/exceptions/api.exception";
+import {
+  ApiException,
+  apiBadRequest,
+  apiForbidden,
+} from "../../common/exceptions/api.exception";
 import { startOfDayInTimeZone } from "../../common/utils/time";
 import { DriverProfile } from "../drivers/schemas/driver-profile.schema";
 import { EarningsService } from "../earnings/earnings.service";
@@ -20,7 +24,11 @@ import { Vehicle } from "../vehicles/schemas/vehicle.schema";
 import type { VehicleDocument } from "../vehicles/schemas/vehicle.schema";
 import type { UpdateAvailabilityDto } from "./dto/driver-duty.dto";
 import { RideDispatchService } from "./ride-dispatch.service";
-import { DRIVER_ENGAGED_STATUSES, RideActorType, RideStatus } from "./ride-state-machine";
+import {
+  DRIVER_ENGAGED_STATUSES,
+  RideActorType,
+  RideStatus,
+} from "./ride-state-machine";
 import { RideViewService } from "./ride-view.service";
 import type { DriverRideView } from "./ride-view.service";
 import { RidesService } from "./rides.service";
@@ -35,7 +43,13 @@ export interface DriverDutyStatus {
    * (DRIVER_LOCATION_STALE_SECONDS). Online + available + fresh = matchable.
    */
   locationFresh: boolean;
-  vehicle?: { id: string; vehicleType: string; registrationNumber: string; make?: string; model?: string };
+  vehicle?: {
+    id: string;
+    vehicleType: string;
+    registrationNumber: string;
+    make?: string;
+    model?: string;
+  };
   currentRideId?: string;
   wentOnlineAt?: Date;
 }
@@ -67,7 +81,8 @@ export class DriverAvailabilityService {
   private readonly timeZone: string;
 
   constructor(
-    @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
+    @InjectModel(DriverProfile.name)
+    private readonly driverModel: Model<DriverProfile>,
     @InjectModel(Vehicle.name) private readonly vehicleModel: Model<Vehicle>,
     @InjectModel(Ride.name) private readonly rideModel: Model<Ride>,
     private readonly rides: RidesService,
@@ -82,18 +97,28 @@ export class DriverAvailabilityService {
     this.timeZone = config.getOrThrow<string>("appTimeZone");
   }
 
-  async setAvailability(driverUserId: string, dto: UpdateAvailabilityDto): Promise<DriverDutyStatus> {
+  async setAvailability(
+    driverUserId: string,
+    dto: UpdateAvailabilityDto,
+  ): Promise<DriverDutyStatus> {
     const driver = await this.rides.resolveDriver(driverUserId);
-    return dto.isOnline ? this.goOnline(driverUserId, driver, dto) : this.goOffline(driverUserId, driver);
+    return dto.isOnline
+      ? this.goOnline(driverUserId, driver, dto)
+      : this.goOffline(driverUserId, driver);
   }
 
   /**
    * REST fallback for `driver.location` (socket unavailable). Same pipeline:
    * validated, relayed to the ride room, persisted only when due.
    */
-  async updateLocation(driverUserId: string, dto: DriverLocationFixDto): Promise<DriverDutyStatus> {
+  async updateLocation(
+    driverUserId: string,
+    dto: DriverLocationFixDto,
+  ): Promise<DriverDutyStatus> {
     const driver = await this.rides.resolveDriver(driverUserId);
-    const result = await this.relay.handle(driver._id.toString(), dto, { enforceRateLimit: false });
+    const result = await this.relay.handle(driver._id.toString(), dto, {
+      enforceRateLimit: false,
+    });
     if (!result.accepted) throw this.locationRejected(result.reason);
     const updated = await this.driverModel.findById(driver._id).exec();
     return this.toStatus(updated ?? driver);
@@ -103,28 +128,43 @@ export class DriverAvailabilityService {
     const driver = await this.rides.resolveDriver(driverUserId);
     const since = startOfDayInTimeZone(new Date(), this.timeZone);
 
-    const [today, currentRide, pendingRequests, vehicle, earnedToday] = await Promise.all([
-      this.rideModel
-        .aggregate<{ count: number; gross: number }>([
-          {
-            $match: {
-              driverId: driver._id,
-              status: RideStatus.COMPLETED,
-              completedAt: { $gte: since },
+    const [today, currentRide, pendingRequests, vehicle, earnedToday] =
+      await Promise.all([
+        this.rideModel
+          .aggregate<{ count: number; gross: number }>([
+            {
+              $match: {
+                driverId: driver._id,
+                status: RideStatus.COMPLETED,
+                completedAt: { $gte: since },
+              },
             },
-          },
-          { $group: { _id: null, count: { $sum: 1 }, gross: { $sum: "$fare.finalFare" } } },
-        ])
-        .exec(),
-      this.rideModel
-        .findOne({ driverId: driver._id, status: { $in: DRIVER_ENGAGED_STATUSES } })
-        .exec(),
-      this.rideModel
-        .countDocuments({ driverId: driver._id, status: RideStatus.DRIVER_ASSIGNED })
-        .exec(),
-      driver.activeVehicleId ? this.vehicleModel.findById(driver.activeVehicleId).exec() : null,
-      this.earnings.todayFor(driver._id),
-    ]);
+            {
+              $group: {
+                _id: null,
+                count: { $sum: 1 },
+                gross: { $sum: "$fare.finalFare" },
+              },
+            },
+          ])
+          .exec(),
+        this.rideModel
+          .findOne({
+            driverId: driver._id,
+            status: { $in: DRIVER_ENGAGED_STATUSES },
+          })
+          .exec(),
+        this.rideModel
+          .countDocuments({
+            driverId: driver._id,
+            status: RideStatus.DRIVER_ASSIGNED,
+          })
+          .exec(),
+        driver.activeVehicleId
+          ? this.vehicleModel.findById(driver.activeVehicleId).exec()
+          : null,
+        this.earnings.todayFor(driver._id),
+      ]);
 
     return {
       ...(await this.toStatus(driver, vehicle)),
@@ -139,7 +179,9 @@ export class DriverAvailabilityService {
         paidRides: earnedToday.rides,
         currency: "INR",
       },
-      currentRide: currentRide ? await this.views.forDriver(currentRide, driver) : null,
+      currentRide: currentRide
+        ? await this.views.forDriver(currentRide, driver)
+        : null,
       pendingRequests,
     };
   }
@@ -154,10 +196,14 @@ export class DriverAvailabilityService {
       throw apiForbidden("This account cannot go online", "USER_BLOCKED");
 
     const vehicle = await this.pickVehicle(driver, dto.vehicleId);
-    const hasNewLocation = dto.latitude !== undefined && dto.longitude !== undefined;
+    const hasNewLocation =
+      dto.latitude !== undefined && dto.longitude !== undefined;
     // Online without a usable position would be "online but never matched".
     if (!hasNewLocation && !this.isFresh(driver.locationUpdatedAt))
-      throw apiBadRequest("Share your current location to go online", "DRIVER_LOCATION_REQUIRED");
+      throw apiBadRequest(
+        "Share your current location to go online",
+        "DRIVER_LOCATION_REQUIRED",
+      );
 
     const now = new Date();
     const updated = await this.driverModel
@@ -171,10 +217,16 @@ export class DriverAvailabilityService {
             activeVehicleId: vehicle._id,
             activeVehicleType: vehicle.vehicleType,
             lastSeenAt: now,
-            wentOnlineAt: driver.isOnline && driver.wentOnlineAt ? driver.wentOnlineAt : now,
+            wentOnlineAt:
+              driver.isOnline && driver.wentOnlineAt
+                ? driver.wentOnlineAt
+                : now,
             ...(hasNewLocation
               ? {
-                  currentLocation: toGeoJsonPoint({ latitude: dto.latitude!, longitude: dto.longitude! }),
+                  currentLocation: toGeoJsonPoint({
+                    latitude: dto.latitude!,
+                    longitude: dto.longitude!,
+                  }),
                   locationUpdatedAt: now,
                 }
               : {}),
@@ -184,13 +236,19 @@ export class DriverAvailabilityService {
       )
       .exec();
     if (hasNewLocation)
-      this.locations.remember(driver._id.toString(), { latitude: dto.latitude!, longitude: dto.longitude! });
+      this.locations.remember(driver._id.toString(), {
+        latitude: dto.latitude!,
+        longitude: dto.longitude!,
+      });
     // A newly available driver may be exactly who a waiting customer needs.
     if (updated?.isAvailable) this.dispatch.kick();
     return this.toStatus(updated ?? driver, vehicle);
   }
 
-  private async goOffline(driverUserId: string, driver: DriverProfileDocument): Promise<DriverDutyStatus> {
+  private async goOffline(
+    driverUserId: string,
+    driver: DriverProfileDocument,
+  ): Promise<DriverDutyStatus> {
     if (driver.currentRideId) {
       const ride = await this.rideModel.findById(driver.currentRideId).exec();
       if (ride && DRIVER_ENGAGED_STATUSES.includes(ride.status))
@@ -202,24 +260,41 @@ export class DriverAvailabilityService {
         );
       if (ride?.status === RideStatus.DRIVER_ASSIGNED)
         // An unanswered request goes straight to the next driver.
-        await this.dispatch.endAssignment(ride._id, driver._id, "DRIVER_OFFLINE", {
-          type: RideActorType.DRIVER,
-          userId: new Types.ObjectId(driverUserId),
-        });
+        await this.dispatch.endAssignment(
+          ride._id,
+          driver._id,
+          "DRIVER_OFFLINE",
+          {
+            type: RideActorType.DRIVER,
+            userId: new Types.ObjectId(driverUserId),
+          },
+        );
     }
 
     const updated = await this.driverModel
       .findByIdAndUpdate(
         driver._id,
-        { $set: { isOnline: false, isAvailable: false }, $unset: { wentOnlineAt: 1 } },
+        {
+          $set: { isOnline: false, isAvailable: false },
+          $unset: { wentOnlineAt: 1 },
+        },
         { returnDocument: "after" },
       )
       .exec();
     // Heal a pointer to a ride that has already finished (defensive; normal
     // flows always release through MatchingService).
-    if (updated?.currentRideId && !(await this.rideModel.exists({ _id: updated.currentRideId, isActive: true }))) {
+    if (
+      updated?.currentRideId &&
+      !(await this.rideModel.exists({
+        _id: updated.currentRideId,
+        isActive: true,
+      }))
+    ) {
       await this.driverModel
-        .updateOne({ _id: driver._id, currentRideId: updated.currentRideId }, { $unset: { currentRideId: 1 } })
+        .updateOne(
+          { _id: driver._id, currentRideId: updated.currentRideId },
+          { $unset: { currentRideId: 1 } },
+        )
         .exec();
       updated.currentRideId = undefined;
     }
@@ -228,51 +303,92 @@ export class DriverAvailabilityService {
   }
 
   private isFresh(updatedAt?: Date): boolean {
-    return updatedAt !== undefined && Date.now() - updatedAt.getTime() <= this.locations.freshnessWindowMs;
+    return (
+      updatedAt !== undefined &&
+      Date.now() - updatedAt.getTime() <= this.locations.freshnessWindowMs
+    );
   }
 
   private locationRejected(reason: LocationRejection): ApiException {
     switch (reason) {
       case "DRIVER_OFFLINE":
-        return new ApiException(HttpStatus.CONFLICT, "Go online to share your location", "DRIVER_OFFLINE");
+        return new ApiException(
+          HttpStatus.CONFLICT,
+          "Go online to share your location",
+          "DRIVER_OFFLINE",
+        );
       case "RIDE_MISMATCH":
-        return new ApiException(HttpStatus.CONFLICT, "That ride is not assigned to you", "RIDE_STATE_CONFLICT");
+        return new ApiException(
+          HttpStatus.CONFLICT,
+          "That ride is not assigned to you",
+          "RIDE_STATE_CONFLICT",
+        );
       case "DRIVER_NOT_APPROVED":
-        return new ApiException(HttpStatus.FORBIDDEN, "Your driver account is not approved", "DRIVER_NOT_APPROVED");
+        return new ApiException(
+          HttpStatus.FORBIDDEN,
+          "Your driver account is not approved",
+          "DRIVER_NOT_APPROVED",
+        );
       case "DRIVER_NOT_FOUND":
-        return new ApiException(HttpStatus.NOT_FOUND, "Driver profile not found", "DRIVER_NOT_FOUND");
+        return new ApiException(
+          HttpStatus.NOT_FOUND,
+          "Driver profile not found",
+          "DRIVER_NOT_FOUND",
+        );
       default:
         return new ApiException(
           HttpStatus.UNPROCESSABLE_ENTITY,
-          reason === "LOW_ACCURACY" ? "GPS accuracy is too low" : "This location is too old to use",
+          reason === "LOW_ACCURACY"
+            ? "GPS accuracy is too low"
+            : "This location is too old to use",
           "DRIVER_LOCATION_REQUIRED",
           { reason },
         );
     }
   }
 
-  private async pickVehicle(driver: DriverProfileDocument, vehicleId?: string): Promise<VehicleDocument> {
+  private async pickVehicle(
+    driver: DriverProfileDocument,
+    vehicleId?: string,
+  ): Promise<VehicleDocument> {
     const filter = vehicleId
-      ? { _id: new Types.ObjectId(vehicleId), driverId: driver._id, isActive: true }
+      ? {
+          _id: new Types.ObjectId(vehicleId),
+          driverId: driver._id,
+          isActive: true,
+        }
       : { driverId: driver._id, isActive: true };
-    const vehicle = await this.vehicleModel.findOne(filter).sort({ updatedAt: -1 }).exec();
+    const vehicle = await this.vehicleModel
+      .findOne(filter)
+      .sort({ updatedAt: -1 })
+      .exec();
     if (!vehicle)
       throw apiBadRequest(
-        vehicleId ? "That vehicle is not active on your account" : "Add an active vehicle before going online",
+        vehicleId
+          ? "That vehicle is not active on your account"
+          : "Add an active vehicle before going online",
         "DRIVER_NO_ACTIVE_VEHICLE",
       );
     return vehicle;
   }
 
-  private async toStatus(driver: DriverProfileDocument, knownVehicle?: VehicleDocument | null): Promise<DriverDutyStatus> {
+  private async toStatus(
+    driver: DriverProfileDocument,
+    knownVehicle?: VehicleDocument | null,
+  ): Promise<DriverDutyStatus> {
     const vehicle =
       knownVehicle ??
-      (driver.activeVehicleId ? await this.vehicleModel.findById(driver.activeVehicleId).exec() : null);
+      (driver.activeVehicleId
+        ? await this.vehicleModel.findById(driver.activeVehicleId).exec()
+        : null);
     return {
       isOnline: driver.isOnline,
       isAvailable: driver.isAvailable,
       location: driver.currentLocation
-        ? { ...fromGeoJsonPoint(driver.currentLocation), updatedAt: driver.locationUpdatedAt }
+        ? {
+            ...fromGeoJsonPoint(driver.currentLocation),
+            updatedAt: driver.locationUpdatedAt,
+          }
         : undefined,
       locationFresh: this.isFresh(driver.locationUpdatedAt),
       vehicle: vehicle

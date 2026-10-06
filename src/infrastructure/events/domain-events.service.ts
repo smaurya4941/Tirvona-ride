@@ -1,5 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { DomainEventHandler, DomainEventMap, DomainEventName } from "./domain-events";
+import type {
+  DomainEventHandler,
+  DomainEventMap,
+  DomainEventName,
+} from "./domain-events";
 
 /**
  * A small in-process event bus. Ride, payment and auth code publish what
@@ -13,7 +17,10 @@ import type { DomainEventHandler, DomainEventMap, DomainEventName } from "./doma
 @Injectable()
 export class DomainEventsService {
   private readonly logger = new Logger(DomainEventsService.name);
-  private readonly handlers = new Map<DomainEventName, Array<DomainEventHandler<DomainEventName>>>();
+  private readonly handlers = new Map<
+    DomainEventName,
+    Array<DomainEventHandler<DomainEventName>>
+  >();
   private readonly pending = new Set<Promise<void>>();
 
   on<K extends DomainEventName>(name: K, handler: DomainEventHandler<K>): void {

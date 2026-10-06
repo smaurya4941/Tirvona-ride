@@ -96,7 +96,8 @@ interface WindowTotals {
   rides: number;
 }
 
-const isDuplicateKey = (error: unknown): boolean => (error as { code?: number } | undefined)?.code === 11000;
+const isDuplicateKey = (error: unknown): boolean =>
+  (error as { code?: number } | undefined)?.code === 11000;
 
 /** `$group` stage summing a set of ledger lines (all paise). */
 export const LEDGER_TOTALS = {
@@ -125,13 +126,17 @@ export class EarningsService {
   private readonly timeZone: string;
 
   constructor(
-    @InjectModel(DriverEarning.name) private readonly earningModel: Model<DriverEarning>,
-    @InjectModel(DriverEarningAdjustment.name) private readonly adjustmentModel: Model<DriverEarningAdjustment>,
+    @InjectModel(DriverEarning.name)
+    private readonly earningModel: Model<DriverEarning>,
+    @InjectModel(DriverEarningAdjustment.name)
+    private readonly adjustmentModel: Model<DriverEarningAdjustment>,
     private readonly commission: CommissionService,
     private readonly drivers: DriversService,
     config: ConfigService,
   ) {
-    this.holdMs = Math.round(config.getOrThrow<number>("earningsHoldHours") * 3_600_000);
+    this.holdMs = Math.round(
+      config.getOrThrow<number>("earningsHoldHours") * 3_600_000,
+    );
     this.timeZone = config.getOrThrow<string>("appTimeZone");
   }
 
@@ -142,20 +147,31 @@ export class EarningsService {
    * any number of times for the same payment (verify + webhook + reconciler):
    * the unique indexes on rideId/paymentId make a second insert impossible.
    */
-  async recordForPayment(input: RecordEarningInput): Promise<{ earning: DriverEarningDocument; created: boolean }> {
-    const existing = await this.earningModel.findOne({ rideId: input.rideId }).exec();
+  async recordForPayment(
+    input: RecordEarningInput,
+  ): Promise<{ earning: DriverEarningDocument; created: boolean }> {
+    const existing = await this.earningModel
+      .findOne({ rideId: input.rideId })
+      .exec();
     if (existing) return { earning: existing, created: false };
 
     // The ride type's rate in force when the ride was finalised (completed) is
     // captured on the line; later changes never touch it. Resolving at
     // completion, not at payment, keeps a ride that finished before a rate
     // change at its own rate even if it is paid after the change.
-    const commission = await this.commission.resolve(input.rideType, input.rideCompletedAt);
+    const commission = await this.commission.resolve(
+      input.rideType,
+      input.rideCompletedAt,
+    );
     const split = splitFare(input.grossFarePaise, commission.value);
     const now = new Date();
     const cash = input.paymentMode === PaymentMode.CASH;
     // Cash is already in the driver's hand: nothing to hold or pay out.
-    const status = cash ? EarningStatus.COLLECTED : this.holdMs > 0 ? EarningStatus.PENDING : EarningStatus.AVAILABLE;
+    const status = cash
+      ? EarningStatus.COLLECTED
+      : this.holdMs > 0
+        ? EarningStatus.PENDING
+        : EarningStatus.AVAILABLE;
 
     try {
       const earning = await this.earningModel.create({
@@ -190,7 +206,9 @@ export class EarningsService {
     } catch (error) {
       if (!isDuplicateKey(error)) throw error;
       // Lost a race with a concurrent verify/webhook: theirs is the line.
-      const winner = await this.earningModel.findOne({ rideId: input.rideId }).exec();
+      const winner = await this.earningModel
+        .findOne({ rideId: input.rideId })
+        .exec();
       if (!winner) throw error;
       return { earning: winner, created: false };
     }
@@ -201,14 +219,21 @@ export class EarningsService {
    * refund (unique), computed on the earning line's own snapshot. Safe to
    * call repeatedly for the same refund.
    */
-  async recordRefundClawback(input: RefundClawbackInput): Promise<ClawbackOutcome> {
-    const existing = await this.adjustmentModel.findOne({ refundId: input.refundId }).exec();
+  async recordRefundClawback(
+    input: RefundClawbackInput,
+  ): Promise<ClawbackOutcome> {
+    const existing = await this.adjustmentModel
+      .findOne({ refundId: input.refundId })
+      .exec();
     if (existing) return { status: "RECORDED", adjustment: existing };
 
-    const earning = await this.earningModel.findOne({ paymentId: input.paymentId }).exec();
+    const earning = await this.earningModel
+      .findOne({ paymentId: input.paymentId })
+      .exec();
     if (!earning) return { status: "NO_EARNING" };
     // The driver already holds a cash fare; Tirvona never refunds cash online.
-    if ((earning.paymentMode ?? PaymentMode.ONLINE) === PaymentMode.CASH) return { status: "NOT_APPLICABLE" };
+    if ((earning.paymentMode ?? PaymentMode.ONLINE) === PaymentMode.CASH)
+      return { status: "NOT_APPLICABLE" };
 
     const [previous] = await this.adjustmentModel
       .aggregate<{ gross: number; commission: number; refunds: number }>([
@@ -228,9 +253,13 @@ export class EarningsService {
       paidAmountPaise: input.paidAmountPaise,
       refundAmountPaise: input.refundAmountPaise,
       previousRefundsPaise: previous?.refunds ?? 0,
-      previous: { grossPaise: previous?.gross ?? 0, commissionPaise: previous?.commission ?? 0 },
+      previous: {
+        grossPaise: previous?.gross ?? 0,
+        commissionPaise: previous?.commission ?? 0,
+      },
     });
-    if (clawback.grossReversalPaise === 0 && clawback.amountPaise === 0) return { status: "NOT_APPLICABLE" };
+    if (clawback.grossReversalPaise === 0 && clawback.amountPaise === 0)
+      return { status: "NOT_APPLICABLE" };
 
     try {
       const adjustment = await this.adjustmentModel.create({
@@ -250,7 +279,10 @@ export class EarningsService {
         amountPaise: clawback.amountPaise,
         commissionRate: earning.commissionRate,
         // Nothing to recover when the reversal is all commission.
-        status: clawback.amountPaise > 0 ? AdjustmentStatus.OUTSTANDING : AdjustmentStatus.SETTLED,
+        status:
+          clawback.amountPaise > 0
+            ? AdjustmentStatus.OUTSTANDING
+            : AdjustmentStatus.SETTLED,
         ...(clawback.amountPaise > 0 ? {} : { settledAt: new Date() }),
       });
       this.logger.log(
@@ -260,17 +292,26 @@ export class EarningsService {
       return { status: "RECORDED", adjustment };
     } catch (error) {
       if (!isDuplicateKey(error)) throw error;
-      const winner = await this.adjustmentModel.findOne({ refundId: input.refundId }).exec();
+      const winner = await this.adjustmentModel
+        .findOne({ refundId: input.refundId })
+        .exec();
       if (!winner) throw error;
       return { status: "RECORDED", adjustment: winner };
     }
   }
 
   /** OUTSTANDING deductions per driver (paise). */
-  async outstandingDeductions(driverIds?: Types.ObjectId[]): Promise<Map<string, number>> {
+  async outstandingDeductions(
+    driverIds?: Types.ObjectId[],
+  ): Promise<Map<string, number>> {
     const rows = await this.adjustmentModel
       .aggregate<{ _id: Types.ObjectId; amount: number }>([
-        { $match: { status: AdjustmentStatus.OUTSTANDING, ...(driverIds ? { driverId: { $in: driverIds } } : {}) } },
+        {
+          $match: {
+            status: AdjustmentStatus.OUTSTANDING,
+            ...(driverIds ? { driverId: { $in: driverIds } } : {}),
+          },
+        },
         { $group: { _id: "$driverId", amount: { $sum: "$amountPaise" } } },
       ])
       .exec();
@@ -282,17 +323,31 @@ export class EarningsService {
     return [...totals.values()].reduce((sum, amount) => sum + amount, 0);
   }
 
-  async adjustmentsForDriver(driverId: Types.ObjectId, limit = 50): Promise<AdjustmentView[]> {
-    const rows = await this.adjustmentModel.find({ driverId }).sort({ createdAt: -1, _id: -1 }).limit(limit).exec();
+  async adjustmentsForDriver(
+    driverId: Types.ObjectId,
+    limit = 50,
+  ): Promise<AdjustmentView[]> {
+    const rows = await this.adjustmentModel
+      .find({ driverId })
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit)
+      .exec();
     return rows.map((row) => this.toAdjustmentView(row));
   }
 
-  async adjustmentsForPayment(paymentId: Types.ObjectId): Promise<AdjustmentView[]> {
-    const rows = await this.adjustmentModel.find({ paymentId }).sort({ createdAt: 1 }).exec();
+  async adjustmentsForPayment(
+    paymentId: Types.ObjectId,
+  ): Promise<AdjustmentView[]> {
+    const rows = await this.adjustmentModel
+      .find({ paymentId })
+      .sort({ createdAt: 1 })
+      .exec();
     return rows.map((row) => this.toAdjustmentView(row));
   }
 
-  toAdjustmentView(adjustment: DriverEarningAdjustmentDocument): AdjustmentView {
+  toAdjustmentView(
+    adjustment: DriverEarningAdjustmentDocument,
+  ): AdjustmentView {
     return {
       id: adjustment._id.toString(),
       type: adjustment.type,
@@ -334,7 +389,10 @@ export class EarningsService {
 
   // ── Driver reads ──────────────────────────────────────────────────────
 
-  async forDriver(driverUserId: string, query: DriverEarningsQueryDto): Promise<DriverEarningsResponse> {
+  async forDriver(
+    driverUserId: string,
+    query: DriverEarningsQueryDto,
+  ): Promise<DriverEarningsResponse> {
     const driver = await this.drivers.getByUserId(driverUserId);
     await this.promoteMatured();
 
@@ -343,18 +401,26 @@ export class EarningsService {
     if (since) filter.rideCompletedAt = { $gte: since };
     if (query.status) filter.status = query.status;
 
-    const [items, total, periodTotals, summary, adjustments] = await Promise.all([
-      this.earningModel
-        .find(filter)
-        .sort({ rideCompletedAt: -1, _id: -1 })
-        .skip((query.page - 1) * query.limit)
-        .limit(query.limit)
-        .exec(),
-      this.earningModel.countDocuments(filter).exec(),
-      this.earningModel.aggregate<WindowTotals>([{ $match: filter }, { $group: LEDGER_TOTALS }]).exec(),
-      this.summaryFor(driver._id, false),
-      query.page === 1 ? this.adjustmentsForDriver(driver._id, 20) : Promise.resolve([]),
-    ]);
+    const [items, total, periodTotals, summary, adjustments] =
+      await Promise.all([
+        this.earningModel
+          .find(filter)
+          .sort({ rideCompletedAt: -1, _id: -1 })
+          .skip((query.page - 1) * query.limit)
+          .limit(query.limit)
+          .exec(),
+        this.earningModel.countDocuments(filter).exec(),
+        this.earningModel
+          .aggregate<WindowTotals>([
+            { $match: filter },
+            { $group: LEDGER_TOTALS },
+          ])
+          .exec(),
+        this.summaryFor(driver._id, false),
+        query.page === 1
+          ? this.adjustmentsForDriver(driver._id, 20)
+          : Promise.resolve([]),
+      ]);
     return {
       period: query.period,
       adjustments,
@@ -368,17 +434,33 @@ export class EarningsService {
     };
   }
 
-  async detailForDriver(driverUserId: string, earningId: string): Promise<EarningView> {
+  async detailForDriver(
+    driverUserId: string,
+    earningId: string,
+  ): Promise<EarningView> {
     const driver = await this.drivers.getByUserId(driverUserId);
     await this.promoteMatured();
-    const earning = await this.earningModel.findOne({ _id: earningId, driverId: driver._id }).exec();
+    const earning = await this.earningModel
+      .findOne({ _id: earningId, driverId: driver._id })
+      .exec();
     if (!earning) throw apiNotFound("Earning not found", "EARNING_NOT_FOUND");
-    const adjustments = await this.adjustmentModel.find({ earningId: earning._id }).sort({ createdAt: 1 }).exec();
-    return { ...this.toView(earning), adjustments: adjustments.map((adjustment) => this.toAdjustmentView(adjustment)) };
+    const adjustments = await this.adjustmentModel
+      .find({ earningId: earning._id })
+      .sort({ createdAt: 1 })
+      .exec();
+    return {
+      ...this.toView(earning),
+      adjustments: adjustments.map((adjustment) =>
+        this.toAdjustmentView(adjustment),
+      ),
+    };
   }
 
   /** Today / this week / this month / all time, plus payout balances. */
-  async summaryFor(driverId: Types.ObjectId, promote = true): Promise<EarningsSummary> {
+  async summaryFor(
+    driverId: Types.ObjectId,
+    promote = true,
+  ): Promise<EarningsSummary> {
     if (promote) await this.promoteMatured();
     const now = new Date();
     const [result] = await this.earningModel
@@ -395,13 +477,17 @@ export class EarningsService {
             balances: [{ $group: STATUS_TOTALS }],
             today: this.windowStages(startOfDayInTimeZone(now, this.timeZone)),
             week: this.windowStages(startOfWeekInTimeZone(now, this.timeZone)),
-            month: this.windowStages(startOfMonthInTimeZone(now, this.timeZone)),
+            month: this.windowStages(
+              startOfMonthInTimeZone(now, this.timeZone),
+            ),
             total: [{ $group: LEDGER_TOTALS }],
           },
         },
       ])
       .exec();
-    const deductions = (await this.outstandingDeductions([driverId])).get(driverId.toString()) ?? 0;
+    const deductions =
+      (await this.outstandingDeductions([driverId])).get(driverId.toString()) ??
+      0;
     return {
       currency: "INR",
       today: toWindow(result?.today[0]),
@@ -416,7 +502,14 @@ export class EarningsService {
   async todayFor(driverId: Types.ObjectId): Promise<EarningsWindow> {
     const [totals] = await this.earningModel
       .aggregate<WindowTotals>([
-        { $match: { driverId, rideCompletedAt: { $gte: startOfDayInTimeZone(new Date(), this.timeZone) } } },
+        {
+          $match: {
+            driverId,
+            rideCompletedAt: {
+              $gte: startOfDayInTimeZone(new Date(), this.timeZone),
+            },
+          },
+        },
         { $group: LEDGER_TOTALS },
       ])
       .exec();
@@ -456,8 +549,10 @@ export class EarningsService {
   }
 
   balancesFrom(rows: StatusTotalsRow[], deductionsPaise = 0): EarningsBalances {
-    const row = (status: EarningStatus) => rows.find((candidate) => candidate._id === status);
-    const of = (status: EarningStatus): number => toRupees(row(status)?.amount ?? 0);
+    const row = (status: EarningStatus) =>
+      rows.find((candidate) => candidate._id === status);
+    const of = (status: EarningStatus): number =>
+      toRupees(row(status)?.amount ?? 0);
     return {
       pending: of(EarningStatus.PENDING),
       available: of(EarningStatus.AVAILABLE),
@@ -466,14 +561,20 @@ export class EarningsService {
       // On a cash ride with a promo the driver collected fare − discount, so
       // the platform owes the discount back: it is netted against commission
       // (negative = Tirvona owes the driver).
-      commissionDue: toRupees((row(EarningStatus.COLLECTED)?.commission ?? 0) - (row(EarningStatus.COLLECTED)?.discount ?? 0)),
+      commissionDue: toRupees(
+        (row(EarningStatus.COLLECTED)?.commission ?? 0) -
+          (row(EarningStatus.COLLECTED)?.discount ?? 0),
+      ),
       // Refund clawbacks still to be deducted from the next payout.
       deductions: toRupees(deductionsPaise),
     };
   }
 
   private windowStages(since: Date): PipelineStage.FacetPipelineStage[] {
-    return [{ $match: { rideCompletedAt: { $gte: since } } }, { $group: LEDGER_TOTALS }];
+    return [
+      { $match: { rideCompletedAt: { $gte: since } } },
+      { $group: LEDGER_TOTALS },
+    ];
   }
 
   private periodStart(period: EarningsPeriod): Date | undefined {

@@ -1,4 +1,13 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
@@ -23,9 +32,16 @@ import type { CancellationPreview } from "../cancellations/cancellations.service
 import { RideLifecycleService } from "./ride-lifecycle.service";
 import { RideRouteService } from "./ride-route.service";
 import type { LiveRouteView } from "./ride-route.service";
-import type { CustomerRideView, DriverRideView, RideView } from "./ride-view.service";
+import type {
+  CustomerRideView,
+  DriverRideView,
+  RideView,
+} from "./ride-view.service";
 import { RiderHomeService } from "./rider-home.service";
-import type { NearbyDriversView, RecentDestinationView } from "./rider-home.service";
+import type {
+  NearbyDriversView,
+  RecentDestinationView,
+} from "./rider-home.service";
 import { RidesService } from "./rides.service";
 import type { FareEstimateView, Page } from "./rides.service";
 
@@ -51,7 +67,9 @@ export class RidesController {
   @HttpCode(HttpStatus.OK)
   @Roles(UserRole.CUSTOMER)
   @ApiOperation({ summary: "Fare estimate for one ride type (server-priced)" })
-  async estimate(@Body() dto: RideRequestDto): Promise<ApiSuccessBody<FareEstimateView>> {
+  async estimate(
+    @Body() dto: RideRequestDto,
+  ): Promise<ApiSuccessBody<FareEstimateView>> {
     return ok(await this.rides.estimate(dto));
   }
 
@@ -59,13 +77,18 @@ export class RidesController {
   @HttpCode(HttpStatus.OK)
   @Roles(UserRole.CUSTOMER)
   @ApiOperation({ summary: "Fare estimates for every bookable ride type" })
-  async estimateAll(@Body() dto: TripDto): Promise<ApiSuccessBody<FareEstimateView[]>> {
+  async estimateAll(
+    @Body() dto: TripDto,
+  ): Promise<ApiSuccessBody<FareEstimateView[]>> {
     return ok(await this.rides.estimateAll(dto));
   }
 
   @Post()
   @Roles(UserRole.CUSTOMER)
-  @ApiOperation({ summary: "Book a ride (optionally with a promo code); the server re-prices and starts matching" })
+  @ApiOperation({
+    summary:
+      "Book a ride (optionally with a promo code); the server re-prices and starts matching",
+  })
   async create(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateRideDto,
@@ -76,14 +99,27 @@ export class RidesController {
   @Get("nearby-drivers")
   @Roles(UserRole.CUSTOMER)
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
-  @ApiOperation({ summary: "Approximate positions of free drivers around the rider (Home map)" })
-  async nearbyDrivers(@Query() query: NearbyDriversQueryDto): Promise<ApiSuccessBody<NearbyDriversView>> {
-    return ok(await this.home.nearbyDrivers({ latitude: query.latitude, longitude: query.longitude }));
+  @ApiOperation({
+    summary:
+      "Approximate positions of free drivers around the rider (Home map)",
+  })
+  async nearbyDrivers(
+    @Query() query: NearbyDriversQueryDto,
+  ): Promise<ApiSuccessBody<NearbyDriversView>> {
+    return ok(
+      await this.home.nearbyDrivers({
+        latitude: query.latitude,
+        longitude: query.longitude,
+      }),
+    );
   }
 
   @Get("recent-destinations")
   @Roles(UserRole.CUSTOMER)
-  @ApiOperation({ summary: "Distinct destinations of the rider's own bookings, most recent first" })
+  @ApiOperation({
+    summary:
+      "Distinct destinations of the rider's own bookings, most recent first",
+  })
   async recentDestinations(
     @CurrentUser() user: AuthenticatedUser,
     @Query() query: RecentDestinationsQueryDto,
@@ -95,7 +131,9 @@ export class RidesController {
 
   @Get()
   @Roles(UserRole.CUSTOMER, UserRole.DRIVER)
-  @ApiOperation({ summary: "Ride history of the authenticated customer or driver" })
+  @ApiOperation({
+    summary: "Ride history of the authenticated customer or driver",
+  })
   async history(
     @CurrentUser() user: AuthenticatedUser,
     @Query() query: ListRidesQueryDto,
@@ -106,20 +144,28 @@ export class RidesController {
   @Get("active")
   @Roles(UserRole.CUSTOMER, UserRole.DRIVER)
   @ApiOperation({ summary: "The caller's in-progress ride, or null" })
-  async active(@CurrentUser() user: AuthenticatedUser): Promise<ApiSuccessBody<AnyRideView | null>> {
+  async active(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ApiSuccessBody<AnyRideView | null>> {
     return ok(await this.rides.getActive(user));
   }
 
   @Get("requests")
   @Roles(UserRole.DRIVER)
-  @ApiOperation({ summary: "Ride requests assigned to this driver (poll; also a heartbeat)" })
-  async requests(@CurrentUser() user: AuthenticatedUser): Promise<ApiSuccessBody<DriverRideView[]>> {
+  @ApiOperation({
+    summary: "Ride requests assigned to this driver (poll; also a heartbeat)",
+  })
+  async requests(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ApiSuccessBody<DriverRideView[]>> {
     return ok(await this.rides.requestsForDriver(user.userId));
   }
 
   @Get(":id")
   @Roles(UserRole.CUSTOMER, UserRole.DRIVER)
-  @ApiOperation({ summary: "One ride, as seen by its customer or its driver (poll)" })
+  @ApiOperation({
+    summary: "One ride, as seen by its customer or its driver (poll)",
+  })
   async findOne(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id", ParseObjectIdPipe) id: string,
@@ -130,7 +176,8 @@ export class RidesController {
   @Get(":id/route")
   @Roles(UserRole.CUSTOMER, UserRole.DRIVER)
   @ApiOperation({
-    summary: "Live road route: driver → pickup (APPROACH) or driver → destination (TRIP); null when none (poll)",
+    summary:
+      "Live road route: driver → pickup (APPROACH) or driver → destination (TRIP); null when none (poll)",
   })
   async route(
     @CurrentUser() user: AuthenticatedUser,
@@ -141,7 +188,10 @@ export class RidesController {
 
   @Get(":id/cancellation")
   @Roles(UserRole.CUSTOMER, UserRole.DRIVER)
-  @ApiOperation({ summary: "Before cancelling: whether it is allowed, the reasons to pick from, and any fee" })
+  @ApiOperation({
+    summary:
+      "Before cancelling: whether it is allowed, the reasons to pick from, and any fee",
+  })
   async cancellationPreview(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id", ParseObjectIdPipe) id: string,
@@ -152,13 +202,21 @@ export class RidesController {
   @Post(":id/cancel")
   @HttpCode(HttpStatus.OK)
   @Roles(UserRole.CUSTOMER, UserRole.DRIVER)
-  @ApiOperation({ summary: "Cancel a ride with a reason (customer: before start; driver: after accept). Fees per policy." })
+  @ApiOperation({
+    summary:
+      "Cancel a ride with a reason (customer: before start; driver: after accept). Fees per policy.",
+  })
   async cancel(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id", ParseObjectIdPipe) id: string,
     @Body() dto: CancelRideDto,
   ): Promise<ApiSuccessBody<AnyRideView>> {
-    return ok(await this.lifecycle.cancel(user, id, { reasonCode: dto.reasonCode, note: dto.reason }));
+    return ok(
+      await this.lifecycle.cancel(user, id, {
+        reasonCode: dto.reasonCode,
+        note: dto.reason,
+      }),
+    );
   }
 
   // ── Driver actions ────────────────────────────────────────────────────
@@ -189,7 +247,9 @@ export class RidesController {
   @Post(":id/arrived")
   @HttpCode(HttpStatus.OK)
   @Roles(UserRole.DRIVER)
-  @ApiOperation({ summary: "Mark arrival at pickup; issues the customer's OTP" })
+  @ApiOperation({
+    summary: "Mark arrival at pickup; issues the customer's OTP",
+  })
   async arrived(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id", ParseObjectIdPipe) id: string,

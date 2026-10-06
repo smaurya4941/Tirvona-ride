@@ -25,7 +25,9 @@ describe("splitFare", () => {
     for (const rupees of [1, 37, 99.99, 180, 195, 1_234.56]) {
       for (const rate of [0, 7.25, 15, 18, 20, 33.33, 100]) {
         const split = splitFare(toPaise(rupees), rate);
-        expect(split.commissionPaise + split.netEarningPaise).toBe(split.grossFarePaise);
+        expect(split.commissionPaise + split.netEarningPaise).toBe(
+          split.grossFarePaise,
+        );
         expect(Number.isInteger(split.commissionPaise)).toBe(true);
         expect(split.netEarningPaise).toBeGreaterThanOrEqual(0);
       }

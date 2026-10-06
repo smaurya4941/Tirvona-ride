@@ -5,7 +5,11 @@ import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
 import { Types } from "mongoose";
 import { createHash, randomBytes } from "node:crypto";
-import { ApiException, apiConflict, apiNotFound } from "../../common/exceptions/api.exception";
+import {
+  ApiException,
+  apiConflict,
+  apiNotFound,
+} from "../../common/exceptions/api.exception";
 import { DomainEventsService } from "../../infrastructure/events/domain-events.service";
 import { DriverProfile } from "../drivers/schemas/driver-profile.schema";
 import { DriverLocationService } from "../locations/driver-location.service";
@@ -34,10 +38,17 @@ export interface ShareLinkView {
 /** At most this many live links per ride (each share-sheet use makes one). */
 const MAX_ACTIVE_LINKS_PER_RIDE = 10;
 
-const hashToken = (token: string): string => createHash("sha256").update(token).digest("hex");
+const hashToken = (token: string): string =>
+  createHash("sha256").update(token).digest("hex");
 
-const linkNotFound = () => apiNotFound("This ride link is not valid", "SHARE_LINK_NOT_FOUND");
-const linkExpired = () => new ApiException(HttpStatus.GONE, "This ride link has expired", "SHARE_LINK_EXPIRED");
+const linkNotFound = () =>
+  apiNotFound("This ride link is not valid", "SHARE_LINK_NOT_FOUND");
+const linkExpired = () =>
+  new ApiException(
+    HttpStatus.GONE,
+    "This ride link has expired",
+    "SHARE_LINK_EXPIRED",
+  );
 
 /**
  * Share-my-ride links. The token is generated here (never by the app),
@@ -51,9 +62,11 @@ export class ShareRideService implements OnModuleInit {
   private readonly graceMinutes: number;
 
   constructor(
-    @InjectModel(RideShareToken.name) private readonly tokenModel: Model<RideShareToken>,
+    @InjectModel(RideShareToken.name)
+    private readonly tokenModel: Model<RideShareToken>,
     @InjectModel(Ride.name) private readonly rideModel: Model<Ride>,
-    @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
+    @InjectModel(DriverProfile.name)
+    private readonly driverModel: Model<DriverProfile>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly driverLocations: DriverLocationService,
     private readonly events: DomainEventsService,
@@ -69,20 +82,32 @@ export class ShareRideService implements OnModuleInit {
     this.events.on("ride.transitioned", async ({ ride, to }) => {
       if (!isTerminal(to)) return;
       await this.tokenModel
-        .updateMany({ rideId: new Types.ObjectId(ride.rideId), isActive: true }, [
-          {
-            $set: {
-              expiresAt: { $min: ["$expiresAt", new Date(Date.now() + this.graceMinutes * 60_000)] },
+        .updateMany(
+          { rideId: new Types.ObjectId(ride.rideId), isActive: true },
+          [
+            {
+              $set: {
+                expiresAt: {
+                  $min: [
+                    "$expiresAt",
+                    new Date(Date.now() + this.graceMinutes * 60_000),
+                  ],
+                },
+              },
             },
-          },
-        ])
+          ],
+        )
         .exec();
     });
   }
 
   async create(customerUserId: string, rideId: string): Promise<ShareLinkView> {
     const ride = await this.customerRide(customerUserId, rideId);
-    if (isTerminal(ride.status)) throw apiConflict("Only an ongoing ride can be shared", "SHARE_NOT_ALLOWED");
+    if (isTerminal(ride.status))
+      throw apiConflict(
+        "Only an ongoing ride can be shared",
+        "SHARE_NOT_ALLOWED",
+      );
 
     const token = randomBytes(24).toString("base64url");
     const expiresAt = new Date(Date.now() + this.maxHours * 60 * 60_000);
@@ -95,7 +120,11 @@ export class ShareRideService implements OnModuleInit {
     });
     await this.retireExcess(ride._id);
 
-    const customer = await this.userModel.findById(ride.customerId).select("firstName").lean().exec();
+    const customer = await this.userModel
+      .findById(ride.customerId)
+      .select("firstName")
+      .lean()
+      .exec();
     const url = `${this.linkBaseUrl}/${token}`;
     return {
       url,
@@ -117,7 +146,10 @@ export class ShareRideService implements OnModuleInit {
    * and sent to their emergency contacts. Same public page as a share link,
    * but it belongs to the incident: stopping sharing does not end it.
    */
-  async createForSos(ride: RideDocument, sosEventId: Types.ObjectId): Promise<{ url: string; token: string; expiresAt: Date }> {
+  async createForSos(
+    ride: RideDocument,
+    sosEventId: Types.ObjectId,
+  ): Promise<{ url: string; token: string; expiresAt: Date }> {
     const token = randomBytes(24).toString("base64url");
     const expiresAt = new Date(Date.now() + this.maxHours * 60 * 60_000);
     await this.tokenModel.create({
@@ -135,12 +167,18 @@ export class ShareRideService implements OnModuleInit {
   /** Ends the incident's tracking link (the incident is resolved or cancelled). */
   async revokeForSos(sosEventId: Types.ObjectId): Promise<void> {
     await this.tokenModel
-      .updateMany({ sosEventId, isActive: true }, { $set: { isActive: false, revokedAt: new Date() } })
+      .updateMany(
+        { sosEventId, isActive: true },
+        { $set: { isActive: false, revokedAt: new Date() } },
+      )
       .exec();
   }
 
   /** Stops every live link of the ride that the rider made (SOS links belong to the incident). */
-  async revoke(customerUserId: string, rideId: string): Promise<{ revoked: number }> {
+  async revoke(
+    customerUserId: string,
+    rideId: string,
+  ): Promise<{ revoked: number }> {
     const ride = await this.customerRide(customerUserId, rideId);
     const result = await this.tokenModel
       .updateMany(
@@ -151,10 +189,18 @@ export class ShareRideService implements OnModuleInit {
     return { revoked: result.modifiedCount };
   }
 
-  async activeLinkCount(customerUserId: string, rideId: string): Promise<{ active: number }> {
+  async activeLinkCount(
+    customerUserId: string,
+    rideId: string,
+  ): Promise<{ active: number }> {
     const ride = await this.customerRide(customerUserId, rideId);
     const active = await this.tokenModel
-      .countDocuments({ rideId: ride._id, isActive: true, purpose: { $ne: "SOS" }, expiresAt: { $gt: new Date() } })
+      .countDocuments({
+        rideId: ride._id,
+        isActive: true,
+        purpose: { $ne: "SOS" },
+        expiresAt: { $gt: new Date() },
+      })
       .exec();
     return { active };
   }
@@ -163,44 +209,74 @@ export class ShareRideService implements OnModuleInit {
   async publicView(token: string): Promise<SharedRideView> {
     // Cheap shape check first: never hash or query obvious garbage.
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(token)) throw linkNotFound();
-    const link = await this.tokenModel.findOne({ tokenHash: hashToken(token) }).exec();
+    const link = await this.tokenModel
+      .findOne({ tokenHash: hashToken(token) })
+      .exec();
     if (!link || !link.isActive) throw linkNotFound();
 
     const ride = await this.rideModel.findById(link.rideId).exec();
     if (!ride) throw linkNotFound();
     const endedAt = ride.completedAt ?? ride.cancelledAt ?? ride.expiredAt;
-    const expiresAt = effectiveShareExpiry(link.expiresAt, isTerminal(ride.status) ? endedAt : undefined, this.graceMinutes);
+    const expiresAt = effectiveShareExpiry(
+      link.expiresAt,
+      isTerminal(ride.status) ? endedAt : undefined,
+      this.graceMinutes,
+    );
     if (Date.now() > expiresAt.getTime()) throw linkExpired();
 
     void this.tokenModel
-      .updateOne({ _id: link._id }, { $inc: { viewCount: 1 }, $set: { lastViewedAt: new Date() } })
+      .updateOne(
+        { _id: link._id },
+        { $inc: { viewCount: 1 }, $set: { lastViewedAt: new Date() } },
+      )
       .exec()
       .catch(() => undefined);
     return this.sanitize(ride, expiresAt);
   }
 
-  private async sanitize(ride: RideDocument, expiresAt: Date): Promise<SharedRideView> {
+  private async sanitize(
+    ride: RideDocument,
+    expiresAt: Date,
+  ): Promise<SharedRideView> {
     const status = publicRideStatus(ride.status);
     let driver: SharedRideView["driver"] = null;
     if (ride.driverId && !["REQUESTED", "CANCELLED"].includes(status)) {
-      const profile = await this.driverModel.findById(ride.driverId).select("userId ratingAverage ratingCount").lean().exec();
-      const user = profile ? await this.userModel.findById(profile.userId).select("firstName").lean().exec() : null;
+      const profile = await this.driverModel
+        .findById(ride.driverId)
+        .select("userId ratingAverage ratingCount")
+        .lean()
+        .exec();
+      const user = profile
+        ? await this.userModel
+            .findById(profile.userId)
+            .select("firstName")
+            .lean()
+            .exec()
+        : null;
       if (user)
         driver = {
           firstName: user.firstName,
-          ratingAverage: profile && (profile.ratingCount ?? 0) > 0 ? profile.ratingAverage : undefined,
+          ratingAverage:
+            profile && (profile.ratingCount ?? 0) > 0
+              ? profile.ratingAverage
+              : undefined,
         };
     }
-    const live = sharesDriverLocation(ride.status) && ride.driverId
-      ? await this.driverLocations.lastKnown(ride.driverId)
-      : undefined;
-    const vehicle = ride.vehicle && driver
-      ? {
-          type: ride.vehicle.vehicleType,
-          registrationNumber: ride.vehicle.registrationNumber,
-          description: [ride.vehicle.color, ride.vehicle.make, ride.vehicle.model].filter(Boolean).join(" ") || undefined,
-        }
-      : null;
+    const live =
+      sharesDriverLocation(ride.status) && ride.driverId
+        ? await this.driverLocations.lastKnown(ride.driverId)
+        : undefined;
+    const vehicle =
+      ride.vehicle && driver
+        ? {
+            type: ride.vehicle.vehicleType,
+            registrationNumber: ride.vehicle.registrationNumber,
+            description:
+              [ride.vehicle.color, ride.vehicle.make, ride.vehicle.model]
+                .filter(Boolean)
+                .join(" ") || undefined,
+          }
+        : null;
     return {
       status,
       statusLabel: SHARED_STATUS_TEXT[status].label,
@@ -209,13 +285,23 @@ export class ShareRideService implements OnModuleInit {
       rideType: ride.rideType,
       driver,
       vehicle,
-      pickup: { address: ride.pickup.address, latitude: ride.pickup.latitude, longitude: ride.pickup.longitude },
+      pickup: {
+        address: ride.pickup.address,
+        latitude: ride.pickup.latitude,
+        longitude: ride.pickup.longitude,
+      },
       destination: {
         address: ride.destination.address,
         latitude: ride.destination.latitude,
         longitude: ride.destination.longitude,
       },
-      driverLocation: live ? { latitude: live.latitude, longitude: live.longitude, updatedAt: live.updatedAt } : null,
+      driverLocation: live
+        ? {
+            latitude: live.latitude,
+            longitude: live.longitude,
+            updatedAt: live.updatedAt,
+          }
+        : null,
       startedAt: ride.startedAt,
       completedAt: ride.completedAt,
       cancelledAt: ride.cancelledAt ?? ride.expiredAt,
@@ -234,13 +320,22 @@ export class ShareRideService implements OnModuleInit {
       .exec();
     if (excess.length)
       await this.tokenModel
-        .updateMany({ _id: { $in: excess.map((row) => row._id) } }, { $set: { isActive: false, revokedAt: new Date() } })
+        .updateMany(
+          { _id: { $in: excess.map((row) => row._id) } },
+          { $set: { isActive: false, revokedAt: new Date() } },
+        )
         .exec();
   }
 
-  private async customerRide(customerUserId: string, rideId: string): Promise<RideDocument> {
+  private async customerRide(
+    customerUserId: string,
+    rideId: string,
+  ): Promise<RideDocument> {
     const ride = await this.rideModel
-      .findOne({ _id: new Types.ObjectId(rideId), customerId: new Types.ObjectId(customerUserId) })
+      .findOne({
+        _id: new Types.ObjectId(rideId),
+        customerId: new Types.ObjectId(customerUserId),
+      })
       .exec();
     if (!ride) throw rideNotFound();
     return ride;

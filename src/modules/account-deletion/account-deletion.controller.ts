@@ -19,7 +19,9 @@ export class AccountDeletionController {
   @Post("me/delete-account")
   @HttpCode(HttpStatus.OK)
   @ThrottlePolicy("otpVerify")
-  @ApiOperation({ summary: "Permanently delete the caller's account (password required)" })
+  @ApiOperation({
+    summary: "Permanently delete the caller's account (password required)",
+  })
   async deleteAccount(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: DeleteAccountDto,

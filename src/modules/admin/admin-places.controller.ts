@@ -13,7 +13,13 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from "@nestjs/swagger";
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from "@nestjs/swagger";
 import { memoryStorage } from "multer";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -24,8 +30,14 @@ import { ParseObjectIdPipe } from "../../common/pipes/parse-object-id.pipe";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
 import { AuditLogService } from "../audit/audit-log.service";
-import { CreatePopularPlaceDto, UpdatePopularPlaceDto } from "../places/dto/popular-place.dto";
-import { POPULAR_IMAGE_RULE, PopularPlacesService } from "../places/popular-places.service";
+import {
+  CreatePopularPlaceDto,
+  UpdatePopularPlaceDto,
+} from "../places/dto/popular-place.dto";
+import {
+  POPULAR_IMAGE_RULE,
+  PopularPlacesService,
+} from "../places/popular-places.service";
 import type { PopularPlaceAdminView } from "../places/popular-places.service";
 
 /** "Popular destinations" shown on the rider's Home and search screens. */
@@ -40,9 +52,19 @@ export class AdminPopularPlacesController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: "Every popular place (active and hidden), with the photo rules" })
-  async list(): Promise<ApiSuccessBody<{ places: PopularPlaceAdminView[]; imageRule: typeof POPULAR_IMAGE_RULE }>> {
-    return ok({ places: await this.places.list(), imageRule: POPULAR_IMAGE_RULE });
+  @ApiOperation({
+    summary: "Every popular place (active and hidden), with the photo rules",
+  })
+  async list(): Promise<
+    ApiSuccessBody<{
+      places: PopularPlaceAdminView[];
+      imageRule: typeof POPULAR_IMAGE_RULE;
+    }>
+  > {
+    return ok({
+      places: await this.places.list(),
+      imageRule: POPULAR_IMAGE_RULE,
+    });
   }
 
   @Post()
@@ -52,7 +74,10 @@ export class AdminPopularPlacesController {
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApiSuccessBody<PopularPlaceAdminView>> {
     const place = await this.places.create(dto, admin.userId);
-    await this.record(admin, "popular_place.create", place, { city: place.city, active: place.active });
+    await this.record(admin, "popular_place.create", place, {
+      city: place.city,
+      active: place.active,
+    });
     return ok(place);
   }
 
@@ -64,13 +89,17 @@ export class AdminPopularPlacesController {
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApiSuccessBody<PopularPlaceAdminView>> {
     const place = await this.places.update(id, dto, admin.userId);
-    await this.record(admin, "popular_place.update", place, { changes: { ...dto } });
+    await this.record(admin, "popular_place.update", place, {
+      changes: { ...dto },
+    });
     return ok(place);
   }
 
   @Delete(":id")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Delete a popular place (hide it instead to keep it for later)" })
+  @ApiOperation({
+    summary: "Delete a popular place (hide it instead to keep it for later)",
+  })
   async remove(
     @Param("id", ParseObjectIdPipe) id: string,
     @CurrentUser() admin: AuthenticatedUser,
@@ -87,25 +116,46 @@ export class AdminPopularPlacesController {
   }
 
   @Put(":id/image")
-  @ApiOperation({ summary: "Set or replace the place's photo (multipart field `file`)" })
+  @ApiOperation({
+    summary: "Set or replace the place's photo (multipart field `file`)",
+  })
   @ApiConsumes("multipart/form-data")
-  @ApiBody({ schema: { type: "object", properties: { file: { type: "string", format: "binary" } } } })
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: { file: { type: "string", format: "binary" } },
+    },
+  })
   // Kept in memory: the bytes go straight into MongoDB, nothing touches disk.
-  @UseInterceptors(FileInterceptor("file", { storage: memoryStorage(), limits: { fileSize: POPULAR_IMAGE_RULE.maxBytes, files: 1 } }))
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: POPULAR_IMAGE_RULE.maxBytes, files: 1 },
+    }),
+  )
   async setImage(
     @Param("id", ParseObjectIdPipe) id: string,
     @CurrentUser() admin: AuthenticatedUser,
     @UploadedFile() file?: Express.Multer.File,
   ): Promise<ApiSuccessBody<PopularPlaceAdminView>> {
-    if (!file?.buffer?.length) throw apiBadRequest("Choose a photo to upload", "POPULAR_PLACE_INVALID_IMAGE", { hint: POPULAR_IMAGE_RULE.hint });
+    if (!file?.buffer?.length)
+      throw apiBadRequest(
+        "Choose a photo to upload",
+        "POPULAR_PLACE_INVALID_IMAGE",
+        { hint: POPULAR_IMAGE_RULE.hint },
+      );
     const place = await this.places.setImage(id, file, admin.userId);
-    await this.record(admin, "popular_place.image", place, { image: place.image });
+    await this.record(admin, "popular_place.image", place, {
+      image: place.image,
+    });
     return ok(place);
   }
 
   @Delete(":id/image")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Remove the place's photo (the apps show a placeholder)" })
+  @ApiOperation({
+    summary: "Remove the place's photo (the apps show a placeholder)",
+  })
   async removeImage(
     @Param("id", ParseObjectIdPipe) id: string,
     @CurrentUser() admin: AuthenticatedUser,
@@ -115,7 +165,12 @@ export class AdminPopularPlacesController {
     return ok(place);
   }
 
-  private record(admin: AuthenticatedUser, action: string, place: PopularPlaceAdminView, metadata?: Record<string, unknown>) {
+  private record(
+    admin: AuthenticatedUser,
+    action: string,
+    place: PopularPlaceAdminView,
+    metadata?: Record<string, unknown>,
+  ) {
     return this.audit.record({
       adminId: admin.userId,
       action,

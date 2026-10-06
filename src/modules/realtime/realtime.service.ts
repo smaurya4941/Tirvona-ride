@@ -1,7 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { Namespace } from "socket.io";
 import { rideRoom, userRoom } from "./realtime.constants";
-import type { RealtimeEnvelope, RideDelivery, SocketIdentity } from "./realtime.types";
+import type {
+  RealtimeEnvelope,
+  RideDelivery,
+  SocketIdentity,
+} from "./realtime.types";
 
 /**
  * The only way the rest of the backend talks to connected apps. Services
@@ -35,13 +39,20 @@ export class RealtimeService {
     const namespace = this.namespace;
     if (!namespace || deliveries.length === 0) return;
     const room = rideRoom(rideId);
-    const byUser = new Map(deliveries.map((delivery) => [delivery.userId, delivery]));
+    const byUser = new Map(
+      deliveries.map((delivery) => [delivery.userId, delivery]),
+    );
 
-    const rooms = [room, ...[...byUser.keys()].map((userId) => userRoom(userId))];
+    const rooms = [
+      room,
+      ...[...byUser.keys()].map((userId) => userRoom(userId)),
+    ];
     const sockets = await namespace.in(rooms).fetchSockets();
     for (const socket of sockets) {
       const identity = socket.data as Partial<SocketIdentity>;
-      const delivery = identity.userId ? byUser.get(identity.userId) : undefined;
+      const delivery = identity.userId
+        ? byUser.get(identity.userId)
+        : undefined;
       if (!delivery) {
         if (socket.rooms.has(room)) socket.leave(room);
         continue;
@@ -62,7 +73,11 @@ export class RealtimeService {
    * client that is not ready instead of piling up in its buffer — a stale
    * location is worthless once a newer one exists.
    */
-  emitVolatileToRide(rideId: string, envelope: RealtimeEnvelope, exceptSocketId?: string): void {
+  emitVolatileToRide(
+    rideId: string,
+    envelope: RealtimeEnvelope,
+    exceptSocketId?: string,
+  ): void {
     const namespace = this.namespace;
     if (!namespace) return;
     let target = namespace.volatile.to(rideRoom(rideId));

@@ -1,13 +1,26 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsISO8601, IsInt, IsOptional, IsString, Length, Max, Min } from "class-validator";
+import {
+  IsISO8601,
+  IsInt,
+  IsOptional,
+  IsString,
+  Length,
+  Max,
+  Min,
+} from "class-validator";
 
 export class ReconciliationRunDto {
-  @ApiProperty({ description: "Window start (ISO date-time)", example: "2026-09-28T00:00:00+05:30" })
+  @ApiProperty({
+    description: "Window start (ISO date-time)",
+    example: "2026-09-28T00:00:00+05:30",
+  })
   @IsISO8601()
   from!: string;
 
-  @ApiPropertyOptional({ description: "Window end (ISO date-time); default now" })
+  @ApiPropertyOptional({
+    description: "Window end (ISO date-time); default now",
+  })
   @IsOptional()
   @IsISO8601()
   to?: string;

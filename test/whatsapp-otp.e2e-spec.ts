@@ -9,7 +9,10 @@ import { MongoMemoryServer } from "mongodb-memory-server";
 import type { Connection } from "mongoose";
 import request from "supertest";
 import type { App } from "supertest/types";
-import { WhatsAppDeliveryError, WhatsAppGateway } from "../src/modules/whatsapp/whatsapp.gateway";
+import {
+  WhatsAppDeliveryError,
+  WhatsAppGateway,
+} from "../src/modules/whatsapp/whatsapp.gateway";
 import type {
   AuthenticationCodeMessage,
   WhatsAppFailureReason,
@@ -41,7 +44,9 @@ class FakeWhatsApp extends WhatsAppGateway {
     return this.sent.filter((item) => item.to === phone).length;
   }
 
-  async sendAuthenticationCode(message: AuthenticationCodeMessage): Promise<WhatsAppSendResult> {
+  async sendAuthenticationCode(
+    message: AuthenticationCodeMessage,
+  ): Promise<WhatsAppSendResult> {
     const failure = this.failures.shift();
     if (failure) throw new WhatsAppDeliveryError(failure, `fake ${failure}`);
     this.sent.push(message);
@@ -53,7 +58,8 @@ const PASSWORD = "Password@123";
 const MAX_ATTEMPTS = 5;
 const MAX_SENDS = 4;
 
-const wrongCode = (code: string): string => (code === "000000" ? "111111" : "000000");
+const wrongCode = (code: string): string =>
+  code === "000000" ? "111111" : "000000";
 
 describe("Signup — WhatsApp OTP (e2e)", () => {
   const originalCwd = process.cwd();
@@ -71,10 +77,19 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
   const register = (phone: string, extra: Record<string, unknown> = {}) =>
     api()
       .post("/api/v1/auth/register")
-      .send({ firstName: "Asha", lastName: "Verma", phone, password: PASSWORD, role: "CUSTOMER", ...extra });
+      .send({
+        firstName: "Asha",
+        lastName: "Verma",
+        phone,
+        password: PASSWORD,
+        role: "CUSTOMER",
+        ...extra,
+      });
 
   const verify = (phone: string, otp: string, verificationId: string) =>
-    api().post("/api/v1/auth/verify-otp").send({ phone, otp, verificationId, deviceId: "device-1" });
+    api()
+      .post("/api/v1/auth/verify-otp")
+      .send({ phone, otp, verificationId, deviceId: "device-1" });
 
   const resend = (phone: string, verificationId: string) =>
     api().post("/api/v1/auth/resend-otp").send({ phone, verificationId });
@@ -83,10 +98,15 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
   const skipCooldown = (phone: string, purpose = "SIGNUP") =>
     db
       .collection("otp_send_quotas")
-      .updateOne({ phone, purpose }, { $set: { lastSentAt: new Date(Date.now() - 10 * 60_000) } });
+      .updateOne(
+        { phone, purpose },
+        { $set: { lastSentAt: new Date(Date.now() - 10 * 60_000) } },
+      );
 
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create({ instance: { launchTimeout: 60_000 } });
+    mongo = await MongoMemoryServer.create({
+      instance: { launchTimeout: 60_000 },
+    });
     workDir = await mkdtemp(join(tmpdir(), "tirvona-ride-otp-"));
     process.chdir(workDir);
     Object.assign(process.env, {
@@ -154,37 +174,74 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
       });
       expect(response.body.data.expiresInSeconds).toBeGreaterThan(290);
       // The code itself never comes back to the client.
-      expect(JSON.stringify(response.body)).not.toContain(whatsapp.lastCodeFor(phone));
+      expect(JSON.stringify(response.body)).not.toContain(
+        whatsapp.lastCodeFor(phone),
+      );
       expect(await db.collection("users").countDocuments({ phone })).toBe(0);
       // An unverified signup cannot sign in.
-      await api().post("/api/v1/auth/login").send({ phone, password: PASSWORD }).expect(401);
+      await api()
+        .post("/api/v1/auth/login")
+        .send({ phone, password: PASSWORD })
+        .expect(401);
     });
 
     it("verify-otp creates a phone-verified account and signs the user in", async () => {
       const phone = nextPhone();
       const { verificationId } = (await register(phone).expect(202)).body.data;
 
-      const session = (await verify(phone, whatsapp.lastCodeFor(phone), verificationId).expect(200)).body.data;
+      const session = (
+        await verify(phone, whatsapp.lastCodeFor(phone), verificationId).expect(
+          200,
+        )
+      ).body.data;
       expect(session).toMatchObject({
         accessToken: expect.any(String),
         refreshToken: expect.any(String),
-        user: { phone, role: "CUSTOMER", status: "ACTIVE", isPhoneVerified: true, firstName: "Asha" },
+        user: {
+          phone,
+          role: "CUSTOMER",
+          status: "ACTIVE",
+          isPhoneVerified: true,
+          firstName: "Asha",
+        },
       });
 
-      const me = (await api().get("/api/v1/auth/me").set(bearer(session.accessToken)).expect(200)).body.data;
+      const me = (
+        await api()
+          .get("/api/v1/auth/me")
+          .set(bearer(session.accessToken))
+          .expect(200)
+      ).body.data;
       expect(me.isPhoneVerified).toBe(true);
-      await api().post("/api/v1/auth/login").send({ phone, password: PASSWORD }).expect(200);
+      await api()
+        .post("/api/v1/auth/login")
+        .send({ phone, password: PASSWORD })
+        .expect(200);
 
       // Code deleted immediately (not left for TTL); pending form gone too.
-      expect(await db.collection("otp_verifications").countDocuments({ phone })).toBe(0);
-      expect(await db.collection("pending_signups").countDocuments({ phone })).toBe(0);
+      expect(
+        await db.collection("otp_verifications").countDocuments({ phone }),
+      ).toBe(0);
+      expect(
+        await db.collection("pending_signups").countDocuments({ phone }),
+      ).toBe(0);
     });
 
     it("driver signup lands in KYC (PENDING), not approval", async () => {
       const phone = nextPhone();
-      const { verificationId } = (await register(phone, { role: "DRIVER" }).expect(202)).body.data;
-      const session = (await verify(phone, whatsapp.lastCodeFor(phone), verificationId).expect(200)).body.data;
-      expect(session.user).toMatchObject({ role: "DRIVER", isPhoneVerified: true, driver: { driverStatus: "PENDING" } });
+      const { verificationId } = (
+        await register(phone, { role: "DRIVER" }).expect(202)
+      ).body.data;
+      const session = (
+        await verify(phone, whatsapp.lastCodeFor(phone), verificationId).expect(
+          200,
+        )
+      ).body.data;
+      expect(session.user).toMatchObject({
+        role: "DRIVER",
+        isPhoneVerified: true,
+        driver: { driverStatus: "PENDING" },
+      });
     });
 
     it("normalises the phone number however it is typed", async () => {
@@ -193,8 +250,15 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
       expect(whatsapp.lastCodeFor("+919700099001")).toMatch(/^\d{6}$/);
 
       // Verifying with another spelling of the same number works.
-      await verify("919700099001", whatsapp.lastCodeFor("+919700099001"), response.body.data.verificationId).expect(200);
-      await api().post("/api/v1/auth/login").send({ phone: "97000 99001", password: PASSWORD }).expect(200);
+      await verify(
+        "919700099001",
+        whatsapp.lastCodeFor("+919700099001"),
+        response.body.data.verificationId,
+      ).expect(200);
+      await api()
+        .post("/api/v1/auth/login")
+        .send({ phone: "97000 99001", password: PASSWORD })
+        .expect(200);
     });
 
     it("rejects numbers that cannot be a mobile", async () => {
@@ -210,8 +274,15 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
     it("rejects a wrong code and reports the attempts left", async () => {
       const phone = nextPhone();
       const { verificationId } = (await register(phone).expect(202)).body.data;
-      const response = await verify(phone, wrongCode(whatsapp.lastCodeFor(phone)), verificationId).expect(400);
-      expect(response.body).toMatchObject({ code: "OTP_INVALID", data: { attemptsRemaining: MAX_ATTEMPTS - 1 } });
+      const response = await verify(
+        phone,
+        wrongCode(whatsapp.lastCodeFor(phone)),
+        verificationId,
+      ).expect(400);
+      expect(response.body).toMatchObject({
+        code: "OTP_INVALID",
+        data: { attemptsRemaining: MAX_ATTEMPTS - 1 },
+      });
     });
 
     it("blocks the code after the maximum attempts, even the right one", async () => {
@@ -219,22 +290,38 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
       const { verificationId } = (await register(phone).expect(202)).body.data;
       const code = whatsapp.lastCodeFor(phone);
       for (let attempt = 1; attempt < MAX_ATTEMPTS; attempt += 1)
-        expect((await verify(phone, wrongCode(code), verificationId).expect(400)).body.code).toBe("OTP_INVALID");
-      expect((await verify(phone, wrongCode(code), verificationId).expect(400)).body.code).toBe("OTP_TOO_MANY_ATTEMPTS");
-      expect((await verify(phone, code, verificationId).expect(400)).body.code).toBe("OTP_TOO_MANY_ATTEMPTS");
+        expect(
+          (await verify(phone, wrongCode(code), verificationId).expect(400))
+            .body.code,
+        ).toBe("OTP_INVALID");
+      expect(
+        (await verify(phone, wrongCode(code), verificationId).expect(400)).body
+          .code,
+      ).toBe("OTP_TOO_MANY_ATTEMPTS");
+      expect(
+        (await verify(phone, code, verificationId).expect(400)).body.code,
+      ).toBe("OTP_TOO_MANY_ATTEMPTS");
 
       // Resend is the way out.
       await skipCooldown(phone);
       await resend(phone, verificationId).expect(200);
-      await verify(phone, whatsapp.lastCodeFor(phone), verificationId).expect(200);
+      await verify(phone, whatsapp.lastCodeFor(phone), verificationId).expect(
+        200,
+      );
     });
 
     it("parallel guesses cannot exceed the attempt limit", async () => {
       const phone = nextPhone();
       const { verificationId } = (await register(phone).expect(202)).body.data;
       const code = whatsapp.lastCodeFor(phone);
-      await Promise.all(Array.from({ length: 12 }, () => verify(phone, wrongCode(code), verificationId)));
-      const record = await db.collection("otp_verifications").findOne({ phone });
+      await Promise.all(
+        Array.from({ length: 12 }, () =>
+          verify(phone, wrongCode(code), verificationId),
+        ),
+      );
+      const record = await db
+        .collection("otp_verifications")
+        .findOne({ phone });
       expect(record?.attempts).toBe(MAX_ATTEMPTS);
     });
 
@@ -243,8 +330,15 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
       const { verificationId } = (await register(phone).expect(202)).body.data;
       await db
         .collection("otp_verifications")
-        .updateOne({ phone }, { $set: { expiresAt: new Date(Date.now() - 1_000) } });
-      const response = await verify(phone, whatsapp.lastCodeFor(phone), verificationId).expect(400);
+        .updateOne(
+          { phone },
+          { $set: { expiresAt: new Date(Date.now() - 1_000) } },
+        );
+      const response = await verify(
+        phone,
+        whatsapp.lastCodeFor(phone),
+        verificationId,
+      ).expect(400);
       expect(response.body.code).toBe("OTP_EXPIRED");
     });
   });
@@ -256,7 +350,10 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
       const phone = nextPhone();
       const { verificationId } = (await register(phone).expect(202)).body.data;
       const response = await resend(phone, verificationId).expect(429);
-      expect(response.body).toMatchObject({ code: "OTP_RESEND_TOO_SOON", data: { retryAfterSeconds: expect.any(Number) } });
+      expect(response.body).toMatchObject({
+        code: "OTP_RESEND_TOO_SOON",
+        data: { retryAfterSeconds: expect.any(Number) },
+      });
       expect(response.body.data.retryAfterSeconds).toBeGreaterThan(50);
       expect(whatsapp.countFor(phone)).toBe(1);
     });
@@ -267,12 +364,19 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
       const first = whatsapp.lastCodeFor(phone);
 
       await skipCooldown(phone);
-      const resent = (await resend(phone, verificationId).expect(200)).body.data;
-      expect(resent).toMatchObject({ codeSent: true, verificationId, sendsRemaining: MAX_SENDS - 2 });
+      const resent = (await resend(phone, verificationId).expect(200)).body
+        .data;
+      expect(resent).toMatchObject({
+        codeSent: true,
+        verificationId,
+        sendsRemaining: MAX_SENDS - 2,
+      });
       const second = whatsapp.lastCodeFor(phone);
 
       if (first !== second)
-        expect((await verify(phone, first, verificationId).expect(400)).body.code).toBe("OTP_INVALID");
+        expect(
+          (await verify(phone, first, verificationId).expect(400)).body.code,
+        ).toBe("OTP_INVALID");
       await verify(phone, second, verificationId).expect(200);
     });
 
@@ -288,19 +392,29 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
       expect(response.body.code).toBe("OTP_SEND_LIMIT_REACHED");
       // Re-submitting the form does not reset the budget either.
       await skipCooldown(phone);
-      expect((await register(phone).expect(429)).body.code).toBe("OTP_SEND_LIMIT_REACHED");
+      expect((await register(phone).expect(429)).body.code).toBe(
+        "OTP_SEND_LIMIT_REACHED",
+      );
       expect(whatsapp.countFor(phone)).toBe(MAX_SENDS);
     });
 
     it("re-submitting the form inside the cooldown keeps the code already sent", async () => {
       const phone = nextPhone();
       await register(phone).expect(202);
-      const again = (await register(phone, { firstName: "Asha Rani" }).expect(202)).body.data;
+      const again = (
+        await register(phone, { firstName: "Asha Rani" }).expect(202)
+      ).body.data;
       expect(again.codeSent).toBe(false);
       expect(again.resendAvailableInSeconds).toBeGreaterThan(0);
       expect(whatsapp.countFor(phone)).toBe(1);
 
-      const session = (await verify(phone, whatsapp.lastCodeFor(phone), again.verificationId).expect(200)).body.data;
+      const session = (
+        await verify(
+          phone,
+          whatsapp.lastCodeFor(phone),
+          again.verificationId,
+        ).expect(200)
+      ).body.data;
       // The latest submission wins.
       expect(session.user.firstName).toBe("Asha Rani");
     });
@@ -312,7 +426,9 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
     it("refuses a number that already has an account, without sending anything", async () => {
       const phone = nextPhone();
       const { verificationId } = (await register(phone).expect(202)).body.data;
-      await verify(phone, whatsapp.lastCodeFor(phone), verificationId).expect(200);
+      await verify(phone, whatsapp.lastCodeFor(phone), verificationId).expect(
+        200,
+      );
 
       const sentBefore = whatsapp.sent.length;
       const response = await register(phone).expect(409);
@@ -322,9 +438,15 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
 
     it("refuses an email another account uses", async () => {
       const first = nextPhone();
-      const { verificationId } = (await register(first, { email: "Asha@Example.com" }).expect(202)).body.data;
-      await verify(first, whatsapp.lastCodeFor(first), verificationId).expect(200);
-      const response = await register(nextPhone(), { email: "asha@example.com" }).expect(409);
+      const { verificationId } = (
+        await register(first, { email: "Asha@Example.com" }).expect(202)
+      ).body.data;
+      await verify(first, whatsapp.lastCodeFor(first), verificationId).expect(
+        200,
+      );
+      const response = await register(nextPhone(), {
+        email: "asha@example.com",
+      }).expect(409);
       expect(response.body.code).toBe("EMAIL_ALREADY_REGISTERED");
     });
 
@@ -342,11 +464,18 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
       const phone = nextPhone();
       whatsapp.failNext("UNAVAILABLE");
       const response = await register(phone).expect(503);
-      expect(response.body).toMatchObject({ success: false, code: "OTP_DELIVERY_FAILED" });
+      expect(response.body).toMatchObject({
+        success: false,
+        code: "OTP_DELIVERY_FAILED",
+      });
       expect(response.body.data).toBeUndefined();
       // No usable code or orphaned sign-up remains…
-      expect(await db.collection("otp_verifications").countDocuments({ phone })).toBe(0);
-      expect(await db.collection("pending_signups").countDocuments({ phone })).toBe(0);
+      expect(
+        await db.collection("otp_verifications").countDocuments({ phone }),
+      ).toBe(0);
+      expect(
+        await db.collection("pending_signups").countDocuments({ phone }),
+      ).toBe(0);
       // …and the failed send did not start a cooldown.
       const retry = await register(phone).expect(202);
       expect(retry.body.data.sendsRemaining).toBe(MAX_SENDS - 1);
@@ -364,9 +493,13 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
       const { verificationId } = (await register(phone).expect(202)).body.data;
       await skipCooldown(phone);
       whatsapp.failNext("MISCONFIGURED");
-      expect((await resend(phone, verificationId).expect(503)).body.code).toBe("OTP_DELIVERY_FAILED");
+      expect((await resend(phone, verificationId).expect(503)).body.code).toBe(
+        "OTP_DELIVERY_FAILED",
+      );
       await resend(phone, verificationId).expect(200);
-      await verify(phone, whatsapp.lastCodeFor(phone), verificationId).expect(200);
+      await verify(phone, whatsapp.lastCodeFor(phone), verificationId).expect(
+        200,
+      );
     });
   });
 
@@ -378,14 +511,18 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
       const { verificationId } = (await register(phone).expect(202)).body.data;
       const code = whatsapp.lastCodeFor(phone);
       await verify(phone, code, verificationId).expect(200);
-      expect((await verify(phone, code, verificationId).expect(400)).body.code).toBe("SIGNUP_SESSION_INVALID");
+      expect(
+        (await verify(phone, code, verificationId).expect(400)).body.code,
+      ).toBe("SIGNUP_SESSION_INVALID");
     });
 
     it("a correct code wins exactly once under concurrency", async () => {
       const phone = nextPhone();
       const { verificationId } = (await register(phone).expect(202)).body.data;
       const code = whatsapp.lastCodeFor(phone);
-      const results = await Promise.all([1, 2, 3].map(() => verify(phone, code, verificationId)));
+      const results = await Promise.all(
+        [1, 2, 3].map(() => verify(phone, code, verificationId)),
+      );
       expect(results.filter((result) => result.status === 200)).toHaveLength(1);
       expect(await db.collection("users").countDocuments({ phone })).toBe(1);
     });
@@ -398,19 +535,27 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
       const codeA = whatsapp.lastCodeFor(phoneA);
       const codeB = whatsapp.lastCodeFor(phoneB);
       if (codeA !== codeB)
-        expect((await verify(phoneB, codeA, b.verificationId).expect(400)).body.code).toBe("OTP_INVALID");
+        expect(
+          (await verify(phoneB, codeA, b.verificationId).expect(400)).body.code,
+        ).toBe("OTP_INVALID");
     });
 
     it("needs the verificationId of the latest submission", async () => {
       const phone = nextPhone();
       const first = (await register(phone).expect(202)).body.data;
       const code = whatsapp.lastCodeFor(phone);
-      expect((await verify(phone, code, "y".repeat(43)).expect(400)).body.code).toBe("SIGNUP_SESSION_INVALID");
+      expect(
+        (await verify(phone, code, "y".repeat(43)).expect(400)).body.code,
+      ).toBe("SIGNUP_SESSION_INVALID");
 
       // Someone re-submits the form for this number: the earlier handle dies,
       // so the first submitter's password can't be swapped under the code.
-      const second = (await register(phone, { password: "Other@Pass1" }).expect(202)).body.data;
-      expect((await verify(phone, code, first.verificationId).expect(400)).body.code).toBe("SIGNUP_SESSION_INVALID");
+      const second = (
+        await register(phone, { password: "Other@Pass1" }).expect(202)
+      ).body.data;
+      expect(
+        (await verify(phone, code, first.verificationId).expect(400)).body.code,
+      ).toBe("SIGNUP_SESSION_INVALID");
       await verify(phone, code, second.verificationId).expect(200);
     });
 
@@ -418,27 +563,47 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
       const phone = nextPhone();
       await register(phone).expect(202);
       const code = whatsapp.lastCodeFor(phone);
-      const record = await db.collection("otp_verifications").findOne({ phone });
-      expect(record).toMatchObject({ purpose: "SIGNUP", attempts: 0, verified: false });
+      const record = await db
+        .collection("otp_verifications")
+        .findOne({ phone });
+      expect(record).toMatchObject({
+        purpose: "SIGNUP",
+        attempts: 0,
+        verified: false,
+      });
       expect(record?.otpHash).toMatch(/^[a-f0-9]{64}$/);
       expect(record?.otpHash).not.toContain(code);
-      expect(record?.otpHash).not.toBe(createHash("sha256").update(code).digest("hex"));
+      expect(record?.otpHash).not.toBe(
+        createHash("sha256").update(code).digest("hex"),
+      );
       expect(JSON.stringify(record)).not.toContain(`"${code}"`);
 
       const pending = await db.collection("pending_signups").findOne({ phone });
       expect(pending?.passwordHash).toMatch(/^\$argon2/);
       expect(JSON.stringify(pending)).not.toContain(PASSWORD);
 
-      for (const collection of ["otp_verifications", "otp_send_quotas", "pending_signups"]) {
+      for (const collection of [
+        "otp_verifications",
+        "otp_send_quotas",
+        "pending_signups",
+      ]) {
         const indexes = await db.collection(collection).indexes();
         expect(indexes).toEqual(
-          expect.arrayContaining([expect.objectContaining({ key: { expiresAt: 1 }, expireAfterSeconds: 0 })]),
+          expect.arrayContaining([
+            expect.objectContaining({
+              key: { expiresAt: 1 },
+              expireAfterSeconds: 0,
+            }),
+          ]),
         );
       }
     });
 
     it("the old public send-otp endpoint is gone", async () => {
-      await api().post("/api/v1/auth/send-otp").send({ phone: nextPhone() }).expect(404);
+      await api()
+        .post("/api/v1/auth/send-otp")
+        .send({ phone: nextPhone() })
+        .expect(404);
     });
   });
 
@@ -447,16 +612,38 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
   describe("existing unverified accounts", () => {
     it("verify their own number while signed in", async () => {
       const phone = nextPhone();
-      const { UsersService } = await import("../src/modules/users/users.service");
+      const { UsersService } =
+        await import("../src/modules/users/users.service");
       const { UserRole } = await import("../src/common/types/user-role.enum");
-      await app.get(UsersService).create({ phone, password: PASSWORD, role: UserRole.CUSTOMER, firstName: "Old" });
+      await app
+        .get(UsersService)
+        .create({
+          phone,
+          password: PASSWORD,
+          role: UserRole.CUSTOMER,
+          firstName: "Old",
+        });
 
-      const login = (await api().post("/api/v1/auth/login").send({ phone, password: PASSWORD }).expect(200)).body.data;
+      const login = (
+        await api()
+          .post("/api/v1/auth/login")
+          .send({ phone, password: PASSWORD })
+          .expect(200)
+      ).body.data;
       expect(login.user.isPhoneVerified).toBe(false);
       await api().post("/api/v1/auth/phone/send-otp").expect(401);
 
-      const sent = (await api().post("/api/v1/auth/phone/send-otp").set(bearer(login.accessToken)).expect(200)).body.data;
-      expect(sent).toMatchObject({ phone, channel: "WHATSAPP", codeSent: true });
+      const sent = (
+        await api()
+          .post("/api/v1/auth/phone/send-otp")
+          .set(bearer(login.accessToken))
+          .expect(200)
+      ).body.data;
+      expect(sent).toMatchObject({
+        phone,
+        channel: "WHATSAPP",
+        codeSent: true,
+      });
       expect(sent.verificationId).toBeUndefined();
 
       const user = (
@@ -468,7 +655,10 @@ describe("Signup — WhatsApp OTP (e2e)", () => {
       ).body.data;
       expect(user.isPhoneVerified).toBe(true);
 
-      const again = await api().post("/api/v1/auth/phone/send-otp").set(bearer(login.accessToken)).expect(409);
+      const again = await api()
+        .post("/api/v1/auth/phone/send-otp")
+        .set(bearer(login.accessToken))
+        .expect(409);
       expect(again.body.code).toBe("PHONE_ALREADY_VERIFIED");
     });
   });

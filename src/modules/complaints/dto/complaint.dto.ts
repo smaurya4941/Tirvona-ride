@@ -1,13 +1,34 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
-import { IsBoolean, IsEnum, IsInt, IsMongoId, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength } from "class-validator";
-import { ComplaintCategory, ComplaintPriority, ComplaintStatus } from "../complaint-rules";
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsMongoId,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength,
+} from "class-validator";
+import {
+  ComplaintCategory,
+  ComplaintPriority,
+  ComplaintStatus,
+} from "../complaint-rules";
 
-const trim = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value);
-const optionalText = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() || undefined : value);
+const trim = ({ value }: { value: unknown }) =>
+  typeof value === "string" ? value.trim() : value;
+const optionalText = ({ value }: { value: unknown }) =>
+  typeof value === "string" ? value.trim() || undefined : value;
 
 export class CreateComplaintDto {
-  @ApiPropertyOptional({ description: "The ride this is about (required for ride-specific categories)" })
+  @ApiPropertyOptional({
+    description:
+      "The ride this is about (required for ride-specific categories)",
+  })
   @IsOptional()
   @IsMongoId()
   rideId?: string;
@@ -24,10 +45,15 @@ export class CreateComplaintDto {
   @MaxLength(120)
   subject!: string;
 
-  @ApiProperty({ example: "The driver did not follow the route shown in the app…" })
+  @ApiProperty({
+    example: "The driver did not follow the route shown in the app…",
+  })
   @Transform(trim)
   @IsString()
-  @MinLength(10, { message: "Please describe the problem in a little more detail (at least 10 characters)" })
+  @MinLength(10, {
+    message:
+      "Please describe the problem in a little more detail (at least 10 characters)",
+  })
   @MaxLength(2000)
   description!: string;
 }
@@ -102,7 +128,9 @@ export class UpdateComplaintDto {
   @MaxLength(2000)
   note?: string;
 
-  @ApiPropertyOptional({ description: "Assign the ticket to the calling admin" })
+  @ApiPropertyOptional({
+    description: "Assign the ticket to the calling admin",
+  })
   @IsOptional()
   @IsBoolean()
   assignToMe?: boolean;

@@ -2,7 +2,10 @@ import { Logger, Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { MongooseModule } from "@nestjs/mongoose";
 import type { RoutesProviderName } from "../../config/environment";
-import { DriverProfile, DriverProfileSchema } from "../drivers/schemas/driver-profile.schema";
+import {
+  DriverProfile,
+  DriverProfileSchema,
+} from "../drivers/schemas/driver-profile.schema";
 import { Ride, RideSchema } from "../rides/schemas/ride.schema";
 import { DriverLiveLocationStore } from "./driver-live-location.store";
 import { DriverLocationService } from "./driver-location.service";
@@ -26,15 +29,20 @@ function routeEstimatorFactory(
 ): RouteEstimator {
   const provider = config.getOrThrow<RoutesProviderName>("routesProvider");
   if (provider !== "google") {
-    new Logger(LocationsModule.name).log("Routing: straight-line (Haversine) estimates");
+    new Logger(LocationsModule.name).log(
+      "Routing: straight-line (Haversine) estimates",
+    );
     return haversine;
   }
-  new Logger(LocationsModule.name).log("Routing: Google Routes API with straight-line fallback");
+  new Logger(LocationsModule.name).log(
+    "Routing: Google Routes API with straight-line fallback",
+  );
   return new ResilientRouteEstimator(google, haversine, {
     cacheTtlMs: config.getOrThrow<number>("routesCacheTtlSeconds") * 1000,
     cacheMaxEntries: config.getOrThrow<number>("routesCacheMaxEntries"),
     failureThreshold: config.getOrThrow<number>("routesFailureThreshold"),
-    cooldownMs: config.getOrThrow<number>("routesFailureCooldownSeconds") * 1000,
+    cooldownMs:
+      config.getOrThrow<number>("routesFailureCooldownSeconds") * 1000,
   });
 }
 import {
@@ -49,7 +57,10 @@ import {
     MongooseModule.forFeature([
       { name: DriverProfile.name, schema: DriverProfileSchema },
       { name: Ride.name, schema: RideSchema },
-      { name: DriverLocationCheckpoint.name, schema: DriverLocationCheckpointSchema },
+      {
+        name: DriverLocationCheckpoint.name,
+        schema: DriverLocationCheckpointSchema,
+      },
     ]),
   ],
   providers: [

@@ -43,13 +43,20 @@ export const BRAND_ASSET_RULES: Record<BrandAssetKind, BrandAssetRule> = {
 };
 
 /** Largest file any kind accepts — the multer limit. */
-export const MAX_BRAND_ASSET_BYTES = Math.max(...Object.values(BRAND_ASSET_RULES).map((rule) => rule.maxBytes));
+export const MAX_BRAND_ASSET_BYTES = Math.max(
+  ...Object.values(BRAND_ASSET_RULES).map((rule) => rule.maxBytes),
+);
 
 /** Returns why the image cannot be used as `kind`, or null if it can. */
-export function brandAssetProblem(kind: BrandAssetKind, bytes: number, image: ImageInfo | null): string | null {
+export function brandAssetProblem(
+  kind: BrandAssetKind,
+  bytes: number,
+  image: ImageInfo | null,
+): string | null {
   const rule = BRAND_ASSET_RULES[kind];
   if (!image) return `${rule.label} must be a PNG, JPEG or WEBP image`;
-  if (bytes > rule.maxBytes) return `${rule.label} must be at most ${Math.round(rule.maxBytes / 1024 / 1024)} MB`;
+  if (bytes > rule.maxBytes)
+    return `${rule.label} must be at most ${Math.round(rule.maxBytes / 1024 / 1024)} MB`;
   if (image.width < rule.minWidth || image.height < rule.minHeight)
     return `${rule.label} must be at least ${rule.minWidth} × ${rule.minHeight} px (got ${image.width} × ${image.height})`;
   const aspect = image.height / image.width;

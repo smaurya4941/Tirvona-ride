@@ -1,4 +1,7 @@
-import { PAID_RIDE_PAYMENT_STATUSES, effectivePaymentStatus } from "../rides/ride-payment-status";
+import {
+  PAID_RIDE_PAYMENT_STATUSES,
+  effectivePaymentStatus,
+} from "../rides/ride-payment-status";
 import type { RidePaymentStatus } from "../rides/ride-payment-status";
 import { RideStatus } from "../rides/ride-state-machine";
 
@@ -40,10 +43,15 @@ export function ratingEligibility(
   const windowEndsAt = ride.completedAt
     ? new Date(ride.completedAt.getTime() + windowDays * 24 * 60 * 60 * 1000)
     : undefined;
-  const blocked = (reason: RatingBlocker): RatingEligibility => ({ canRate: false, reason, windowEndsAt });
+  const blocked = (reason: RatingBlocker): RatingEligibility => ({
+    canRate: false,
+    reason,
+    windowEndsAt,
+  });
 
   if (alreadyRated) return blocked(RatingBlocker.ALREADY_RATED);
-  if (ride.status !== RideStatus.COMPLETED) return blocked(RatingBlocker.RIDE_NOT_COMPLETED);
+  if (ride.status !== RideStatus.COMPLETED)
+    return blocked(RatingBlocker.RIDE_NOT_COMPLETED);
   if (!ride.driverId) return blocked(RatingBlocker.NO_DRIVER);
   // Explicit fields: `ride` may be a hydrated Mongoose document, whose
   // properties are getters that an object spread would not copy.
@@ -54,6 +62,7 @@ export function ratingEligibility(
   });
   if (!PAID_RIDE_PAYMENT_STATUSES.includes(paymentStatus))
     return blocked(RatingBlocker.PAYMENT_NOT_VERIFIED);
-  if (windowEndsAt && now > windowEndsAt) return blocked(RatingBlocker.WINDOW_CLOSED);
+  if (windowEndsAt && now > windowEndsAt)
+    return blocked(RatingBlocker.WINDOW_CLOSED);
   return { canRate: true, windowEndsAt };
 }

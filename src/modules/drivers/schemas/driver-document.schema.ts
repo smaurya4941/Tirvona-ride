@@ -27,7 +27,11 @@ export class DriverDocument {
   @Prop({ required: true })
   filePath!: string;
 
-  @Prop({ required: true, enum: DocumentStatus, default: DocumentStatus.PENDING })
+  @Prop({
+    required: true,
+    enum: DocumentStatus,
+    default: DocumentStatus.PENDING,
+  })
   status!: DocumentStatus;
 
   @Prop()
@@ -44,6 +48,7 @@ export class DriverDocument {
 }
 
 export type DriverDocumentDocument = HydratedDocument<DriverDocument>;
-export const DriverDocumentSchema = SchemaFactory.createForClass(DriverDocument);
+export const DriverDocumentSchema =
+  SchemaFactory.createForClass(DriverDocument);
 
 DriverDocumentSchema.index({ driverId: 1, documentType: 1 });

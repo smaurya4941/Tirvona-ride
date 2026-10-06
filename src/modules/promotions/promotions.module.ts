@@ -6,7 +6,12 @@ import { RideTypesModule } from "../ride-types/ride-types.module";
 import { PromoRideEventsListener } from "./promo-ride-events.listener";
 import { PromotionsController } from "./promotions.controller";
 import { PromotionsService } from "./promotions.service";
-import { PromoCode, PromoCodeSchema, PromoRedemption, PromoRedemptionSchema } from "./schemas/promo-code.schema";
+import {
+  PromoCode,
+  PromoCodeSchema,
+  PromoRedemption,
+  PromoRedemptionSchema,
+} from "./schemas/promo-code.schema";
 
 // Rides → Promotions (reserve at booking). Promotions never imports Rides:
 // ride outcomes arrive as domain events.

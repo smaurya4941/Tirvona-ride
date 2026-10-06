@@ -2,8 +2,14 @@ import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 import { PeakPricingService } from "./peak-pricing.service";
 import { PricingService } from "./pricing.service";
-import { PeakPricingSlot, PeakPricingSlotSchema } from "./schemas/peak-pricing-slot.schema";
-import { PricingConfig, PricingConfigSchema } from "./schemas/pricing-config.schema";
+import {
+  PeakPricingSlot,
+  PeakPricingSlotSchema,
+} from "./schemas/peak-pricing-slot.schema";
+import {
+  PricingConfig,
+  PricingConfigSchema,
+} from "./schemas/pricing-config.schema";
 
 @Module({
   imports: [

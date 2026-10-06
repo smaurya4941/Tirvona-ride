@@ -44,7 +44,12 @@ export const apiConflict = (
 ): ConflictException => new ConflictException({ message, code, data });
 
 export class ApiException extends HttpException {
-  constructor(status: number, message: string, code: ErrorCode, data?: unknown) {
+  constructor(
+    status: number,
+    message: string,
+    code: ErrorCode,
+    data?: unknown,
+  ) {
     super({ message, code, data }, status);
   }
 }

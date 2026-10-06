@@ -1,7 +1,10 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { SchemaTypes, Types } from "mongoose";
 import type { HydratedDocument } from "mongoose";
-import { GeoPoint, GeoPointSchema } from "../../../common/schemas/geo-point.schema";
+import {
+  GeoPoint,
+  GeoPointSchema,
+} from "../../../common/schemas/geo-point.schema";
 
 export enum CheckpointKind {
   /** Where the driver was when they accepted. */
@@ -65,8 +68,11 @@ export class DriverLocationCheckpoint {
   recordedAt!: Date;
 }
 
-export type DriverLocationCheckpointDocument = HydratedDocument<DriverLocationCheckpoint>;
-export const DriverLocationCheckpointSchema = SchemaFactory.createForClass(DriverLocationCheckpoint);
+export type DriverLocationCheckpointDocument =
+  HydratedDocument<DriverLocationCheckpoint>;
+export const DriverLocationCheckpointSchema = SchemaFactory.createForClass(
+  DriverLocationCheckpoint,
+);
 
 DriverLocationCheckpointSchema.index({ rideId: 1, recordedAt: 1 });
 DriverLocationCheckpointSchema.index({ driverId: 1, createdAt: -1 });

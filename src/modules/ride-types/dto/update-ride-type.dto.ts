@@ -18,7 +18,14 @@ import { InitialDistanceDto } from "../../ride-config/dto/ride-config.dto";
 import { RIDE_TYPE_CODE_PATTERN } from "../schemas/ride-type.schema";
 
 /** Icon keys the mobile apps bundle; anything else would render a blank. */
-export const RIDE_TYPE_ICONS = ["bike", "auto", "e_rickshaw", "cab", "cab_xl", "premium"] as const;
+export const RIDE_TYPE_ICONS = [
+  "bike",
+  "auto",
+  "e_rickshaw",
+  "cab",
+  "cab_xl",
+  "premium",
+] as const;
 
 const MONEY = { allowNaN: false, allowInfinity: false, maxDecimalPlaces: 2 };
 
@@ -38,10 +45,15 @@ export class UpdateRideTypeDto {
   @ApiPropertyOptional({ enum: RIDE_TYPE_ICONS })
   @IsOptional()
   @IsString()
-  @Matches(new RegExp(`^(${RIDE_TYPE_ICONS.join("|")})$`), { message: `icon must be one of ${RIDE_TYPE_ICONS.join(", ")}` })
+  @Matches(new RegExp(`^(${RIDE_TYPE_ICONS.join("|")})$`), {
+    message: `icon must be one of ${RIDE_TYPE_ICONS.join(", ")}`,
+  })
   icon?: string;
 
-  @ApiPropertyOptional({ enum: VehicleType, description: "Which drivers serve it (applies to new bookings)" })
+  @ApiPropertyOptional({
+    enum: VehicleType,
+    description: "Which drivers serve it (applies to new bookings)",
+  })
   @IsOptional()
   @IsEnum(VehicleType)
   vehicleType?: VehicleType;
@@ -53,7 +65,9 @@ export class UpdateRideTypeDto {
   @Max(8)
   seatCapacity?: number;
 
-  @ApiPropertyOptional({ description: "Customers can book it (requires a tariff)" })
+  @ApiPropertyOptional({
+    description: "Customers can book it (requires a tariff)",
+  })
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
@@ -65,7 +79,10 @@ export class UpdateRideTypeDto {
   @Max(100)
   sortOrder?: number;
 
-  @ApiPropertyOptional({ description: "Audit note, required by the panel when switching a ride type off" })
+  @ApiPropertyOptional({
+    description:
+      "Audit note, required by the panel when switching a ride type off",
+  })
   @IsOptional()
   @IsString()
   @Length(3, 240)
@@ -100,7 +117,9 @@ export class InitialTariffDto {
 
 export class CreateRideTypeDto {
   @ApiProperty({ example: "CAB_XL" })
-  @Matches(RIDE_TYPE_CODE_PATTERN, { message: "code must be 2–24 upper-case letters, digits or underscores" })
+  @Matches(RIDE_TYPE_CODE_PATTERN, {
+    message: "code must be 2–24 upper-case letters, digits or underscores",
+  })
   code!: string;
 
   @ApiProperty({ example: "Cab XL" })
@@ -115,7 +134,9 @@ export class CreateRideTypeDto {
   description?: string;
 
   @ApiProperty({ enum: RIDE_TYPE_ICONS })
-  @Matches(new RegExp(`^(${RIDE_TYPE_ICONS.join("|")})$`), { message: `icon must be one of ${RIDE_TYPE_ICONS.join(", ")}` })
+  @Matches(new RegExp(`^(${RIDE_TYPE_ICONS.join("|")})$`), {
+    message: `icon must be one of ${RIDE_TYPE_ICONS.join(", ")}`,
+  })
   icon!: string;
 
   @ApiProperty({ enum: VehicleType })
@@ -140,13 +161,20 @@ export class CreateRideTypeDto {
   @IsBoolean()
   isActive?: boolean;
 
-  @ApiPropertyOptional({ type: InitialTariffDto, description: "Required to create it active" })
+  @ApiPropertyOptional({
+    type: InitialTariffDto,
+    description: "Required to create it active",
+  })
   @IsOptional()
   @ValidateNested()
   @Type(() => InitialTariffDto)
   pricing?: InitialTariffDto;
 
-  @ApiPropertyOptional({ type: InitialDistanceDto, description: "Minimum (m) and maximum (km) trip distance. Required to create it active" })
+  @ApiPropertyOptional({
+    type: InitialDistanceDto,
+    description:
+      "Minimum (m) and maximum (km) trip distance. Required to create it active",
+  })
   @IsOptional()
   @ValidateNested()
   @Type(() => InitialDistanceDto)

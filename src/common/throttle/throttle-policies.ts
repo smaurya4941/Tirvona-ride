@@ -11,7 +11,14 @@ import type { Environment } from "../../config/environment";
  * time, before ConfigService exists, so it registers resolver functions that
  * read this table on every request; ThrottlerModule's factory fills it in.
  */
-export type ThrottlePolicyName = "auth" | "signup" | "otpSend" | "otpVerify" | "refresh" | "adminLogin" | "promo";
+export type ThrottlePolicyName =
+  | "auth"
+  | "signup"
+  | "otpSend"
+  | "otpVerify"
+  | "refresh"
+  | "adminLogin"
+  | "promo";
 
 interface ThrottleWindow {
   limit: number;
@@ -49,18 +56,40 @@ export function configureThrottlePolicies(
   >,
 ): void {
   policies.auth = { limit: env.throttleAuthLimit, ttl: env.throttleAuthTtlMs };
-  policies.signup = { limit: env.throttleSignupLimit, ttl: env.throttleSignupTtlMs };
-  policies.otpSend = { limit: env.throttleOtpSendLimit, ttl: env.throttleOtpSendTtlMs };
-  policies.otpVerify = { limit: env.throttleOtpVerifyLimit, ttl: env.throttleOtpVerifyTtlMs };
-  policies.refresh = { limit: env.throttleRefreshLimit, ttl: env.throttleRefreshTtlMs };
-  policies.adminLogin = { limit: env.throttleAdminLoginLimit, ttl: env.throttleAdminLoginTtlMs };
-  policies.promo = { limit: env.throttlePromoLimit, ttl: env.throttlePromoTtlMs };
+  policies.signup = {
+    limit: env.throttleSignupLimit,
+    ttl: env.throttleSignupTtlMs,
+  };
+  policies.otpSend = {
+    limit: env.throttleOtpSendLimit,
+    ttl: env.throttleOtpSendTtlMs,
+  };
+  policies.otpVerify = {
+    limit: env.throttleOtpVerifyLimit,
+    ttl: env.throttleOtpVerifyTtlMs,
+  };
+  policies.refresh = {
+    limit: env.throttleRefreshLimit,
+    ttl: env.throttleRefreshTtlMs,
+  };
+  policies.adminLogin = {
+    limit: env.throttleAdminLoginLimit,
+    ttl: env.throttleAdminLoginTtlMs,
+  };
+  policies.promo = {
+    limit: env.throttlePromoLimit,
+    ttl: env.throttlePromoTtlMs,
+  };
 }
 
-export const throttlePolicy = (name: ThrottlePolicyName): Readonly<ThrottleWindow> => policies[name];
+export const throttlePolicy = (
+  name: ThrottlePolicyName,
+): Readonly<ThrottleWindow> => policies[name];
 
 /** Applies the named policy to a route (overrides the "default" throttler). */
-export const ThrottlePolicy = (name: ThrottlePolicyName): MethodDecorator & ClassDecorator =>
+export const ThrottlePolicy = (
+  name: ThrottlePolicyName,
+): MethodDecorator & ClassDecorator =>
   Throttle({
     default: {
       limit: () => policies[name].limit,

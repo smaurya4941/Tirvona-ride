@@ -25,7 +25,11 @@ export class PaymentWebhookEvent {
   @Prop({ required: true })
   event!: string;
 
-  @Prop({ required: true, enum: WebhookEventStatus, default: WebhookEventStatus.RECEIVED })
+  @Prop({
+    required: true,
+    enum: WebhookEventStatus,
+    default: WebhookEventStatus.RECEIVED,
+  })
   status!: WebhookEventStatus;
 
   @Prop()
@@ -45,8 +49,12 @@ export class PaymentWebhookEvent {
 }
 
 export type PaymentWebhookEventDocument = HydratedDocument<PaymentWebhookEvent>;
-export const PaymentWebhookEventSchema = SchemaFactory.createForClass(PaymentWebhookEvent);
+export const PaymentWebhookEventSchema =
+  SchemaFactory.createForClass(PaymentWebhookEvent);
 
 PaymentWebhookEventSchema.index({ eventId: 1 }, { unique: true });
 // Webhook trail is operational data: keep 180 days.
-PaymentWebhookEventSchema.index({ createdAt: 1 }, { expireAfterSeconds: 180 * 86_400, name: "ttl_180d" });
+PaymentWebhookEventSchema.index(
+  { createdAt: 1 },
+  { expireAfterSeconds: 180 * 86_400, name: "ttl_180d" },
+);

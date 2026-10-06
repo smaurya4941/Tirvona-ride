@@ -1,5 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { OnApplicationBootstrap, OnApplicationShutdown } from "@nestjs/common";
+import type {
+  OnApplicationBootstrap,
+  OnApplicationShutdown,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
@@ -41,7 +44,9 @@ export interface MonitorResult {
  * instances; a missed pass only delays a warning to the next.
  */
 @Injectable()
-export class CircuitMonitorService implements OnApplicationBootstrap, OnApplicationShutdown {
+export class CircuitMonitorService
+  implements OnApplicationBootstrap, OnApplicationShutdown
+{
   private readonly logger = new Logger(CircuitMonitorService.name);
   private readonly tripMeterMaxGapSeconds: number;
   private timer?: NodeJS.Timeout;
@@ -54,13 +59,19 @@ export class CircuitMonitorService implements OnApplicationBootstrap, OnApplicat
     private readonly ledger: CircuitLedgerService,
     private readonly config: ConfigService,
   ) {
-    this.tripMeterMaxGapSeconds = config.getOrThrow<number>("tripMeterMaxGapSeconds");
+    this.tripMeterMaxGapSeconds = config.getOrThrow<number>(
+      "tripMeterMaxGapSeconds",
+    );
   }
 
   onApplicationBootstrap(): void {
-    const intervalMs = this.config.getOrThrow<number>("circuitMonitorIntervalMs");
+    const intervalMs = this.config.getOrThrow<number>(
+      "circuitMonitorIntervalMs",
+    );
     if (intervalMs <= 0) {
-      this.logger.warn("Circuit monitor disabled (CIRCUIT_MONITOR_INTERVAL_MS=0)");
+      this.logger.warn(
+        "Circuit monitor disabled (CIRCUIT_MONITOR_INTERVAL_MS=0)",
+      );
       return;
     }
     this.timer = setInterval(() => void this.safeTick(), intervalMs);
@@ -78,7 +89,10 @@ export class CircuitMonitorService implements OnApplicationBootstrap, OnApplicat
     try {
       await this.tick();
     } catch (error) {
-      this.logger.error("Circuit monitor pass failed", error instanceof Error ? error.stack : String(error));
+      this.logger.error(
+        "Circuit monitor pass failed",
+        error instanceof Error ? error.stack : String(error),
+      );
     } finally {
       this.running = false;
     }
@@ -86,13 +100,19 @@ export class CircuitMonitorService implements OnApplicationBootstrap, OnApplicat
 
   /** One pass over every running circuit. */
   async tick(now: Date = new Date()): Promise<MonitorResult> {
-    const running = await this.rideModel.find({ kind: RideKind.CIRCUIT, status: RideStatus.RIDE_STARTED }).limit(BATCH).exec();
+    const running = await this.rideModel
+      .find({ kind: RideKind.CIRCUIT, status: RideStatus.RIDE_STARTED })
+      .limit(BATCH)
+      .exec();
     let warnings = 0;
     for (const ride of running) {
       try {
         warnings += await this.check(ride, now);
       } catch (error) {
-        this.logger.error(`Circuit check failed for ${ride.rideCode}`, error instanceof Error ? error.stack : String(error));
+        this.logger.error(
+          `Circuit check failed for ${ride.rideCode}`,
+          error instanceof Error ? error.stack : String(error),
+        );
       }
     }
     return { checked: running.length, warnings };
@@ -102,14 +122,24 @@ export class CircuitMonitorService implements OnApplicationBootstrap, OnApplicat
     const circuit = ride.circuit;
     if (!circuit || !ride.driverId || !ride.startedAt) return 0;
 
-    const measurement = measureTrip(await this.locations.tripTrail(ride._id, ride.driverId, ride.startedAt), this.tripMeterMaxGapSeconds);
+    const measurement = measureTrip(
+      await this.locations.tripTrail(ride._id, ride.driverId, ride.startedAt),
+      this.tripMeterMaxGapSeconds,
+    );
     // Distance never goes backwards (an unreliable trail must not erase what was already measured).
-    const distance = Math.max(circuit.usage?.distanceMeters ?? 0, measurement.distanceMeters);
+    const distance = Math.max(
+      circuit.usage?.distanceMeters ?? 0,
+      measurement.distanceMeters,
+    );
     const refreshed = await this.rideModel
       .findOneAndUpdate(
         { _id: ride._id, status: RideStatus.RIDE_STARTED },
         {
-          $set: { "circuit.usage.distanceMeters": distance, "circuit.usage.reliable": measurement.reliable, "circuit.usage.measuredAt": now },
+          $set: {
+            "circuit.usage.distanceMeters": distance,
+            "circuit.usage.reliable": measurement.reliable,
+            "circuit.usage.measuredAt": now,
+          },
           $inc: { stateVersion: 1 },
         },
         { returnDocument: "after" },
@@ -123,14 +153,22 @@ export class CircuitMonitorService implements OnApplicationBootstrap, OnApplicat
       const flag = WARNING_FLAG[warning];
       const claimed = await this.rideModel
         .findOneAndUpdate(
-          { _id: ride._id, status: RideStatus.RIDE_STARTED, [`circuit.warnings.${flag}`]: { $exists: false } },
-          { $set: { [`circuit.warnings.${flag}`]: now }, $inc: { stateVersion: 1 } },
+          {
+            _id: ride._id,
+            status: RideStatus.RIDE_STARTED,
+            [`circuit.warnings.${flag}`]: { $exists: false },
+          },
+          {
+            $set: { [`circuit.warnings.${flag}`]: now },
+            $inc: { stateVersion: 1 },
+          },
           { returnDocument: "after" },
         )
         .exec();
       if (!claimed) continue;
       sent += 1;
-      const remainingSeconds = circuit.pricing.includedDurationSeconds - elapsed;
+      const remainingSeconds =
+        circuit.pricing.includedDurationSeconds - elapsed;
       const isTime = warning.startsWith("TIME");
       await this.ledger.record({
         rideId: ride._id,
@@ -142,10 +180,16 @@ export class CircuitMonitorService implements OnApplicationBootstrap, OnApplicat
         claimed,
         isTime ? CircuitEvent.TIME_WARNING : CircuitEvent.DISTANCE_WARNING,
         { warning, remainingSeconds, distanceMeters: distance },
-        { kind: warning as CircuitNoticeKind, remainingMinutes: Math.max(0, Math.round(remainingSeconds / 60)) },
+        {
+          kind: warning as CircuitNoticeKind,
+          remainingMinutes: Math.max(0, Math.round(remainingSeconds / 60)),
+        },
       );
     }
-    if (sent === 0) this.events.circuitEvent(refreshed, CircuitEvent.USAGE, { distanceMeters: distance });
+    if (sent === 0)
+      this.events.circuitEvent(refreshed, CircuitEvent.USAGE, {
+        distanceMeters: distance,
+      });
     return sent;
   }
 }

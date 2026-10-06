@@ -4,16 +4,27 @@ import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model, QueryFilter } from "mongoose";
 import { Types } from "mongoose";
-import { apiBadRequest, apiConflict, apiNotFound } from "../../../common/exceptions/api.exception";
+import {
+  apiBadRequest,
+  apiConflict,
+  apiNotFound,
+} from "../../../common/exceptions/api.exception";
 import { UserRole } from "../../../common/types/user-role.enum";
-import { DriverProfile, DriverStatus } from "../../drivers/schemas/driver-profile.schema";
+import {
+  DriverProfile,
+  DriverStatus,
+} from "../../drivers/schemas/driver-profile.schema";
 import type { Page } from "../../rides/rides.service";
 import { User, UserStatus } from "../../users/schemas/user.schema";
 import type { NotificationDraft } from "../notification-plan";
 import { NotificationType } from "../notification-types";
 import { NotificationsService } from "../notifications.service";
 import type { CreateBroadcastDto, UpdateBroadcastDto } from "./broadcast.dto";
-import { Broadcast, BroadcastAudience, BroadcastStatus } from "./broadcast.schema";
+import {
+  Broadcast,
+  BroadcastAudience,
+  BroadcastStatus,
+} from "./broadcast.schema";
 import type { BroadcastDeepLink, BroadcastDocument } from "./broadcast.schema";
 
 export interface BroadcastView {
@@ -41,7 +52,10 @@ interface Recipient {
 }
 
 const LEASE_MS = 120_000;
-const EDITABLE: readonly BroadcastStatus[] = [BroadcastStatus.DRAFT, BroadcastStatus.SCHEDULED];
+const EDITABLE: readonly BroadcastStatus[] = [
+  BroadcastStatus.DRAFT,
+  BroadcastStatus.SCHEDULED,
+];
 
 @Injectable()
 export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
@@ -52,14 +66,18 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
   private readonly running = new Set<Promise<void>>();
 
   constructor(
-    @InjectModel(Broadcast.name) private readonly broadcastModel: Model<Broadcast>,
+    @InjectModel(Broadcast.name)
+    private readonly broadcastModel: Model<Broadcast>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
-    @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
+    @InjectModel(DriverProfile.name)
+    private readonly driverModel: Model<DriverProfile>,
     private readonly notifications: NotificationsService,
     config: ConfigService,
   ) {
     this.batchSize = config.getOrThrow<number>("broadcastBatchSize");
-    this.workerIntervalMs = config.getOrThrow<number>("broadcastWorkerIntervalMs");
+    this.workerIntervalMs = config.getOrThrow<number>(
+      "broadcastWorkerIntervalMs",
+    );
   }
 
   onModuleInit(): void {
@@ -96,8 +114,14 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async list(query: { page: number; limit: number; status?: BroadcastStatus }): Promise<Page<BroadcastView>> {
-    const filter: QueryFilter<Broadcast> = query.status ? { status: query.status } : {};
+  async list(query: {
+    page: number;
+    limit: number;
+    status?: BroadcastStatus;
+  }): Promise<Page<BroadcastView>> {
+    const filter: QueryFilter<Broadcast> = query.status
+      ? { status: query.status }
+      : {};
     const [rows, total] = await Promise.all([
       this.broadcastModel
         .find(filter)
@@ -112,9 +136,16 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
       .select("firstName lastName")
       .lean()
       .exec();
-    const names = new Map(admins.map((admin) => [admin._id.toString(), [admin.firstName, admin.lastName].filter(Boolean).join(" ")]));
+    const names = new Map(
+      admins.map((admin) => [
+        admin._id.toString(),
+        [admin.firstName, admin.lastName].filter(Boolean).join(" "),
+      ]),
+    );
     return {
-      items: rows.map((row) => this.toView(row, names.get(row.createdBy.toString()))),
+      items: rows.map((row) =>
+        this.toView(row, names.get(row.createdBy.toString())),
+      ),
       page: query.page,
       limit: query.limit,
       total,
@@ -124,13 +155,17 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
 
   async get(id: string): Promise<BroadcastDocument> {
     const broadcast = await this.broadcastModel.findById(id).exec();
-    if (!broadcast) throw apiNotFound("Broadcast not found", "BROADCAST_NOT_FOUND");
+    if (!broadcast)
+      throw apiNotFound("Broadcast not found", "BROADCAST_NOT_FOUND");
     return broadcast;
   }
 
   // ── Drafts & scheduling ───────────────────────────────────────────────
 
-  async create(dto: CreateBroadcastDto, adminUserId: string): Promise<BroadcastDocument> {
+  async create(
+    dto: CreateBroadcastDto,
+    adminUserId: string,
+  ): Promise<BroadcastDocument> {
     if (dto.scheduledAt) this.assertFuture(dto.scheduledAt);
     return this.broadcastModel.create({
       title: dto.title,
@@ -138,16 +173,25 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
       audience: dto.audience,
       deepLink: dto.deepLink,
       scheduledAt: dto.scheduledAt,
-      status: dto.scheduledAt ? BroadcastStatus.SCHEDULED : BroadcastStatus.DRAFT,
+      status: dto.scheduledAt
+        ? BroadcastStatus.SCHEDULED
+        : BroadcastStatus.DRAFT,
       createdBy: new Types.ObjectId(adminUserId),
       updatedBy: new Types.ObjectId(adminUserId),
     });
   }
 
-  async update(id: string, dto: UpdateBroadcastDto, adminUserId: string): Promise<BroadcastDocument> {
+  async update(
+    id: string,
+    dto: UpdateBroadcastDto,
+    adminUserId: string,
+  ): Promise<BroadcastDocument> {
     const broadcast = await this.get(id);
     if (!EDITABLE.includes(broadcast.status))
-      throw apiConflict("Only drafts and scheduled broadcasts can be edited", "BROADCAST_NOT_EDITABLE");
+      throw apiConflict(
+        "Only drafts and scheduled broadcasts can be edited",
+        "BROADCAST_NOT_EDITABLE",
+      );
     if (dto.title !== undefined) broadcast.title = dto.title;
     if (dto.message !== undefined) broadcast.message = dto.message;
     if (dto.audience !== undefined) broadcast.audience = dto.audience;
@@ -173,14 +217,20 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
             deepLink: broadcast.deepLink,
             status: broadcast.status,
             updatedBy: broadcast.updatedBy,
-            ...(broadcast.scheduledAt ? { scheduledAt: broadcast.scheduledAt } : {}),
+            ...(broadcast.scheduledAt
+              ? { scheduledAt: broadcast.scheduledAt }
+              : {}),
           },
           ...(broadcast.scheduledAt ? {} : { $unset: { scheduledAt: 1 } }),
         },
         { returnDocument: "after" },
       )
       .exec();
-    if (!saved) throw apiConflict("This broadcast is already being sent", "BROADCAST_NOT_EDITABLE");
+    if (!saved)
+      throw apiConflict(
+        "This broadcast is already being sent",
+        "BROADCAST_NOT_EDITABLE",
+      );
     return saved;
   }
 
@@ -188,13 +238,21 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
     const cancelled = await this.broadcastModel
       .findOneAndUpdate(
         { _id: id, status: { $in: EDITABLE } },
-        { $set: { status: BroadcastStatus.CANCELLED, updatedBy: new Types.ObjectId(adminUserId) } },
+        {
+          $set: {
+            status: BroadcastStatus.CANCELLED,
+            updatedBy: new Types.ObjectId(adminUserId),
+          },
+        },
         { returnDocument: "after" },
       )
       .exec();
     if (cancelled) return cancelled;
     await this.get(id);
-    throw apiConflict("Only drafts and scheduled broadcasts can be cancelled", "BROADCAST_NOT_EDITABLE");
+    throw apiConflict(
+      "Only drafts and scheduled broadcasts can be cancelled",
+      "BROADCAST_NOT_EDITABLE",
+    );
   }
 
   // ── Sending ───────────────────────────────────────────────────────────
@@ -202,9 +260,16 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
   /** How many accounts a broadcast to this audience would reach right now. */
   async audienceSize(audience: BroadcastAudience): Promise<number> {
     if (audience === BroadcastAudience.APPROVED_DRIVERS) {
-      const approved = await this.driverModel.find({ driverStatus: DriverStatus.APPROVED }).select("userId").lean().exec();
+      const approved = await this.driverModel
+        .find({ driverStatus: DriverStatus.APPROVED })
+        .select("userId")
+        .lean()
+        .exec();
       return this.userModel
-        .countDocuments({ _id: { $in: approved.map((driver) => driver.userId) }, status: { $nin: [UserStatus.BLOCKED, UserStatus.DELETED] } })
+        .countDocuments({
+          _id: { $in: approved.map((driver) => driver.userId) },
+          status: { $nin: [UserStatus.BLOCKED, UserStatus.DELETED] },
+        })
         .exec();
     }
     return this.userModel.countDocuments(this.userFilter(audience)).exec();
@@ -232,7 +297,10 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
       .exec();
     if (!claimed) {
       const existing = await this.get(id);
-      throw apiConflict(`This broadcast is already ${existing.status.toLowerCase()}`, "BROADCAST_NOT_EDITABLE");
+      throw apiConflict(
+        `This broadcast is already ${existing.status.toLowerCase()}`,
+        "BROADCAST_NOT_EDITABLE",
+      );
     }
     this.track(this.deliver(claimed));
     return claimed;
@@ -259,7 +327,11 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
               },
             },
           ],
-          { returnDocument: "after", sort: { scheduledAt: 1 }, updatePipeline: true },
+          {
+            returnDocument: "after",
+            sort: { scheduledAt: 1 },
+            updatePipeline: true,
+          },
         )
         .exec();
       if (!claimed) return;
@@ -287,19 +359,20 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
         if (!batch.length) break;
 
         await this.notifications.notify(
-          batch.map(
-            (recipient): NotificationDraft => ({
-              userId: recipient.userId.toString(),
-              recipientRole: recipient.role,
-              type: NotificationType.ANNOUNCEMENT,
-              title: broadcast.title,
-              message: broadcast.message,
-              referenceId: broadcast._id.toString(),
-              data: { broadcastId: broadcast._id.toString(), deepLink: broadcast.deepLink },
-              // One per user per broadcast, even if a resumed send overlaps.
-              dedupeKey: `broadcast:${broadcast._id.toString()}:${recipient.userId.toString()}`,
-            }),
-          ),
+          batch.map((recipient): NotificationDraft => ({
+            userId: recipient.userId.toString(),
+            recipientRole: recipient.role,
+            type: NotificationType.ANNOUNCEMENT,
+            title: broadcast.title,
+            message: broadcast.message,
+            referenceId: broadcast._id.toString(),
+            data: {
+              broadcastId: broadcast._id.toString(),
+              deepLink: broadcast.deepLink,
+            },
+            // One per user per broadcast, even if a resumed send overlaps.
+            dedupeKey: `broadcast:${broadcast._id.toString()}:${recipient.userId.toString()}`,
+          })),
         );
         // Pace FCM: let this batch's pushes finish before the next.
         await this.notifications.drain();
@@ -309,30 +382,56 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
         await this.broadcastModel
           .updateOne(
             { _id: broadcast._id, status: BroadcastStatus.SENDING },
-            { $set: { lastUserId: cursor, processedCount: processed, leaseUntil: new Date(Date.now() + LEASE_MS) } },
+            {
+              $set: {
+                lastUserId: cursor,
+                processedCount: processed,
+                leaseUntil: new Date(Date.now() + LEASE_MS),
+              },
+            },
           )
           .exec();
       }
       await this.broadcastModel
         .updateOne(
           { _id: broadcast._id, status: BroadcastStatus.SENDING },
-          { $set: { status: BroadcastStatus.SENT, sentAt: new Date(), processedCount: processed }, $unset: { leaseUntil: 1 } },
+          {
+            $set: {
+              status: BroadcastStatus.SENT,
+              sentAt: new Date(),
+              processedCount: processed,
+            },
+            $unset: { leaseUntil: 1 },
+          },
         )
         .exec();
-      this.logger.log(`Broadcast ${broadcast._id.toString()} sent to ${processed} users (${broadcast.audience})`);
+      this.logger.log(
+        `Broadcast ${broadcast._id.toString()} sent to ${processed} users (${broadcast.audience})`,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.error(`Broadcast ${broadcast._id.toString()} failed after ${processed} users: ${message}`);
+      this.logger.error(
+        `Broadcast ${broadcast._id.toString()} failed after ${processed} users: ${message}`,
+      );
       await this.broadcastModel
         .updateOne(
           { _id: broadcast._id, status: BroadcastStatus.SENDING },
-          { $set: { status: BroadcastStatus.FAILED, error: message.slice(0, 300), processedCount: processed } },
+          {
+            $set: {
+              status: BroadcastStatus.FAILED,
+              error: message.slice(0, 300),
+              processedCount: processed,
+            },
+          },
         )
         .exec();
     }
   }
 
-  private async nextRecipients(audience: BroadcastAudience, after?: Types.ObjectId): Promise<Recipient[]> {
+  private async nextRecipients(
+    audience: BroadcastAudience,
+    after?: Types.ObjectId,
+  ): Promise<Recipient[]> {
     const afterFilter = after ? { $gt: after } : { $exists: true };
     if (audience === BroadcastAudience.APPROVED_DRIVERS) {
       // Approved profiles in userId order; blocked accounts are skipped.
@@ -345,7 +444,10 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
         .exec();
       if (!drivers.length) return [];
       const active = await this.userModel
-        .find({ _id: { $in: drivers.map((driver) => driver.userId) }, status: { $nin: [UserStatus.BLOCKED, UserStatus.DELETED] } })
+        .find({
+          _id: { $in: drivers.map((driver) => driver.userId) },
+          status: { $nin: [UserStatus.BLOCKED, UserStatus.DELETED] },
+        })
         .select("_id")
         .lean()
         .exec();
@@ -354,7 +456,11 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
         .filter((driver) => allowed.has(driver.userId.toString()))
         .map((driver) => ({ userId: driver.userId, role: UserRole.DRIVER }));
       // Keep the cursor moving even when a whole batch is blocked accounts.
-      if (!recipients.length) return this.nextRecipients(audience, drivers[drivers.length - 1].userId);
+      if (!recipients.length)
+        return this.nextRecipients(
+          audience,
+          drivers[drivers.length - 1].userId,
+        );
       return recipients;
     }
     const users = await this.userModel
@@ -374,11 +480,17 @@ export class BroadcastsService implements OnModuleInit, OnModuleDestroy {
         : audience === BroadcastAudience.ALL_DRIVERS
           ? [UserRole.DRIVER]
           : [UserRole.CUSTOMER, UserRole.DRIVER];
-    return { role: { $in: roles }, status: { $nin: [UserStatus.BLOCKED, UserStatus.DELETED] } };
+    return {
+      role: { $in: roles },
+      status: { $nin: [UserStatus.BLOCKED, UserStatus.DELETED] },
+    };
   }
 
   private assertFuture(date: Date): void {
     if (date.getTime() < Date.now() + 60_000)
-      throw apiBadRequest("Schedule the broadcast at least a minute in the future", "BROADCAST_INVALID_SCHEDULE");
+      throw apiBadRequest(
+        "Schedule the broadcast at least a minute in the future",
+        "BROADCAST_INVALID_SCHEDULE",
+      );
   }
 }

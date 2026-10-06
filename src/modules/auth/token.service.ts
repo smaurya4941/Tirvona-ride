@@ -88,9 +88,7 @@ export class TokenService {
   }
 
   /** Verifies a refresh token against both its signature and the stored session. */
-  async verifyRefreshToken(
-    refreshToken: string,
-  ): Promise<UserSessionDocument> {
+  async verifyRefreshToken(refreshToken: string): Promise<UserSessionDocument> {
     let payload: JwtRefreshPayload;
     try {
       payload = await this.jwtService.verifyAsync<JwtRefreshPayload>(
@@ -135,7 +133,10 @@ export class TokenService {
   /** Ends every session of a user (blocked account, suspended driver). */
   async revokeAllForUser(userId: string): Promise<number> {
     const result = await this.sessionModel
-      .updateMany({ userId: new Types.ObjectId(userId), isActive: true }, { $set: { isActive: false } })
+      .updateMany(
+        { userId: new Types.ObjectId(userId), isActive: true },
+        { $set: { isActive: false } },
+      )
       .exec();
     return result.modifiedCount;
   }

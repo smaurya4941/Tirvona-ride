@@ -1,7 +1,10 @@
 import { Logger } from "@nestjs/common";
 import type { GeoCoordinates } from "../../locations/geo";
 import type { PlaceSuggestion, ResolvedPlace } from "../places.types";
-import { GeocodingProvider, GeocodingProviderError } from "./geocoding.provider";
+import {
+  GeocodingProvider,
+  GeocodingProviderError,
+} from "./geocoding.provider";
 import type { ProviderSearchRequest } from "./geocoding.provider";
 
 export interface FallbackOptions {
@@ -12,7 +15,10 @@ export interface FallbackOptions {
   now?: () => number;
 }
 
-const NO_BREAKER: FallbackOptions = { failureThreshold: Number.POSITIVE_INFINITY, cooldownMs: 0 };
+const NO_BREAKER: FallbackOptions = {
+  failureThreshold: Number.POSITIVE_INFINITY,
+  cooldownMs: 0,
+};
 
 /**
  * Two providers used as one: PLACES_PROVIDER=osm (Photon, then Nominatim) and
@@ -52,7 +58,9 @@ export class FallbackGeocodingProvider extends GeocodingProvider {
     return this.now() < this.skipUntil;
   }
 
-  async autocomplete(request: ProviderSearchRequest): Promise<Array<Omit<PlaceSuggestion, "featured">>> {
+  async autocomplete(
+    request: ProviderSearchRequest,
+  ): Promise<Array<Omit<PlaceSuggestion, "featured">>> {
     if (!this.isDegraded) {
       try {
         const suggestions = await this.primary.autocomplete(request);
@@ -65,7 +73,10 @@ export class FallbackGeocodingProvider extends GeocodingProvider {
     return this.secondary.autocomplete(request);
   }
 
-  async resolve(id: string, sessionToken?: string): Promise<ResolvedPlace | null> {
+  async resolve(
+    id: string,
+    sessionToken?: string,
+  ): Promise<ResolvedPlace | null> {
     // Ids the primary issued can only be resolved by it, even while degraded.
     let primaryError: unknown;
     try {
@@ -102,9 +113,13 @@ export class FallbackGeocodingProvider extends GeocodingProvider {
 
   private stepIn(operation: string, error: unknown): void {
     const reason = error instanceof Error ? error.message : String(error);
-    const retryable = error instanceof GeocodingProviderError ? error.retryable : true;
+    const retryable =
+      error instanceof GeocodingProviderError ? error.retryable : true;
     this.consecutiveFailures += 1;
-    if (this.options.cooldownMs > 0 && (!retryable || this.consecutiveFailures >= this.options.failureThreshold)) {
+    if (
+      this.options.cooldownMs > 0 &&
+      (!retryable || this.consecutiveFailures >= this.options.failureThreshold)
+    ) {
       this.skipUntil = this.now() + this.options.cooldownMs;
       this.consecutiveFailures = 0;
       this.logger.error(
@@ -114,6 +129,8 @@ export class FallbackGeocodingProvider extends GeocodingProvider {
       );
       return;
     }
-    this.logger.warn(`${this.primary.name} ${operation} failed (${reason}); trying ${this.secondary.name}`);
+    this.logger.warn(
+      `${this.primary.name} ${operation} failed (${reason}); trying ${this.secondary.name}`,
+    );
   }
 }

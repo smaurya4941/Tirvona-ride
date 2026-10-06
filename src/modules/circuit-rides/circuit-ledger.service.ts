@@ -34,7 +34,10 @@ export interface CircuitLedgerView {
 export class CircuitLedgerService {
   private readonly logger = new Logger(CircuitLedgerService.name);
 
-  constructor(@InjectModel(CircuitRideEvent.name) private readonly events: Model<CircuitRideEvent>) {}
+  constructor(
+    @InjectModel(CircuitRideEvent.name)
+    private readonly events: Model<CircuitRideEvent>,
+  ) {}
 
   /** The change has already committed; a failed audit insert is logged loudly but never fails the action. */
   async record(entry: CircuitLedgerEntry): Promise<void> {
@@ -43,7 +46,9 @@ export class CircuitLedgerService {
         rideId: entry.rideId,
         type: entry.type,
         actorType: entry.actor.type,
-        actorId: entry.actor.userId ? new Types.ObjectId(entry.actor.userId) : undefined,
+        actorId: entry.actor.userId
+          ? new Types.ObjectId(entry.actor.userId)
+          : undefined,
         stopOrder: entry.stopOrder,
         fromState: entry.fromState,
         toState: entry.toState,
@@ -59,7 +64,11 @@ export class CircuitLedgerService {
   }
 
   async timeline(rideId: Types.ObjectId): Promise<CircuitLedgerView[]> {
-    const rows = await this.events.find({ rideId }).sort({ createdAt: 1, _id: 1 }).lean().exec();
+    const rows = await this.events
+      .find({ rideId })
+      .sort({ createdAt: 1, _id: 1 })
+      .lean()
+      .exec();
     return rows.map((row) => ({
       id: row._id.toString(),
       type: row.type,

@@ -1,9 +1,15 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
-import { DriverProfile, DriverProfileSchema } from "../drivers/schemas/driver-profile.schema";
+import {
+  DriverProfile,
+  DriverProfileSchema,
+} from "../drivers/schemas/driver-profile.schema";
 import { Ride, RideSchema } from "../rides/schemas/ride.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
-import { DriverRatingsController, RideRatingsController } from "./ratings.controller";
+import {
+  DriverRatingsController,
+  RideRatingsController,
+} from "./ratings.controller";
 import { RatingsService } from "./ratings.service";
 import { Rating, RatingSchema } from "./schemas/rating.schema";
 

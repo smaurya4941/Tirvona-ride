@@ -19,9 +19,14 @@ import {
 } from "class-validator";
 import { RIDE_TYPE_CODE_PATTERN } from "../../ride-types/schemas/ride-type.schema";
 import { TIME_OF_DAY_PATTERN } from "../../pricing/peak-pricing";
-import { CircuitPackageStatus, MAX_PASSENGERS, MAX_STOPS } from "../circuit-package.types";
+import {
+  CircuitPackageStatus,
+  MAX_PASSENGERS,
+  MAX_STOPS,
+} from "../circuit-package.types";
 
-const trim = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value);
+const trim = ({ value }: { value: unknown }) =>
+  typeof value === "string" ? value.trim() : value;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
@@ -29,13 +34,20 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
  * (name, address, coordinates), so a client can never invent a location.
  */
 export class CircuitStopInputDto {
-  @ApiProperty({ example: "google:ChIJ…", description: "Provider place id from GET /admin/circuit-packages/places/autocomplete" })
+  @ApiProperty({
+    example: "google:ChIJ…",
+    description:
+      "Provider place id from GET /admin/circuit-packages/places/autocomplete",
+  })
   @Transform(trim)
   @IsString()
   @Length(3, 300)
   placeId!: string;
 
-  @ApiPropertyOptional({ example: "Prem Mandir", description: "Optional display name; defaults to the place's own name" })
+  @ApiPropertyOptional({
+    example: "Prem Mandir",
+    description: "Optional display name; defaults to the place's own name",
+  })
   @IsOptional()
   @Transform(trim)
   @IsString()
@@ -61,10 +73,15 @@ export class CircuitPricingDto {
 /** What one allowed vehicle costs on this circuit. */
 export class CircuitVehiclePriceDto {
   @ApiProperty({ example: "AUTO" })
-  @Matches(RIDE_TYPE_CODE_PATTERN, { message: "rideType must be a ride type code such as AUTO" })
+  @Matches(RIDE_TYPE_CODE_PATTERN, {
+    message: "rideType must be a ride type code such as AUTO",
+  })
   rideType!: string;
 
-  @ApiProperty({ example: 600, description: "Package price for this vehicle, rupees" })
+  @ApiProperty({
+    example: 600,
+    description: "Package price for this vehicle, rupees",
+  })
   @IsNumber({ allowNaN: false, allowInfinity: false, maxDecimalPlaces: 2 })
   @Min(0)
   @Max(1_000_000)
@@ -84,7 +101,10 @@ export class CircuitVehiclePriceDto {
 }
 
 export class CircuitAvailabilityDto {
-  @ApiPropertyOptional({ example: [0, 1, 2, 3, 4, 5, 6], description: "0 = Monday … 6 = Sunday" })
+  @ApiPropertyOptional({
+    example: [0, 1, 2, 3, 4, 5, 6],
+    description: "0 = Monday … 6 = Sunday",
+  })
   @IsOptional()
   @IsArray()
   @ArrayUnique()
@@ -95,20 +115,30 @@ export class CircuitAvailabilityDto {
 
   @ApiPropertyOptional({ example: "06:00" })
   @IsOptional()
-  @Matches(TIME_OF_DAY_PATTERN, { message: "opensAt must be a 24-hour time such as 06:00" })
+  @Matches(TIME_OF_DAY_PATTERN, {
+    message: "opensAt must be a 24-hour time such as 06:00",
+  })
   opensAt?: string;
 
   @ApiPropertyOptional({ example: "20:00" })
   @IsOptional()
-  @Matches(TIME_OF_DAY_PATTERN, { message: "closesAt must be a 24-hour time such as 20:00" })
+  @Matches(TIME_OF_DAY_PATTERN, {
+    message: "closesAt must be a 24-hour time such as 20:00",
+  })
   closesAt?: string;
 
-  @ApiPropertyOptional({ example: "2026-08-20", description: "Season start (inclusive); null clears it" })
+  @ApiPropertyOptional({
+    example: "2026-08-20",
+    description: "Season start (inclusive); null clears it",
+  })
   @IsOptional()
   @Matches(DATE_PATTERN, { message: "validFrom must be YYYY-MM-DD" })
   validFrom?: string | null;
 
-  @ApiPropertyOptional({ example: "2026-09-10", description: "Season end (inclusive); null clears it" })
+  @ApiPropertyOptional({
+    example: "2026-09-10",
+    description: "Season end (inclusive); null clears it",
+  })
   @IsOptional()
   @Matches(DATE_PATTERN, { message: "validUntil must be YYYY-MM-DD" })
   validUntil?: string | null;
@@ -152,7 +182,10 @@ export class CreateCircuitPackageDto {
   @Length(2, 60)
   city!: string;
 
-  @ApiPropertyOptional({ type: [CircuitStopInputDto], description: "In visiting order. Replaces all stops when sent." })
+  @ApiPropertyOptional({
+    type: [CircuitStopInputDto],
+    description: "In visiting order. Replaces all stops when sent.",
+  })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(MAX_STOPS)
@@ -166,17 +199,24 @@ export class CreateCircuitPackageDto {
   @Type(() => CircuitPricingDto)
   pricing?: CircuitPricingDto;
 
-  @ApiPropertyOptional({ example: ["AUTO", "CAB"], description: "Ride type codes that can be booked with this circuit" })
+  @ApiPropertyOptional({
+    example: ["AUTO", "CAB"],
+    description: "Ride type codes that can be booked with this circuit",
+  })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
   @ArrayUnique()
-  @Matches(RIDE_TYPE_CODE_PATTERN, { each: true, message: "each ride type must be a ride type code such as AUTO" })
+  @Matches(RIDE_TYPE_CODE_PATTERN, {
+    each: true,
+    message: "each ride type must be a ride type code such as AUTO",
+  })
   rideTypes?: string[];
 
   @ApiPropertyOptional({
     type: [CircuitVehiclePriceDto],
-    description: "Price per allowed vehicle. Replaces all prices when sent; each ride type must be one of `rideTypes`.",
+    description:
+      "Price per allowed vehicle. Replaces all prices when sent; each ride type must be one of `rideTypes`.",
   })
   @IsOptional()
   @IsArray()
@@ -205,15 +245,24 @@ export class CreateCircuitPackageDto {
   @Length(0, 1000)
   cancellationPolicy?: string;
 
-  @ApiPropertyOptional({ type: ReferenceOriginDto, description: "Where Admin expects pickups, to judge viability. Not shown to customers." })
+  @ApiPropertyOptional({
+    type: ReferenceOriginDto,
+    description:
+      "Where Admin expects pickups, to judge viability. Not shown to customers.",
+  })
   @IsOptional()
   @ValidateNested()
   @Type(() => ReferenceOriginDto)
   referenceOrigin?: ReferenceOriginDto;
 }
 
-export class UpdateCircuitPackageDto extends PartialType(CreateCircuitPackageDto) {
-  @ApiPropertyOptional({ example: "Festival pricing", description: "Recorded in the audit log" })
+export class UpdateCircuitPackageDto extends PartialType(
+  CreateCircuitPackageDto,
+) {
+  @ApiPropertyOptional({
+    example: "Festival pricing",
+    description: "Recorded in the audit log",
+  })
   @IsOptional()
   @Transform(trim)
   @IsString()
@@ -256,7 +305,10 @@ export class ListCircuitPackagesQueryDto {
 }
 
 export class RoutePreviewDto {
-  @ApiPropertyOptional({ type: [CircuitStopInputDto], description: "Preview these stops instead of the saved ones" })
+  @ApiPropertyOptional({
+    type: [CircuitStopInputDto],
+    description: "Preview these stops instead of the saved ones",
+  })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(MAX_STOPS)
@@ -264,7 +316,9 @@ export class RoutePreviewDto {
   @Type(() => CircuitStopInputDto)
   stops?: CircuitStopInputDto[];
 
-  @ApiPropertyOptional({ description: "Included distance to check against, km" })
+  @ApiPropertyOptional({
+    description: "Included distance to check against, km",
+  })
   @IsOptional()
   @IsNumber({ allowNaN: false, allowInfinity: false })
   @Min(0)

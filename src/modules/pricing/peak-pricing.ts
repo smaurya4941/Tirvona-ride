@@ -46,7 +46,8 @@ export interface AppliedPeak {
 
 export function parseTimeOfDay(value: string): number {
   const match = TIME_OF_DAY_PATTERN.exec(value);
-  if (!match) throw new RangeError(`"${value}" is not a time of day (HH:mm, 24-hour)`);
+  if (!match)
+    throw new RangeError(`"${value}" is not a time of day (HH:mm, 24-hour)`);
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
@@ -58,7 +59,8 @@ export function minuteOfDay(at: Date, timeZone: string): number {
     hour: "2-digit",
     minute: "2-digit",
   }).formatToParts(at);
-  const part = (type: Intl.DateTimeFormatPartTypes): number => Number(parts.find((entry) => entry.type === type)?.value);
+  const part = (type: Intl.DateTimeFormatPartTypes): number =>
+    Number(parts.find((entry) => entry.type === type)?.value);
   return part("hour") * 60 + part("minute");
 }
 
@@ -69,7 +71,9 @@ export const crossesMidnight = (window: PeakWindow): boolean =>
 export function windowContains(window: PeakWindow, minute: number): boolean {
   const start = parseTimeOfDay(window.startTime);
   const end = parseTimeOfDay(window.endTime);
-  return start < end ? minute >= start && minute < end : minute >= start || minute < end;
+  return start < end
+    ? minute >= start && minute < end
+    : minute >= start || minute < end;
 }
 
 /** The window as one or two [start, end) segments inside a single day. */
@@ -85,7 +89,9 @@ function segments(window: PeakWindow): Array<[number, number]> {
 }
 
 export function windowsOverlap(a: PeakWindow, b: PeakWindow): boolean {
-  return segments(a).some(([aStart, aEnd]) => segments(b).some(([bStart, bEnd]) => aStart < bEnd && bStart < aEnd));
+  return segments(a).some(([aStart, aEnd]) =>
+    segments(b).some(([bStart, bEnd]) => aStart < bEnd && bStart < aEnd),
+  );
 }
 
 /** Two scopes share a ride type when either is "all" or their code lists intersect. */
@@ -94,16 +100,24 @@ export function scopesIntersect(a: PeakScope, b: PeakScope): boolean {
   return a.rideTypes.some((code) => b.rideTypes.includes(code));
 }
 
-export const appliesToRideType = (scope: PeakScope, rideType: string): boolean =>
-  scope.appliesToAll || scope.rideTypes.includes(rideType);
+export const appliesToRideType = (
+  scope: PeakScope,
+  rideType: string,
+): boolean => scope.appliesToAll || scope.rideTypes.includes(rideType);
 
 /**
  * The first rule that is in force for `rideType` at `minute`. Active rules
  * never overlap for a ride type (checked when they are saved), so "first" is
  * only a tie-break for data that predates a rule change.
  */
-export function resolvePeak<T extends PeakRule>(rules: readonly T[], rideType: string, minute: number): T | undefined {
-  return rules.find((rule) => appliesToRideType(rule, rideType) && windowContains(rule, minute));
+export function resolvePeak<T extends PeakRule>(
+  rules: readonly T[],
+  rideType: string,
+  minute: number,
+): T | undefined {
+  return rules.find(
+    (rule) => appliesToRideType(rule, rideType) && windowContains(rule, minute),
+  );
 }
 
 const toPaise = (rupees: number): number => Math.round(rupees * 100);
@@ -112,20 +126,37 @@ const toPaise = (rupees: number): number => Math.round(rupees * 100);
  * The per-km rate with the hike applied, rounded to the paisa
  * (₹18 + 50% = ₹27, ₹14 + 12.5% = ₹15.75). Only the per-km rate moves.
  */
-export function effectivePerKmRate(perKmRate: number, hikePercent: number): number {
+export function effectivePerKmRate(
+  perKmRate: number,
+  hikePercent: number,
+): number {
   const hikeBasisPoints = Math.round(hikePercent * 100);
-  return Math.round((toPaise(perKmRate) * (10_000 + hikeBasisPoints)) / 10_000) / 100;
+  return (
+    Math.round((toPaise(perKmRate) * (10_000 + hikeBasisPoints)) / 10_000) / 100
+  );
 }
 
 /** Base rates with the peak hike applied to per-km only; every other rate is untouched. */
-export function peakRates<R extends PricingRates>(rates: R, hikePercent: number): R {
-  return { ...rates, perKmRate: effectivePerKmRate(rates.perKmRate, hikePercent) };
+export function peakRates<R extends PricingRates>(
+  rates: R,
+  hikePercent: number,
+): R {
+  return {
+    ...rates,
+    perKmRate: effectivePerKmRate(rates.perKmRate, hikePercent),
+  };
 }
 
 /** Two active slots would both claim some minute for some ride type. */
-export function findConflict<T extends PeakRule>(candidate: PeakRule, existing: readonly T[]): T | undefined {
+export function findConflict<T extends PeakRule>(
+  candidate: PeakRule,
+  existing: readonly T[],
+): T | undefined {
   return existing.find(
-    (other) => other.id !== candidate.id && windowsOverlap(candidate, other) && scopesIntersect(candidate, other),
+    (other) =>
+      other.id !== candidate.id &&
+      windowsOverlap(candidate, other) &&
+      scopesIntersect(candidate, other),
   );
 }
 

@@ -1,4 +1,9 @@
-import { MOBILE_PATTERN, maskPhone, normalizePhone, toWhatsAppRecipient } from "./phone-number";
+import {
+  MOBILE_PATTERN,
+  maskPhone,
+  normalizePhone,
+  toWhatsAppRecipient,
+} from "./phone-number";
 
 describe("normalizePhone", () => {
   it.each([

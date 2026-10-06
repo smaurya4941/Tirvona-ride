@@ -40,7 +40,9 @@ export class FcmHttpGateway extends PushGateway {
     this.privateKey = config.get<string>("firebasePrivateKey") ?? "";
     this.timeoutMs = config.getOrThrow<number>("fcmTimeoutMs");
     if (!this.isConfigured)
-      this.logger.warn("Firebase credentials are not set: push notifications are disabled (in-app only)");
+      this.logger.warn(
+        "Firebase credentials are not set: push notifications are disabled (in-app only)",
+      );
   }
 
   get isConfigured(): boolean {
@@ -49,30 +51,50 @@ export class FcmHttpGateway extends PushGateway {
 
   async send(tokens: string[], message: PushMessage): Promise<PushResult[]> {
     if (!this.isConfigured)
-      return tokens.map((token) => ({ token, delivered: false, tokenInvalid: false, error: "FCM not configured" }));
+      return tokens.map((token) => ({
+        token,
+        delivered: false,
+        tokenInvalid: false,
+        error: "FCM not configured",
+      }));
     return Promise.all(tokens.map((token) => this.sendOne(token, message)));
   }
 
-  private async sendOne(token: string, message: PushMessage, retried = false): Promise<PushResult> {
+  private async sendOne(
+    token: string,
+    message: PushMessage,
+    retried = false,
+  ): Promise<PushResult> {
     let response: Response;
     try {
-      response = await fetch(`https://fcm.googleapis.com/v1/projects/${encodeURIComponent(this.projectId)}/messages:send`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${await this.oauthToken()}`,
-          "Content-Type": "application/json",
+      response = await fetch(
+        `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(this.projectId)}/messages:send`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${await this.oauthToken()}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ message: this.payload(token, message) }),
+          signal: AbortSignal.timeout(this.timeoutMs),
         },
-        body: JSON.stringify({ message: this.payload(token, message) }),
-        signal: AbortSignal.timeout(this.timeoutMs),
-      });
+      );
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      return { token, delivered: false, tokenInvalid: false, error: `FCM unreachable: ${reason}` };
+      return {
+        token,
+        delivered: false,
+        tokenInvalid: false,
+        error: `FCM unreachable: ${reason}`,
+      };
     }
     if (response.ok) return { token, delivered: true, tokenInvalid: false };
 
     const body = (await response.json().catch(() => ({}))) as FcmErrorBody;
-    const code = body.error?.details?.find((detail) => detail.errorCode)?.errorCode ?? body.error?.status ?? "";
+    const code =
+      body.error?.details?.find((detail) => detail.errorCode)?.errorCode ??
+      body.error?.status ??
+      "";
     // Our OAuth token was revoked or expired early: fetch a new one once.
     if (response.status === 401 && !retried) {
       this.accessToken = undefined;
@@ -86,16 +108,24 @@ export class FcmHttpGateway extends PushGateway {
     const tokenInvalid =
       DEAD_TOKEN_CODES.has(code) ||
       response.status === 404 ||
-      (response.status === 400 && /registration token/i.test(body.error?.message ?? ""));
+      (response.status === 400 &&
+        /registration token/i.test(body.error?.message ?? ""));
     return {
       token,
       delivered: false,
       tokenInvalid,
-      error: `FCM ${response.status} ${code}: ${body.error?.message ?? "request failed"}`.slice(0, 300),
+      error:
+        `FCM ${response.status} ${code}: ${body.error?.message ?? "request failed"}`.slice(
+          0,
+          300,
+        ),
     };
   }
 
-  private payload(token: string, message: PushMessage): Record<string, unknown> {
+  private payload(
+    token: string,
+    message: PushMessage,
+  ): Record<string, unknown> {
     return {
       token,
       notification: { title: message.title, body: message.body },
@@ -112,7 +142,9 @@ export class FcmHttpGateway extends PushGateway {
       apns: {
         headers: {
           "apns-priority": message.highPriority ? "10" : "5",
-          ...(message.collapseKey ? { "apns-collapse-id": message.collapseKey.slice(0, 64) } : {}),
+          ...(message.collapseKey
+            ? { "apns-collapse-id": message.collapseKey.slice(0, 64) }
+            : {}),
         },
         payload: { aps: { sound: `${message.sound}.wav` } },
       },
@@ -120,7 +152,8 @@ export class FcmHttpGateway extends PushGateway {
   }
 
   private async oauthToken(): Promise<string> {
-    if (this.accessToken && this.accessToken.expiresAt > Date.now()) return this.accessToken.value;
+    if (this.accessToken && this.accessToken.expiresAt > Date.now())
+      return this.accessToken.value;
     // Concurrent sends share one token request.
     this.tokenRequest ??= this.fetchOauthToken().finally(() => {
       this.tokenRequest = undefined;
@@ -144,13 +177,16 @@ export class FcmHttpGateway extends PushGateway {
       error_description?: string;
     };
     if (!response.ok || !body.access_token) {
-      this.logger.error(`Google OAuth token request failed: ${response.status} ${body.error_description ?? ""}`);
+      this.logger.error(
+        `Google OAuth token request failed: ${response.status} ${body.error_description ?? ""}`,
+      );
       throw new Error("Could not obtain an FCM access token");
     }
     // Refresh a minute early so a token never expires mid-send.
     this.accessToken = {
       value: body.access_token,
-      expiresAt: Date.now() + Math.max(60, (body.expires_in ?? 3600) - 60) * 1000,
+      expiresAt:
+        Date.now() + Math.max(60, (body.expires_in ?? 3600) - 60) * 1000,
     };
     return body.access_token;
   }

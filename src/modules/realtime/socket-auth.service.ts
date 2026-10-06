@@ -39,7 +39,8 @@ export class SocketAuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     @InjectModel(User.name) private readonly userModel: Model<User>,
-    @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
+    @InjectModel(DriverProfile.name)
+    private readonly driverModel: Model<DriverProfile>,
   ) {}
 
   /** `auth: { token }` (preferred) or an `Authorization: Bearer` header. Never a query string. */
@@ -49,21 +50,29 @@ export class SocketAuthService {
       return fromAuth.replace(/^Bearer\s+/i, "").trim();
     const header = handshake.headers?.authorization;
     const value = Array.isArray(header) ? header[0] : header;
-    if (value?.startsWith("Bearer ")) return value.slice("Bearer ".length).trim() || undefined;
+    if (value?.startsWith("Bearer "))
+      return value.slice("Bearer ".length).trim() || undefined;
     return undefined;
   }
 
   async authenticate(handshake: HandshakeLike): Promise<SocketIdentity> {
     const token = this.extractToken(handshake);
-    if (!token) throw new SocketAuthError(RealtimeErrorCode.AUTH_UNAUTHORIZED, "Authentication required");
+    if (!token)
+      throw new SocketAuthError(
+        RealtimeErrorCode.AUTH_UNAUTHORIZED,
+        "Authentication required",
+      );
 
     let payload: JwtAccessPayload & { exp?: number };
     try {
-      payload = await this.jwt.verifyAsync<JwtAccessPayload & { exp?: number }>(token, {
-        secret: this.config.getOrThrow<string>("jwtAccessSecret"),
-        issuer: this.config.get<string>("jwtIssuer"),
-        audience: this.config.get<string>("jwtAudience"),
-      });
+      payload = await this.jwt.verifyAsync<JwtAccessPayload & { exp?: number }>(
+        token,
+        {
+          secret: this.config.getOrThrow<string>("jwtAccessSecret"),
+          issuer: this.config.get<string>("jwtIssuer"),
+          audience: this.config.get<string>("jwtAudience"),
+        },
+      );
     } catch {
       throw new SocketAuthError(
         RealtimeErrorCode.AUTH_TOKEN_EXPIRED,
@@ -77,18 +86,34 @@ export class SocketAuthService {
         "Realtime is available to customers and drivers only",
       );
 
-    const user = await this.userModel.findById(payload.sub).select("status").lean().exec();
-    if (!user) throw new SocketAuthError(RealtimeErrorCode.AUTH_UNAUTHORIZED, "Account not found");
+    const user = await this.userModel
+      .findById(payload.sub)
+      .select("status")
+      .lean()
+      .exec();
+    if (!user)
+      throw new SocketAuthError(
+        RealtimeErrorCode.AUTH_UNAUTHORIZED,
+        "Account not found",
+      );
     if (user.status !== UserStatus.ACTIVE)
-      throw new SocketAuthError(RealtimeErrorCode.USER_BLOCKED, "This account cannot connect");
+      throw new SocketAuthError(
+        RealtimeErrorCode.USER_BLOCKED,
+        "This account cannot connect",
+      );
 
     const identity: SocketIdentity = {
       userId: payload.sub,
       role: payload.role,
-      tokenExpiresAt: (payload.exp ?? Math.floor(Date.now() / 1000) + 900) * 1000,
+      tokenExpiresAt:
+        (payload.exp ?? Math.floor(Date.now() / 1000) + 900) * 1000,
     };
     if (payload.role === UserRole.DRIVER) {
-      const driver = await this.driverModel.findOne({ userId: payload.sub }).select("_id").lean().exec();
+      const driver = await this.driverModel
+        .findOne({ userId: payload.sub })
+        .select("_id")
+        .lean()
+        .exec();
       // A driver still onboarding may connect; driver-only actions check approval.
       if (driver) identity.driverId = driver._id.toString();
     }

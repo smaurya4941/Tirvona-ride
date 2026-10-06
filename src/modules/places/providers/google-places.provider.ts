@@ -3,7 +3,10 @@ import { ConfigService } from "@nestjs/config";
 import type { GeoCoordinates } from "../../locations/geo";
 import { bookingAddress, secondaryLine } from "../place-text";
 import type { PlaceSuggestion, ResolvedPlace } from "../places.types";
-import { GeocodingProvider, GeocodingProviderError } from "./geocoding.provider";
+import {
+  GeocodingProvider,
+  GeocodingProviderError,
+} from "./geocoding.provider";
 import type { ProviderSearchRequest } from "./geocoding.provider";
 
 interface AutocompleteResponse {
@@ -11,7 +14,10 @@ interface AutocompleteResponse {
     placePrediction?: {
       placeId?: string;
       text?: { text?: string };
-      structuredFormat?: { mainText?: { text?: string }; secondaryText?: { text?: string } };
+      structuredFormat?: {
+        mainText?: { text?: string };
+        secondaryText?: { text?: string };
+      };
       distanceMeters?: number;
     };
   }>;
@@ -57,7 +63,9 @@ export class GooglePlacesProvider extends GeocodingProvider {
     this.isConfigured = Boolean(this.apiKey);
   }
 
-  async autocomplete(request: ProviderSearchRequest): Promise<Array<Omit<PlaceSuggestion, "featured">>> {
+  async autocomplete(
+    request: ProviderSearchRequest,
+  ): Promise<Array<Omit<PlaceSuggestion, "featured">>> {
     const body = {
       input: request.query,
       languageCode: "en",
@@ -71,52 +79,80 @@ export class GooglePlacesProvider extends GeocodingProvider {
       origin: request.bias,
       ...(request.sessionToken ? { sessionToken: request.sessionToken } : {}),
     };
-    const response = await this.call<AutocompleteResponse>(`${PLACES_API}/places:autocomplete`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const response = await this.call<AutocompleteResponse>(
+      `${PLACES_API}/places:autocomplete`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
     const suggestions: Array<Omit<PlaceSuggestion, "featured">> = [];
     for (const { placePrediction: prediction } of response.suggestions ?? []) {
       if (!prediction?.placeId) continue;
-      const name = (prediction.structuredFormat?.mainText?.text ?? prediction.text?.text ?? "").trim();
+      const name = (
+        prediction.structuredFormat?.mainText?.text ??
+        prediction.text?.text ??
+        ""
+      ).trim();
       if (!name) continue;
-      const secondaryText = secondaryLine(prediction.structuredFormat?.secondaryText?.text ?? "", name);
+      const secondaryText = secondaryLine(
+        prediction.structuredFormat?.secondaryText?.text ?? "",
+        name,
+      );
       suggestions.push({
         id: `google:${prediction.placeId}`,
         name,
         secondaryText,
         address: bookingAddress(name, secondaryText),
-        ...(typeof prediction.distanceMeters === "number" ? { distanceMeters: prediction.distanceMeters } : {}),
+        ...(typeof prediction.distanceMeters === "number"
+          ? { distanceMeters: prediction.distanceMeters }
+          : {}),
       });
       if (suggestions.length >= request.limit) break;
     }
     return suggestions;
   }
 
-  async resolve(id: string, sessionToken?: string): Promise<ResolvedPlace | null> {
+  async resolve(
+    id: string,
+    sessionToken?: string,
+  ): Promise<ResolvedPlace | null> {
     const match = GOOGLE_ID.exec(id);
     if (!match) return null;
     const query = new URLSearchParams({ languageCode: "en" });
     if (sessionToken) query.set("sessionToken", sessionToken);
     let place: PlaceDetailsResponse;
     try {
-      place = await this.call<PlaceDetailsResponse>(`${PLACES_API}/places/${match[1]}?${query.toString()}`, {
-        headers: { "X-Goog-FieldMask": "id,displayName,formattedAddress,location" },
-      });
+      place = await this.call<PlaceDetailsResponse>(
+        `${PLACES_API}/places/${match[1]}?${query.toString()}`,
+        {
+          headers: {
+            "X-Goog-FieldMask": "id,displayName,formattedAddress,location",
+          },
+        },
+      );
     } catch (error) {
       if (error instanceof GooglePlaceNotFound) return null;
       throw error;
     }
     const latitude = place.location?.latitude;
     const longitude = place.location?.longitude;
-    if (typeof latitude !== "number" || typeof longitude !== "number") return null;
-    const name = (place.displayName?.text ?? place.formattedAddress?.split(",")[0] ?? "").trim();
+    if (typeof latitude !== "number" || typeof longitude !== "number")
+      return null;
+    const name = (
+      place.displayName?.text ??
+      place.formattedAddress?.split(",")[0] ??
+      ""
+    ).trim();
     if (!name) return null;
     return {
       id,
       name,
-      address: bookingAddress(name, secondaryLine(place.formattedAddress ?? "", name)),
+      address: bookingAddress(
+        name,
+        secondaryLine(place.formattedAddress ?? "", name),
+      ),
       latitude,
       longitude,
     };
@@ -128,27 +164,42 @@ export class GooglePlacesProvider extends GeocodingProvider {
       language: "en",
       key: this.apiKey,
     });
-    const response = await this.call<GeocodeResponse>(`${GEOCODE_API}?${query.toString()}`, {}, false);
+    const response = await this.call<GeocodeResponse>(
+      `${GEOCODE_API}?${query.toString()}`,
+      {},
+      false,
+    );
     if (response.status === "ZERO_RESULTS") return null;
     if (response.status !== "OK")
       throw new GeocodingProviderError(
         `Google Geocoding ${response.status ?? "error"}: ${response.error_message ?? ""}`.trim(),
-        response.status === "OVER_QUERY_LIMIT" || response.status === "UNKNOWN_ERROR",
+        response.status === "OVER_QUERY_LIMIT" ||
+          response.status === "UNKNOWN_ERROR",
       );
     const result = response.results?.[0];
     if (!result?.formatted_address) return null;
     const name = result.formatted_address.split(",")[0].trim();
     return {
-      id: result.place_id ? `google:${result.place_id}` : `pin:${point.latitude.toFixed(6)},${point.longitude.toFixed(6)}`,
+      id: result.place_id
+        ? `google:${result.place_id}`
+        : `pin:${point.latitude.toFixed(6)},${point.longitude.toFixed(6)}`,
       name,
-      address: bookingAddress(name, secondaryLine(result.formatted_address, name)),
+      address: bookingAddress(
+        name,
+        secondaryLine(result.formatted_address, name),
+      ),
       latitude: point.latitude,
       longitude: point.longitude,
     };
   }
 
-  private async call<T>(url: string, init: RequestInit, sendKeyHeader = true): Promise<T> {
-    if (!this.isConfigured) throw new GeocodingProviderError("Google Maps API key is not set", false);
+  private async call<T>(
+    url: string,
+    init: RequestInit,
+    sendKeyHeader = true,
+  ): Promise<T> {
+    if (!this.isConfigured)
+      throw new GeocodingProviderError("Google Maps API key is not set", false);
     let response: Response;
     try {
       response = await fetch(url, {
@@ -162,20 +213,31 @@ export class GooglePlacesProvider extends GeocodingProvider {
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      throw new GeocodingProviderError(`Google Places unreachable: ${reason}`, true);
+      throw new GeocodingProviderError(
+        `Google Places unreachable: ${reason}`,
+        true,
+      );
     }
     if (response.status === 404) throw new GooglePlaceNotFound();
     if (!response.ok) {
-      const body = (await response.json().catch(() => ({}))) as { error?: { status?: string; message?: string } };
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: { status?: string; message?: string };
+      };
       throw new GeocodingProviderError(
-        `Google Places ${response.status} ${body.error?.status ?? ""}: ${body.error?.message ?? "request failed"}`.slice(0, 300),
+        `Google Places ${response.status} ${body.error?.status ?? ""}: ${body.error?.message ?? "request failed"}`.slice(
+          0,
+          300,
+        ),
         response.status === 429 || response.status >= 500,
       );
     }
     try {
       return (await response.json()) as T;
     } catch {
-      throw new GeocodingProviderError("Google Places returned malformed JSON", true);
+      throw new GeocodingProviderError(
+        "Google Places returned malformed JSON",
+        true,
+      );
     }
   }
 }

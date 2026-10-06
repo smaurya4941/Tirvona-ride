@@ -24,11 +24,17 @@ import { CancellationFeeStatus } from "../schemas/cancellation.schemas";
 
 const MONEY = { allowNaN: false, allowInfinity: false, maxDecimalPlaces: 2 };
 const REASON_CODE = /^[A-Z][A-Z0-9_]{1,39}$/;
-const PICKABLE_ACTORS = [RideActorType.CUSTOMER, RideActorType.DRIVER, RideActorType.ADMIN] as const;
+const PICKABLE_ACTORS = [
+  RideActorType.CUSTOMER,
+  RideActorType.DRIVER,
+  RideActorType.ADMIN,
+] as const;
 
 export class CreateCancellationReasonDto {
   @ApiProperty({ example: "LONG_WAIT_AT_PICKUP" })
-  @Matches(REASON_CODE, { message: "code must be upper-case letters, digits or underscores" })
+  @Matches(REASON_CODE, {
+    message: "code must be upper-case letters, digits or underscores",
+  })
   code!: string;
 
   @ApiProperty({ enum: PICKABLE_ACTORS })
@@ -83,7 +89,10 @@ export class CustomerFeePolicyDto {
   @IsBoolean()
   enabled!: boolean;
 
-  @ApiProperty({ example: 120, description: "Free window after the driver accepts, seconds" })
+  @ApiProperty({
+    example: 120,
+    description: "Free window after the driver accepts, seconds",
+  })
   @IsInt()
   @Min(0)
   @Max(3_600)
@@ -127,11 +136,15 @@ export class UpdateCancellationPolicyDto {
 }
 
 export class ResolveCancellationFeeDto {
-  @ApiProperty({ enum: [CancellationFeeStatus.WAIVED, CancellationFeeStatus.COLLECTED] })
+  @ApiProperty({
+    enum: [CancellationFeeStatus.WAIVED, CancellationFeeStatus.COLLECTED],
+  })
   @IsIn([CancellationFeeStatus.WAIVED, CancellationFeeStatus.COLLECTED])
   status!: CancellationFeeStatus.WAIVED | CancellationFeeStatus.COLLECTED;
 
-  @ApiProperty({ example: "Driver confirmed customer was waiting at the wrong gate" })
+  @ApiProperty({
+    example: "Driver confirmed customer was waiting at the wrong gate",
+  })
   @IsString()
   @Length(3, 240)
   note!: string;

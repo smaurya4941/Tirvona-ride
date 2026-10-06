@@ -14,7 +14,10 @@ export interface CommissionSplit {
  * rounded half-up to the paisa and the driver gets exactly the remainder,
  * so the two always add back up to the fare.
  */
-export function splitFare(grossFarePaise: number, commissionPercent: number): CommissionSplit {
+export function splitFare(
+  grossFarePaise: number,
+  commissionPercent: number,
+): CommissionSplit {
   const commissionPaise = percentOfPaise(grossFarePaise, commissionPercent);
   return {
     grossFarePaise,

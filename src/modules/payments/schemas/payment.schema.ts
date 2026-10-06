@@ -19,7 +19,11 @@ export class PaymentAttempt {
   @Prop({ required: true, min: 1 })
   amountPaise!: number;
 
-  @Prop({ required: true, enum: PaymentAttemptStatus, default: PaymentAttemptStatus.CREATED })
+  @Prop({
+    required: true,
+    enum: PaymentAttemptStatus,
+    default: PaymentAttemptStatus.CREATED,
+  })
   status!: PaymentAttemptStatus;
 
   /** Latest Razorpay payment seen on this order. */
@@ -56,7 +60,8 @@ export class PaymentMethodDetails {
   @Prop()
   cardLast4?: string;
 }
-const PaymentMethodDetailsSchema = SchemaFactory.createForClass(PaymentMethodDetails);
+const PaymentMethodDetailsSchema =
+  SchemaFactory.createForClass(PaymentMethodDetails);
 
 /** Append-only audit line: what happened, who reported it, when. */
 @Schema({ _id: false })
@@ -260,7 +265,10 @@ export class Payment {
 export type PaymentDocument = HydratedDocument<Payment>;
 export const PaymentSchema = SchemaFactory.createForClass(Payment);
 
-PaymentSchema.index({ rideId: 1 }, { unique: true, name: "uniq_payment_per_ride" });
+PaymentSchema.index(
+  { rideId: 1 },
+  { unique: true, name: "uniq_payment_per_ride" },
+);
 // A Razorpay payment can settle exactly one Tirvona payment (rule: no reuse).
 PaymentSchema.index(
   { razorpayPaymentId: 1 },

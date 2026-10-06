@@ -137,10 +137,15 @@ export const FEATURED_ID_PREFIX = "featured:";
 
 const index = FEATURED_PLACES.map((place) => ({
   place,
-  terms: [place.name, ...place.aliases, place.secondaryText].map(normalizeQuery),
+  terms: [place.name, ...place.aliases, place.secondaryText].map(
+    normalizeQuery,
+  ),
 }));
 
-export function featuredToSuggestion(place: FeaturedPlace, near?: GeoCoordinates): PlaceSuggestion {
+export function featuredToSuggestion(
+  place: FeaturedPlace,
+  near?: GeoCoordinates,
+): PlaceSuggestion {
   return {
     id: `${FEATURED_ID_PREFIX}${place.slug}`,
     name: place.name,
@@ -148,14 +153,22 @@ export function featuredToSuggestion(place: FeaturedPlace, near?: GeoCoordinates
     address: bookingAddress(place.name, place.secondaryText),
     latitude: place.latitude,
     longitude: place.longitude,
-    ...(near ? { distanceMeters: Math.round(haversineMeters(near, place)) } : {}),
+    ...(near
+      ? { distanceMeters: Math.round(haversineMeters(near, place)) }
+      : {}),
     featured: true,
   };
 }
 
 export function featuredToResolved(place: FeaturedPlace): ResolvedPlace {
   const { id, name, address } = featuredToSuggestion(place);
-  return { id, name, address, latitude: place.latitude, longitude: place.longitude };
+  return {
+    id,
+    name,
+    address,
+    latitude: place.latitude,
+    longitude: place.longitude,
+  };
 }
 
 export function findFeatured(id: string): FeaturedPlace | undefined {
@@ -169,45 +182,75 @@ export function findFeatured(id: string): FeaturedPlace | undefined {
  * typed (each word as a prefix of some word), best first: name-prefix
  * matches, then others; ties by distance when a position is known.
  */
-export function searchFeatured(query: string, near?: GeoCoordinates, limit = 5): PlaceSuggestion[] {
+export function searchFeatured(
+  query: string,
+  near?: GeoCoordinates,
+  limit = 5,
+): PlaceSuggestion[] {
   const words = normalizeQuery(query).split(" ").filter(Boolean);
   if (!words.length) return [];
   const scored: Array<{ place: FeaturedPlace; score: number }> = [];
   for (const { place, terms } of index) {
     const termWords = terms.flatMap((term) => term.split(" "));
-    if (!words.every((word) => termWords.some((termWord) => termWord.startsWith(word)))) continue;
+    if (
+      !words.every((word) =>
+        termWords.some((termWord) => termWord.startsWith(word)),
+      )
+    )
+      continue;
     const joined = words.join(" ");
-    const score = terms[0].startsWith(joined) ? 0 : terms.slice(1).some((term) => term.startsWith(joined)) ? 1 : 2;
+    const score = terms[0].startsWith(joined)
+      ? 0
+      : terms.slice(1).some((term) => term.startsWith(joined))
+        ? 1
+        : 2;
     scored.push({ place, score });
   }
   return scored
     .sort(
       (a, b) =>
         a.score - b.score ||
-        (near ? haversineMeters(near, a.place) - haversineMeters(near, b.place) : a.place.name.localeCompare(b.place.name)),
+        (near
+          ? haversineMeters(near, a.place) - haversineMeters(near, b.place)
+          : a.place.name.localeCompare(b.place.name)),
     )
     .slice(0, limit)
     .map(({ place }) => featuredToSuggestion(place, near));
 }
 
 /** Popular places, nearest first when the rider's position is known. */
-export function popularPlaces(near?: GeoCoordinates, limit = 8): PlaceSuggestion[] {
+export function popularPlaces(
+  near?: GeoCoordinates,
+  limit = 8,
+): PlaceSuggestion[] {
   const places = [...FEATURED_PLACES];
-  if (near) places.sort((a, b) => haversineMeters(near, a) - haversineMeters(near, b));
-  return places.slice(0, limit).map((place) => featuredToSuggestion(place, near));
+  if (near)
+    places.sort((a, b) => haversineMeters(near, a) - haversineMeters(near, b));
+  return places
+    .slice(0, limit)
+    .map((place) => featuredToSuggestion(place, near));
 }
 
 /** A curated place within [radiusMeters] of a point (e.g. a pin on a temple gate). */
-export function featuredNear(point: GeoCoordinates, radiusMeters: number): FeaturedPlace | undefined {
+export function featuredNear(
+  point: GeoCoordinates,
+  radiusMeters: number,
+): FeaturedPlace | undefined {
   let best: { place: FeaturedPlace; meters: number } | undefined;
   for (const place of FEATURED_PLACES) {
     const meters = haversineMeters(point, place);
-    if (meters <= radiusMeters && (!best || meters < best.meters)) best = { place, meters };
+    if (meters <= radiusMeters && (!best || meters < best.meters))
+      best = { place, meters };
   }
   return best?.place;
 }
 
 /** Whether any curated place lies within [radiusMeters] — i.e. the rider is in Braj. */
-export function isNearFeatured(point: GeoCoordinates, radiusMeters: number): boolean {
-  return FEATURED_PLACES.some((place) => haversineMeters(point, place) <= radiusMeters);
+export function isNearFeatured(
+  point: GeoCoordinates,
+  radiusMeters: number,
+): boolean {
+  return FEATURED_PLACES.some(
+    (place) => haversineMeters(point, place) <= radiusMeters,
+  );
 }

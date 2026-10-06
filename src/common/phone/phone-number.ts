@@ -30,12 +30,15 @@ export function normalizePhone(input: unknown): unknown {
 }
 
 /** Meta's Cloud API wants the recipient as digits only, country code first. */
-export const toWhatsAppRecipient = (e164: string): string => e164.replace(/^\+/, "");
+export const toWhatsAppRecipient = (e164: string): string =>
+  e164.replace(/^\+/, "");
 
 /** "+919876543210" -> "+91 ***** *3210": safe for logs (plain ASCII) and API responses. */
 export function maskPhone(e164: string): string {
   const digits = e164.replace(/^\+/, "");
-  const country = e164.startsWith("+91") ? "91" : digits.slice(0, Math.max(1, digits.length - 10));
+  const country = e164.startsWith("+91")
+    ? "91"
+    : digits.slice(0, Math.max(1, digits.length - 10));
   const local = digits.slice(country.length);
   const visible = local.slice(-4);
   const hidden = "*".repeat(Math.max(0, local.length - 4));
@@ -52,5 +55,7 @@ export const IsMobileNumber = (): PropertyDecorator =>
   applyDecorators(
     Transform(({ value }) => normalizePhone(value)),
     IsString(),
-    Matches(MOBILE_PATTERN, { message: "phone must be a valid mobile number, e.g. +919876543210" }),
+    Matches(MOBILE_PATTERN, {
+      message: "phone must be a valid mobile number, e.g. +919876543210",
+    }),
   );

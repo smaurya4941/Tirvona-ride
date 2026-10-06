@@ -26,7 +26,8 @@ export class CircuitPackageStop {
   @Prop({ required: true, min: -180, max: 180 })
   longitude!: number;
 }
-const CircuitPackageStopSchema = SchemaFactory.createForClass(CircuitPackageStop);
+const CircuitPackageStopSchema =
+  SchemaFactory.createForClass(CircuitPackageStop);
 
 /**
  * What the package includes, the same whichever vehicle is booked: the route
@@ -40,7 +41,9 @@ export class CircuitPackagePricing {
   @Prop({ required: true, min: 0 })
   includedDurationSeconds!: number;
 }
-const CircuitPackagePricingSchema = SchemaFactory.createForClass(CircuitPackagePricing);
+const CircuitPackagePricingSchema = SchemaFactory.createForClass(
+  CircuitPackagePricing,
+);
 
 /** What one allowed vehicle costs on this circuit. Exactly one per ride type in `rideTypes` once published. */
 @Schema({ _id: false })
@@ -60,7 +63,8 @@ export class CircuitVehiclePrice {
   @Prop({ required: true, min: 0 })
   extraDurationRatePerHour!: number;
 }
-const CircuitVehiclePriceSchema = SchemaFactory.createForClass(CircuitVehiclePrice);
+const CircuitVehiclePriceSchema =
+  SchemaFactory.createForClass(CircuitVehiclePrice);
 
 @Schema({ _id: false })
 export class CircuitPackageAvailability {
@@ -82,7 +86,9 @@ export class CircuitPackageAvailability {
   @Prop()
   validUntil?: string;
 }
-const CircuitPackageAvailabilitySchema = SchemaFactory.createForClass(CircuitPackageAvailability);
+const CircuitPackageAvailabilitySchema = SchemaFactory.createForClass(
+  CircuitPackageAvailability,
+);
 
 /** The reference origin Admin uses to judge viability (customers book from anywhere). */
 @Schema({ _id: false })
@@ -96,7 +102,9 @@ export class CircuitReferenceOrigin {
   @Prop({ required: true, min: -180, max: 180 })
   longitude!: number;
 }
-const CircuitReferenceOriginSchema = SchemaFactory.createForClass(CircuitReferenceOrigin);
+const CircuitReferenceOriginSchema = SchemaFactory.createForClass(
+  CircuitReferenceOrigin,
+);
 
 @Schema({ _id: false })
 export class CircuitPackageCover {
@@ -118,7 +126,8 @@ export class CircuitPackageCover {
   @Prop({ required: true })
   bytes!: number;
 }
-const CircuitPackageCoverSchema = SchemaFactory.createForClass(CircuitPackageCover);
+const CircuitPackageCoverSchema =
+  SchemaFactory.createForClass(CircuitPackageCover);
 
 /**
  * A product Admin configures — not a ride. A package lives for months; every
@@ -140,7 +149,11 @@ export class CircuitPackage {
   @Prop({ required: true, trim: true })
   city!: string;
 
-  @Prop({ required: true, enum: CircuitPackageStatus, default: CircuitPackageStatus.DRAFT })
+  @Prop({
+    required: true,
+    enum: CircuitPackageStatus,
+    default: CircuitPackageStatus.DRAFT,
+  })
   status!: CircuitPackageStatus;
 
   @Prop({ type: [CircuitPackageStopSchema], default: [] })
@@ -194,7 +207,8 @@ export class CircuitPackage {
 }
 
 export type CircuitPackageDocument = HydratedDocument<CircuitPackage>;
-export const CircuitPackageSchema = SchemaFactory.createForClass(CircuitPackage);
+export const CircuitPackageSchema =
+  SchemaFactory.createForClass(CircuitPackage);
 
 CircuitPackageSchema.index({ code: 1 }, { unique: true });
 CircuitPackageSchema.index({ status: 1, city: 1, name: 1 });
@@ -209,4 +223,6 @@ export class CircuitPackageCounter {
   @Prop({ required: true, default: 0 })
   seq!: number;
 }
-export const CircuitPackageCounterSchema = SchemaFactory.createForClass(CircuitPackageCounter);
+export const CircuitPackageCounterSchema = SchemaFactory.createForClass(
+  CircuitPackageCounter,
+);

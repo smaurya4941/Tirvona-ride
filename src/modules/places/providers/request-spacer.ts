@@ -21,7 +21,11 @@ export class RequestSpacer {
     const now = Date.now();
     const slot = Math.max(now, this.nextSlotAt);
     const wait = slot - now;
-    if (wait > this.maxWaitMs) throw new GeocodingProviderError(`${this.upstream} request budget exhausted`, true);
+    if (wait > this.maxWaitMs)
+      throw new GeocodingProviderError(
+        `${this.upstream} request budget exhausted`,
+        true,
+      );
     this.nextSlotAt = slot + this.minIntervalMs;
     if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
   }

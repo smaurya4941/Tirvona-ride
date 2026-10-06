@@ -5,8 +5,12 @@ const hmacHex = (secret: string, payload: string | Buffer): string =>
 
 /** Constant-time comparison of two hex digests (false on any shape mismatch). */
 function sameHex(expected: string, received: string): boolean {
-  if (!/^[0-9a-f]+$/i.test(received) || expected.length !== received.length) return false;
-  return timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(received.toLowerCase(), "hex"));
+  if (!/^[0-9a-f]+$/i.test(received) || expected.length !== received.length)
+    return false;
+  return timingSafeEqual(
+    Buffer.from(expected, "hex"),
+    Buffer.from(received.toLowerCase(), "hex"),
+  );
 }
 
 /**
@@ -14,7 +18,11 @@ function sameHex(expected: string, received: string): boolean {
  * key_secret). Proves Razorpay issued this payment for *this* order — the
  * app cannot forge it without the secret, which never leaves the server.
  */
-export function razorpayPaymentSignature(orderId: string, paymentId: string, keySecret: string): string {
+export function razorpayPaymentSignature(
+  orderId: string,
+  paymentId: string,
+  keySecret: string,
+): string {
   return hmacHex(keySecret, `${orderId}|${paymentId}`);
 }
 
@@ -25,7 +33,10 @@ export function verifyPaymentSignature(
   keySecret: string,
 ): boolean {
   if (!orderId || !paymentId || !signature || !keySecret) return false;
-  return sameHex(razorpayPaymentSignature(orderId, paymentId, keySecret), signature);
+  return sameHex(
+    razorpayPaymentSignature(orderId, paymentId, keySecret),
+    signature,
+  );
 }
 
 /**
@@ -33,7 +44,10 @@ export function verifyPaymentSignature(
  * `X-Razorpay-Signature` header. Must be computed over the exact bytes
  * received — never over re-serialised JSON.
  */
-export function razorpayWebhookSignature(rawBody: Buffer | string, webhookSecret: string): string {
+export function razorpayWebhookSignature(
+  rawBody: Buffer | string,
+  webhookSecret: string,
+): string {
   return hmacHex(webhookSecret, rawBody);
 }
 

@@ -4,7 +4,10 @@ import { AuthModule } from "../auth/auth.module";
 import { BrandingModule } from "../branding/branding.module";
 import { CancellationsModule } from "../cancellations/cancellations.module";
 import { ComplaintsModule } from "../complaints/complaints.module";
-import { SupportTicket, SupportTicketSchema } from "../complaints/schemas/support-ticket.schema";
+import {
+  SupportTicket,
+  SupportTicketSchema,
+} from "../complaints/schemas/support-ticket.schema";
 import { DriversModule } from "../drivers/drivers.module";
 import { LocationsModule } from "../locations/locations.module";
 import { EarningsModule } from "../earnings/earnings.module";
@@ -42,7 +45,10 @@ import { AdminPeakPricingController } from "./admin-peak-pricing.controller";
 import { AdminRideConfigController } from "./admin-ride-config.controller";
 import { AdminPeopleService } from "./admin-people.service";
 import { AdminPricingController } from "./admin-pricing.controller";
-import { AdminComplaintsController, AdminSosController } from "./admin-safety.controller";
+import {
+  AdminComplaintsController,
+  AdminSosController,
+} from "./admin-safety.controller";
 import { AdminRidesController } from "./admin-rides.controller";
 import { AdminController } from "./admin.controller";
 import { AdminService } from "./admin.service";

@@ -98,7 +98,11 @@ export class PaymentRefund {
   lastCheckedAt?: Date;
 
   // ── Driver ledger ─────────────────────────────────────────────────────
-  @Prop({ required: true, enum: RefundLedgerState, default: RefundLedgerState.PENDING })
+  @Prop({
+    required: true,
+    enum: RefundLedgerState,
+    default: RefundLedgerState.PENDING,
+  })
   ledgerState!: RefundLedgerState;
 
   @Prop({ type: SchemaTypes.ObjectId, ref: "DriverEarningAdjustment" })
@@ -118,11 +122,19 @@ export const PaymentRefundSchema = SchemaFactory.createForClass(PaymentRefund);
 PaymentRefundSchema.index({ paymentId: 1, createdAt: 1 });
 PaymentRefundSchema.index(
   { razorpayRefundId: 1 },
-  { unique: true, partialFilterExpression: { razorpayRefundId: { $type: "string" } }, name: "uniq_razorpay_refund_id" },
+  {
+    unique: true,
+    partialFilterExpression: { razorpayRefundId: { $type: "string" } },
+    name: "uniq_razorpay_refund_id",
+  },
 );
 PaymentRefundSchema.index(
   { idempotencyKey: 1 },
-  { unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } }, name: "uniq_refund_idempotency_key" },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $type: "string" } },
+    name: "uniq_refund_idempotency_key",
+  },
 );
 // Reconciler sweeps and admin lists.
 PaymentRefundSchema.index({ status: 1, updatedAt: 1 });

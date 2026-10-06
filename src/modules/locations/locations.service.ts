@@ -6,7 +6,9 @@ import type { RouteEstimate, RouteEstimator } from "./route-estimator";
 
 @Injectable()
 export class LocationsService {
-  constructor(@Inject(ROUTE_ESTIMATOR) private readonly estimator: RouteEstimator) {}
+  constructor(
+    @Inject(ROUTE_ESTIMATOR) private readonly estimator: RouteEstimator,
+  ) {}
 
   /**
    * Road route between two points through the shared provider, cache and
@@ -14,7 +16,10 @@ export class LocationsService {
    * per ride type by TripPolicyService (the only path for estimates and
    * bookings). Driver → pickup / destination legs call this directly.
    */
-  routeBetween(origin: GeoCoordinates, destination: GeoCoordinates): Promise<RouteEstimate> {
+  routeBetween(
+    origin: GeoCoordinates,
+    destination: GeoCoordinates,
+  ): Promise<RouteEstimate> {
     return this.estimator.estimate(origin, destination);
   }
 

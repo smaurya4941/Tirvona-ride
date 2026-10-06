@@ -23,11 +23,8 @@ import { Roles } from "../../common/decorators/roles.decorator";
 import { apiBadRequest } from "../../common/exceptions/api.exception";
 import { ok } from "../../common/http/api-response";
 import type { ApiSuccessBody } from "../../common/http/api-response";
-import {
-  documentUploadOptions,
-  streamDocument,
-} from "../../common/http/file-upload";
-import { UploadCleanupInterceptor } from "../../common/interceptors/upload-cleanup.interceptor";
+import { documentUploadOptions } from "../../common/http/file-upload";
+import { StorageService } from "../storage/storage.service";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
 import { CreateVehicleDto } from "./dto/create-vehicle.dto";
@@ -54,7 +51,10 @@ function toDocumentSummary(document: VehicleDocumentDocument) {
 @Roles(UserRole.DRIVER)
 @Controller({ path: "vehicles", version: "1" })
 export class VehiclesController {
-  constructor(private readonly vehicles: VehiclesService) {}
+  constructor(
+    private readonly vehicles: VehiclesService,
+    private readonly storage: StorageService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: "Register a vehicle for the authenticated driver" })
@@ -119,10 +119,7 @@ export class VehiclesController {
     },
   })
   @ApiOperation({ summary: "Upload (or replace) a vehicle document" })
-  @UseInterceptors(
-    FileInterceptor("file", documentUploadOptions),
-    UploadCleanupInterceptor,
-  )
+  @UseInterceptors(FileInterceptor("file", documentUploadOptions))
   async uploadDocument(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id") id: string,
@@ -131,7 +128,12 @@ export class VehiclesController {
   ): Promise<ApiSuccessBody<ReturnType<typeof toDocumentSummary>>> {
     if (!file)
       throw apiBadRequest("A file is required", "DOCUMENT_INVALID_TYPE");
-    const document = await this.vehicles.addDocument(user.userId, id, dto, file);
+    const document = await this.vehicles.addDocument(
+      user.userId,
+      id,
+      dto,
+      file,
+    );
     return ok(toDocumentSummary(document));
   }
 
@@ -157,6 +159,6 @@ export class VehiclesController {
       id,
       documentId,
     );
-    return streamDocument(document.filePath);
+    return this.storage.stream(document.filePath);
   }
 }

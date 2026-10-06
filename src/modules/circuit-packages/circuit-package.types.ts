@@ -7,10 +7,21 @@ export enum CircuitPackageStatus {
 }
 
 /** Legal status moves. ARCHIVED is final; a package that was ever used is archived, never deleted. */
-export const PACKAGE_STATUS_TRANSITIONS: Readonly<Record<CircuitPackageStatus, readonly CircuitPackageStatus[]>> = {
-  [CircuitPackageStatus.DRAFT]: [CircuitPackageStatus.ACTIVE, CircuitPackageStatus.ARCHIVED],
-  [CircuitPackageStatus.ACTIVE]: [CircuitPackageStatus.INACTIVE, CircuitPackageStatus.ARCHIVED],
-  [CircuitPackageStatus.INACTIVE]: [CircuitPackageStatus.ACTIVE, CircuitPackageStatus.ARCHIVED],
+export const PACKAGE_STATUS_TRANSITIONS: Readonly<
+  Record<CircuitPackageStatus, readonly CircuitPackageStatus[]>
+> = {
+  [CircuitPackageStatus.DRAFT]: [
+    CircuitPackageStatus.ACTIVE,
+    CircuitPackageStatus.ARCHIVED,
+  ],
+  [CircuitPackageStatus.ACTIVE]: [
+    CircuitPackageStatus.INACTIVE,
+    CircuitPackageStatus.ARCHIVED,
+  ],
+  [CircuitPackageStatus.INACTIVE]: [
+    CircuitPackageStatus.ACTIVE,
+    CircuitPackageStatus.ARCHIVED,
+  ],
   [CircuitPackageStatus.ARCHIVED]: [],
 };
 

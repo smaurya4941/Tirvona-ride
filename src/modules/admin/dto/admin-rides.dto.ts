@@ -1,6 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsEnum, IsInt, IsOptional, IsString, Length, Matches, Max, Min } from "class-validator";
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+  Max,
+  Min,
+} from "class-validator";
 import { RIDE_TYPE_CODE_PATTERN } from "../../ride-types/schemas/ride-type.schema";
 import { RideStatus } from "../../rides/ride-state-machine";
 
@@ -31,7 +40,9 @@ export class AdminListRidesQueryDto {
   @Matches(RIDE_TYPE_CODE_PATTERN)
   rideType?: string;
 
-  @ApiPropertyOptional({ description: "Ride code prefix, ride id, or customer phone" })
+  @ApiPropertyOptional({
+    description: "Ride code prefix, ride id, or customer phone",
+  })
   @IsOptional()
   @IsString()
   @Length(1, 40)
@@ -39,7 +50,10 @@ export class AdminListRidesQueryDto {
 }
 
 export class AdminCancelRideDto {
-  @ApiPropertyOptional({ example: "CUSTOMER_REQUEST", description: "ADMIN cancellation reason code (defaults to OTHER)" })
+  @ApiPropertyOptional({
+    example: "CUSTOMER_REQUEST",
+    description: "ADMIN cancellation reason code (defaults to OTHER)",
+  })
   @IsOptional()
   @Matches(/^[A-Z][A-Z0-9_]{1,39}$/)
   reasonCode?: string;

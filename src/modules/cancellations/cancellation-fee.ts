@@ -25,7 +25,10 @@ export interface CustomerFeeRule {
 }
 
 /** Statuses in which a charge is even conceivable (driver committed, trip not started). */
-export const FEE_ELIGIBLE_STATUSES: readonly RideStatus[] = [RideStatus.DRIVER_ACCEPTED, RideStatus.DRIVER_ARRIVED];
+export const FEE_ELIGIBLE_STATUSES: readonly RideStatus[] = [
+  RideStatus.DRIVER_ACCEPTED,
+  RideStatus.DRIVER_ARRIVED,
+];
 
 export const DISABLED_CUSTOMER_FEE_RULE: CustomerFeeRule = {
   enabled: false,
@@ -54,20 +57,40 @@ export interface FeeAssessment {
   freeUntil?: Date;
 }
 
-const none = (explanation: string, freeUntil?: Date): FeeAssessment => ({ amount: 0, applies: false, explanation, freeUntil });
+const none = (explanation: string, freeUntil?: Date): FeeAssessment => ({
+  amount: 0,
+  applies: false,
+  explanation,
+  freeUntil,
+});
 
 /** Pure and deterministic: same rule + context → same fee. Whole rupees. */
-export function assessCancellationFee(rule: CustomerFeeRule, context: FeeContext): FeeAssessment {
-  if (context.actor !== RideActorType.CUSTOMER) return none("No fee for this cancellation");
+export function assessCancellationFee(
+  rule: CustomerFeeRule,
+  context: FeeContext,
+): FeeAssessment {
+  if (context.actor !== RideActorType.CUSTOMER)
+    return none("No fee for this cancellation");
   if (!rule.enabled) return none("Free cancellation");
-  if (!FEE_ELIGIBLE_STATUSES.includes(context.status) || !rule.applicableStatuses.includes(context.status))
+  if (
+    !FEE_ELIGIBLE_STATUSES.includes(context.status) ||
+    !rule.applicableStatuses.includes(context.status)
+  )
     return none("Free cancellation — no driver is on the way yet");
-  if (!context.acceptedAt) return none("Free cancellation — no driver is on the way yet");
+  if (!context.acceptedAt)
+    return none("Free cancellation — no driver is on the way yet");
 
-  const freeUntil = new Date(context.acceptedAt.getTime() + Math.max(0, rule.graceSeconds) * 1000);
-  if (context.now < freeUntil) return none("Free cancellation for a little longer", freeUntil);
+  const freeUntil = new Date(
+    context.acceptedAt.getTime() + Math.max(0, rule.graceSeconds) * 1000,
+  );
+  if (context.now < freeUntil)
+    return none("Free cancellation for a little longer", freeUntil);
 
-  const raw = Math.max(0, rule.fixedFee) + (Math.max(0, context.fare) * Math.min(100, Math.max(0, rule.percentOfFare))) / 100;
+  const raw =
+    Math.max(0, rule.fixedFee) +
+    (Math.max(0, context.fare) *
+      Math.min(100, Math.max(0, rule.percentOfFare))) /
+      100;
   let amount = Math.round(raw);
   if (rule.maxFee > 0) amount = Math.min(amount, Math.round(rule.maxFee));
   amount = Math.min(amount, Math.round(Math.max(0, context.fare)));

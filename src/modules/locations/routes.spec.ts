@@ -1,5 +1,9 @@
 import type { ConfigService } from "@nestjs/config";
-import { GOOGLE_ROUTES_URL, GoogleRoutesEstimator, parseDurationSeconds } from "./google-routes-estimator";
+import {
+  GOOGLE_ROUTES_URL,
+  GoogleRoutesEstimator,
+  parseDurationSeconds,
+} from "./google-routes-estimator";
 import { LiveRouteService } from "./live-route.service";
 import type { LocationsService } from "./locations.service";
 import { ResilientRouteEstimator } from "./resilient-route-estimator";
@@ -28,7 +32,10 @@ const googleConfig = (overrides: Record<string, unknown> = {}) =>
   });
 
 const jsonResponse = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 
 describe("parseDurationSeconds", () => {
   it("reads protobuf JSON durations", () => {
@@ -55,11 +62,20 @@ describe("GoogleRoutesEstimator", () => {
   it("asks computeRoutes for distance, duration and polyline only, with the key in a header", async () => {
     fetchMock.mockResolvedValue(
       jsonResponse(200, {
-        routes: [{ distanceMeters: 11_873, duration: "1512s", polyline: { encodedPolyline: "_p~iF~ps|U_ulLnnqC" } }],
+        routes: [
+          {
+            distanceMeters: 11_873,
+            duration: "1512s",
+            polyline: { encodedPolyline: "_p~iF~ps|U_ulLnnqC" },
+          },
+        ],
       }),
     );
 
-    const route = await new GoogleRoutesEstimator(googleConfig()).estimate(VRINDAVAN, MATHURA);
+    const route = await new GoogleRoutesEstimator(googleConfig()).estimate(
+      VRINDAVAN,
+      MATHURA,
+    );
 
     expect(route).toEqual({
       distanceMeters: 11_873,
@@ -87,26 +103,35 @@ describe("GoogleRoutesEstimator", () => {
   });
 
   it("uses live traffic and the configured travel mode when asked", async () => {
-    fetchMock.mockResolvedValue(jsonResponse(200, { routes: [{ distanceMeters: 5, duration: "60s" }] }));
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, { routes: [{ distanceMeters: 5, duration: "60s" }] }),
+    );
     await new GoogleRoutesEstimator(
-      googleConfig({ routesTrafficAware: true, routesTravelMode: "TWO_WHEELER" }),
+      googleConfig({
+        routesTrafficAware: true,
+        routesTravelMode: "TWO_WHEELER",
+      }),
     ).estimate(VRINDAVAN, MATHURA);
-    const body = JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body)) as Record<
-      string,
-      unknown
-    >;
+    const body = JSON.parse(
+      String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body),
+    ) as Record<string, unknown>;
     expect(body.routingPreference).toBe("TRAFFIC_AWARE");
     expect(body.travelMode).toBe("TWO_WHEELER");
   });
 
   it("treats an empty answer as no route, and a missing distance as 0 m", async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(200, {}));
-    await expect(new GoogleRoutesEstimator(googleConfig()).estimate(VRINDAVAN, MATHURA)).rejects.toBeInstanceOf(
-      NoRouteFoundError,
-    );
+    await expect(
+      new GoogleRoutesEstimator(googleConfig()).estimate(VRINDAVAN, MATHURA),
+    ).rejects.toBeInstanceOf(NoRouteFoundError);
 
-    fetchMock.mockResolvedValueOnce(jsonResponse(200, { routes: [{ duration: "0s" }] }));
-    const route = await new GoogleRoutesEstimator(googleConfig()).estimate(VRINDAVAN, VRINDAVAN);
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, { routes: [{ duration: "0s" }] }),
+    );
+    const route = await new GoogleRoutesEstimator(googleConfig()).estimate(
+      VRINDAVAN,
+      VRINDAVAN,
+    );
     expect(route.distanceMeters).toBe(0);
     expect(route.polyline).toBeUndefined();
   });
@@ -115,35 +140,61 @@ describe("GoogleRoutesEstimator", () => {
     const estimator = new GoogleRoutesEstimator(googleConfig());
 
     fetchMock.mockResolvedValueOnce(
-      jsonResponse(403, { error: { status: "PERMISSION_DENIED", message: "API key not authorized" } }),
+      jsonResponse(403, {
+        error: {
+          status: "PERMISSION_DENIED",
+          message: "API key not authorized",
+        },
+      }),
     );
-    const denied = await estimator.estimate(VRINDAVAN, MATHURA).catch((error: unknown) => error);
+    const denied = await estimator
+      .estimate(VRINDAVAN, MATHURA)
+      .catch((error: unknown) => error);
     expect(denied).toBeInstanceOf(RouteProviderError);
     expect((denied as RouteProviderError).retryable).toBe(false);
     expect((denied as Error).message).toContain("PERMISSION_DENIED");
 
     fetchMock.mockResolvedValueOnce(jsonResponse(503, {}));
-    expect(((await estimator.estimate(VRINDAVAN, MATHURA).catch((e: unknown) => e)) as RouteProviderError).retryable).toBe(
-      true,
-    );
+    expect(
+      (
+        (await estimator
+          .estimate(VRINDAVAN, MATHURA)
+          .catch((e: unknown) => e)) as RouteProviderError
+      ).retryable,
+    ).toBe(true);
 
     fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
-    expect(((await estimator.estimate(VRINDAVAN, MATHURA).catch((e: unknown) => e)) as RouteProviderError).retryable).toBe(
-      true,
-    );
+    expect(
+      (
+        (await estimator
+          .estimate(VRINDAVAN, MATHURA)
+          .catch((e: unknown) => e)) as RouteProviderError
+      ).retryable,
+    ).toBe(true);
   });
 
   it("refuses to call Google without a key", async () => {
     await expect(
-      new GoogleRoutesEstimator(googleConfig({ googleRoutesApiKey: "" })).estimate(VRINDAVAN, MATHURA),
+      new GoogleRoutesEstimator(
+        googleConfig({ googleRoutesApiKey: "" }),
+      ).estimate(VRINDAVAN, MATHURA),
     ).rejects.toThrow("GOOGLE_ROUTES_API_KEY");
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
 describe("ResilientRouteEstimator", () => {
-  const road: RouteEstimate = { distanceMeters: 12_000, durationSeconds: 1_500, provider: "GOOGLE_ROUTES", polyline: "abc" };
-  const straight: RouteEstimate = { distanceMeters: 9_900, durationSeconds: 1_620, provider: "HAVERSINE" };
+  const road: RouteEstimate = {
+    distanceMeters: 12_000,
+    durationSeconds: 1_500,
+    provider: "GOOGLE_ROUTES",
+    polyline: "abc",
+  };
+  const straight: RouteEstimate = {
+    distanceMeters: 9_900,
+    durationSeconds: 1_620,
+    provider: "HAVERSINE",
+  };
 
   let clock: number;
   let primary: jest.Mocked<RouteEstimator>;
@@ -169,7 +220,10 @@ describe("ResilientRouteEstimator", () => {
       estimator.estimate(VRINDAVAN, MATHURA),
     ]);
     const nudged = await estimator.estimate(
-      { latitude: VRINDAVAN.latitude + 0.00002, longitude: VRINDAVAN.longitude },
+      {
+        latitude: VRINDAVAN.latitude + 0.00002,
+        longitude: VRINDAVAN.longitude,
+      },
       MATHURA,
     );
     expect([a, b, nudged]).toEqual([road, road, road]);
@@ -181,7 +235,9 @@ describe("ResilientRouteEstimator", () => {
   });
 
   it("falls back to the straight line on failure without caching it", async () => {
-    primary.estimate.mockRejectedValueOnce(new RouteProviderError("timeout", true));
+    primary.estimate.mockRejectedValueOnce(
+      new RouteProviderError("timeout", true),
+    );
     expect(await estimator.estimate(VRINDAVAN, MATHURA)).toEqual(straight);
     expect(await estimator.estimate(VRINDAVAN, MATHURA)).toEqual(road);
     expect(primary.estimate).toHaveBeenCalledTimes(2);
@@ -202,14 +258,17 @@ describe("ResilientRouteEstimator", () => {
   });
 
   it("opens the breaker at once on a configuration error (bad key, API disabled)", async () => {
-    primary.estimate.mockRejectedValueOnce(new RouteProviderError("403 PERMISSION_DENIED", false));
+    primary.estimate.mockRejectedValueOnce(
+      new RouteProviderError("403 PERMISSION_DENIED", false),
+    );
     await estimator.estimate(VRINDAVAN, MATHURA);
     expect(estimator.isDegraded).toBe(true);
   });
 
   it("does not count 'no route' against the provider's health", async () => {
     primary.estimate.mockRejectedValue(new NoRouteFoundError());
-    for (let i = 0; i < 5; i += 1) expect(await estimator.estimate(VRINDAVAN, MATHURA)).toEqual(straight);
+    for (let i = 0; i < 5; i += 1)
+      expect(await estimator.estimate(VRINDAVAN, MATHURA)).toEqual(straight);
     expect(estimator.isDegraded).toBe(false);
   });
 
@@ -234,7 +293,13 @@ describe("LiveRouteService", () => {
 
   beforeEach(() => {
     jest.useFakeTimers({ now: new Date("2026-09-28T10:00:00Z") });
-    routeBetween = jest.fn().mockResolvedValue({ distanceMeters: 900, durationSeconds: 180, provider: "GOOGLE_ROUTES" });
+    routeBetween = jest
+      .fn()
+      .mockResolvedValue({
+        distanceMeters: 900,
+        durationSeconds: 180,
+        provider: "GOOGLE_ROUTES",
+      });
     service = new LiveRouteService(
       { routeBetween } as unknown as LocationsService,
       configOf({ routesLiveRefreshSeconds: 90, routesLiveRefreshMeters: 300 }),
@@ -255,7 +320,11 @@ describe("LiveRouteService", () => {
     );
     expect(again).toBe(first);
     expect(routeBetween).toHaveBeenCalledTimes(1);
-    expect(first).toMatchObject({ stage: "APPROACH", origin: VRINDAVAN, destination: PICKUP });
+    expect(first).toMatchObject({
+      stage: "APPROACH",
+      origin: VRINDAVAN,
+      destination: PICKUP,
+    });
   });
 
   it("recomputes after the refresh interval, a long move, or a stage change", async () => {
@@ -266,10 +335,20 @@ describe("LiveRouteService", () => {
     expect(routeBetween).toHaveBeenCalledTimes(2);
 
     // ~450 m away.
-    await service.forRide("r1", "APPROACH", { latitude: VRINDAVAN.latitude - 0.004, longitude: VRINDAVAN.longitude }, PICKUP);
+    await service.forRide(
+      "r1",
+      "APPROACH",
+      { latitude: VRINDAVAN.latitude - 0.004, longitude: VRINDAVAN.longitude },
+      PICKUP,
+    );
     expect(routeBetween).toHaveBeenCalledTimes(3);
 
-    await service.forRide("r1", "TRIP", { latitude: VRINDAVAN.latitude - 0.004, longitude: VRINDAVAN.longitude }, VRINDAVAN);
+    await service.forRide(
+      "r1",
+      "TRIP",
+      { latitude: VRINDAVAN.latitude - 0.004, longitude: VRINDAVAN.longitude },
+      VRINDAVAN,
+    );
     expect(routeBetween).toHaveBeenCalledTimes(4);
   });
 

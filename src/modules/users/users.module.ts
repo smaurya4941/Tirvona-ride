@@ -1,6 +1,9 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
-import { ProfileImage, ProfileImageSchema } from "./schemas/profile-image.schema";
+import {
+  ProfileImage,
+  ProfileImageSchema,
+} from "./schemas/profile-image.schema";
 import { User, UserSchema } from "./schemas/user.schema";
 import { ProfileImagesService } from "./profile-images.service";
 import { UsersController } from "./users.controller";

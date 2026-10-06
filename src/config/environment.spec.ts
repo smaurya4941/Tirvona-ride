@@ -1,4 +1,8 @@
-import { environment, environmentFrom as environment_, validateEnvironment } from "./environment";
+import {
+  environment,
+  environmentFrom as environment_,
+  validateEnvironment,
+} from "./environment";
 
 const productionInput = (): Record<string, unknown> => ({
   NODE_ENV: "production",
@@ -67,40 +71,69 @@ describe("validateEnvironment", () => {
 
   it("still honours the Phase 2 heartbeat name as the stale window", () => {
     expect(
-      environment_({ MATCHING_DRIVER_HEARTBEAT_SECONDS: "90" }).driverLocationStaleSeconds,
+      environment_({ MATCHING_DRIVER_HEARTBEAT_SECONDS: "90" })
+        .driverLocationStaleSeconds,
     ).toBe(90);
   });
 
   it("requires a real WhatsApp sender and an OTP hash secret in production", () => {
     const withoutToken = productionInput();
     delete withoutToken.WHATSAPP_ACCESS_TOKEN;
-    expect(() => validateEnvironment(withoutToken)).toThrow("WHATSAPP_PROVIDER must be meta");
-    expect(() => validateEnvironment({ ...productionInput(), WHATSAPP_PROVIDER: "log" })).toThrow(
+    expect(() => validateEnvironment(withoutToken)).toThrow(
       "WHATSAPP_PROVIDER must be meta",
     );
-    expect(() => validateEnvironment({ ...productionInput(), OTP_HASH_SECRET: "short" })).toThrow("OTP_HASH_SECRET");
+    expect(() =>
+      validateEnvironment({ ...productionInput(), WHATSAPP_PROVIDER: "log" }),
+    ).toThrow("WHATSAPP_PROVIDER must be meta");
+    expect(() =>
+      validateEnvironment({ ...productionInput(), OTP_HASH_SECRET: "short" }),
+    ).toThrow("OTP_HASH_SECRET");
   });
 
   it("validates the WhatsApp and OTP settings", () => {
-    expect(() => validateEnvironment({ WHATSAPP_PROVIDER: "sms" })).toThrow("WHATSAPP_PROVIDER");
-    expect(() => validateEnvironment({ WHATSAPP_PROVIDER: "meta", WHATSAPP_ACCESS_TOKEN: "t" })).toThrow(
-      "WHATSAPP_PHONE_NUMBER_ID is required",
+    expect(() => validateEnvironment({ WHATSAPP_PROVIDER: "sms" })).toThrow(
+      "WHATSAPP_PROVIDER",
     );
     expect(() =>
-      validateEnvironment({ WHATSAPP_ACCESS_TOKEN: "t", WHATSAPP_PHONE_NUMBER_ID: "+919876543210" }),
+      validateEnvironment({
+        WHATSAPP_PROVIDER: "meta",
+        WHATSAPP_ACCESS_TOKEN: "t",
+      }),
+    ).toThrow("WHATSAPP_PHONE_NUMBER_ID is required");
+    expect(() =>
+      validateEnvironment({
+        WHATSAPP_ACCESS_TOKEN: "t",
+        WHATSAPP_PHONE_NUMBER_ID: "+919876543210",
+      }),
     ).toThrow("numeric Phone Number ID");
-    expect(() => validateEnvironment({ WHATSAPP_API_VERSION: "23" })).toThrow("WHATSAPP_API_VERSION");
-    expect(() => validateEnvironment({ WHATSAPP_OTP_TEMPLATE_NAME: "Signup OTP" })).toThrow("WHATSAPP_OTP_TEMPLATE_NAME");
-    expect(() => validateEnvironment({ WHATSAPP_OTP_TEMPLATE_LANGUAGE: "english" })).toThrow("LANGUAGE");
-    expect(() => validateEnvironment({ OTP_TTL_SECONDS: "30" })).toThrow("OTP_TTL_SECONDS");
-    expect(() => validateEnvironment({ OTP_RESEND_COOLDOWN_SECONDS: "300" })).toThrow("shorter than OTP_TTL_SECONDS");
-    expect(() => validateEnvironment({ OTP_SEND_WINDOW_MINUTES: "1" })).toThrow("OTP_SEND_WINDOW_MINUTES");
-    expect(() => validateEnvironment({ SIGNUP_PENDING_TTL_MINUTES: "1" })).toThrow("SIGNUP_PENDING_TTL_MINUTES");
+    expect(() => validateEnvironment({ WHATSAPP_API_VERSION: "23" })).toThrow(
+      "WHATSAPP_API_VERSION",
+    );
+    expect(() =>
+      validateEnvironment({ WHATSAPP_OTP_TEMPLATE_NAME: "Signup OTP" }),
+    ).toThrow("WHATSAPP_OTP_TEMPLATE_NAME");
+    expect(() =>
+      validateEnvironment({ WHATSAPP_OTP_TEMPLATE_LANGUAGE: "english" }),
+    ).toThrow("LANGUAGE");
+    expect(() => validateEnvironment({ OTP_TTL_SECONDS: "30" })).toThrow(
+      "OTP_TTL_SECONDS",
+    );
+    expect(() =>
+      validateEnvironment({ OTP_RESEND_COOLDOWN_SECONDS: "300" }),
+    ).toThrow("shorter than OTP_TTL_SECONDS");
+    expect(() => validateEnvironment({ OTP_SEND_WINDOW_MINUTES: "1" })).toThrow(
+      "OTP_SEND_WINDOW_MINUTES",
+    );
+    expect(() =>
+      validateEnvironment({ SIGNUP_PENDING_TTL_MINUTES: "1" }),
+    ).toThrow("SIGNUP_PENDING_TTL_MINUTES");
   });
 
   it("uses Meta only when an access token is configured", () => {
     expect(environment_({}).whatsappProvider).toBe("log");
-    expect(environment_({ WHATSAPP_ACCESS_TOKEN: "t" }).whatsappProvider).toBe("meta");
+    expect(environment_({ WHATSAPP_ACCESS_TOKEN: "t" }).whatsappProvider).toBe(
+      "meta",
+    );
     expect(environment_({}).otpTtlSeconds).toBe(300);
     expect(environment_({}).otpResendCooldownSeconds).toBe(60);
   });
@@ -130,14 +163,15 @@ describe("validateEnvironment", () => {
     ).toThrow("must differ");
   });
 
-  it.each(["RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "RAZORPAY_WEBHOOK_SECRET"])(
-    "requires %s in production",
-    (name) => {
-      const input = productionInput();
-      delete input[name];
-      expect(() => validateEnvironment(input)).toThrow("RAZORPAY_");
-    },
-  );
+  it.each([
+    "RAZORPAY_KEY_ID",
+    "RAZORPAY_KEY_SECRET",
+    "RAZORPAY_WEBHOOK_SECRET",
+  ])("requires %s in production", (name) => {
+    const input = productionInput();
+    delete input[name];
+    expect(() => validateEnvironment(input)).toThrow("RAZORPAY_");
+  });
 
   it("allows production without Razorpay only when PAYMENTS_ENABLED=false", () => {
     const input = productionInput();
@@ -145,37 +179,69 @@ describe("validateEnvironment", () => {
     delete input.RAZORPAY_KEY_SECRET;
     delete input.RAZORPAY_WEBHOOK_SECRET;
     expect(() => validateEnvironment(input)).toThrow("RAZORPAY_KEY_ID");
-    expect(() => validateEnvironment({ ...input, PAYMENTS_ENABLED: "true" })).toThrow("RAZORPAY_KEY_ID");
-    expect(() => validateEnvironment({ ...input, PAYMENTS_ENABLED: "false" })).not.toThrow();
+    expect(() =>
+      validateEnvironment({ ...input, PAYMENTS_ENABLED: "true" }),
+    ).toThrow("RAZORPAY_KEY_ID");
+    expect(() =>
+      validateEnvironment({ ...input, PAYMENTS_ENABLED: "false" }),
+    ).not.toThrow();
   });
 
   it("never accepts live Razorpay keys outside production", () => {
     expect(() =>
-      validateEnvironment({ RAZORPAY_KEY_ID: "rzp_live_AbCdEf123456", RAZORPAY_KEY_SECRET: "x" }),
+      validateEnvironment({
+        RAZORPAY_KEY_ID: "rzp_live_AbCdEf123456",
+        RAZORPAY_KEY_SECRET: "x",
+      }),
     ).toThrow("only allowed when NODE_ENV=production");
     expect(() =>
-      validateEnvironment({ RAZORPAY_KEY_ID: "rzp_test_AbCdEf123456", RAZORPAY_KEY_SECRET: "x" }),
+      validateEnvironment({
+        RAZORPAY_KEY_ID: "rzp_test_AbCdEf123456",
+        RAZORPAY_KEY_SECRET: "x",
+      }),
     ).not.toThrow();
   });
 
   it("requires the Razorpay key id and secret together", () => {
-    expect(() => validateEnvironment({ RAZORPAY_KEY_ID: "rzp_test_AbCdEf123456" })).toThrow("set together");
-    expect(() => validateEnvironment({ RAZORPAY_KEY_ID: "pk_test_1", RAZORPAY_KEY_SECRET: "x" })).toThrow(
-      "rzp_test_",
-    );
+    expect(() =>
+      validateEnvironment({ RAZORPAY_KEY_ID: "rzp_test_AbCdEf123456" }),
+    ).toThrow("set together");
+    expect(() =>
+      validateEnvironment({
+        RAZORPAY_KEY_ID: "pk_test_1",
+        RAZORPAY_KEY_SECRET: "x",
+      }),
+    ).toThrow("rzp_test_");
   });
 
   it("bounds the default commission and the earnings hold window", () => {
-    expect(() => validateEnvironment({ DEFAULT_COMMISSION_PERCENT: "120" })).toThrow("between 0 and 100");
-    expect(() => validateEnvironment({ EARNINGS_HOLD_HOURS: "-1" })).toThrow("EARNINGS_HOLD_HOURS");
-    expect(() => validateEnvironment({ DEFAULT_COMMISSION_PERCENT: "17.5", EARNINGS_HOLD_HOURS: "24" })).not.toThrow();
+    expect(() =>
+      validateEnvironment({ DEFAULT_COMMISSION_PERCENT: "120" }),
+    ).toThrow("between 0 and 100");
+    expect(() => validateEnvironment({ EARNINGS_HOLD_HOURS: "-1" })).toThrow(
+      "EARNINGS_HOLD_HOURS",
+    );
+    expect(() =>
+      validateEnvironment({
+        DEFAULT_COMMISSION_PERCENT: "17.5",
+        EARNINGS_HOLD_HOURS: "24",
+      }),
+    ).not.toThrow();
   });
 
   it("validates the final-fare and refund/reconciliation settings", () => {
-    expect(() => validateEnvironment({ FINAL_FARE_MODE: "estimate" })).toThrow("FINAL_FARE_MODE");
-    expect(() => validateEnvironment({ FINAL_FARE_MAX_ESTIMATE_MULTIPLIER: "0.8" })).toThrow("FINAL_FARE_MAX_ESTIMATE_MULTIPLIER");
-    expect(() => validateEnvironment({ PAYMENT_DAILY_RECONCILIATION_HOUR: "24" })).toThrow("PAYMENT_DAILY_RECONCILIATION_HOUR");
-    expect(() => validateEnvironment({ PAYMENT_REFUND_WINDOW_DAYS: "0" })).toThrow("PAYMENT_REFUND_WINDOW_DAYS");
+    expect(() => validateEnvironment({ FINAL_FARE_MODE: "estimate" })).toThrow(
+      "FINAL_FARE_MODE",
+    );
+    expect(() =>
+      validateEnvironment({ FINAL_FARE_MAX_ESTIMATE_MULTIPLIER: "0.8" }),
+    ).toThrow("FINAL_FARE_MAX_ESTIMATE_MULTIPLIER");
+    expect(() =>
+      validateEnvironment({ PAYMENT_DAILY_RECONCILIATION_HOUR: "24" }),
+    ).toThrow("PAYMENT_DAILY_RECONCILIATION_HOUR");
+    expect(() =>
+      validateEnvironment({ PAYMENT_REFUND_WINDOW_DAYS: "0" }),
+    ).toThrow("PAYMENT_REFUND_WINDOW_DAYS");
     expect(() =>
       validateEnvironment({
         FINAL_FARE_MODE: "BOOKED",
@@ -185,21 +251,41 @@ describe("validateEnvironment", () => {
       }),
     ).not.toThrow();
     process.env = { FINAL_FARE_MODE: "Booked" };
-    expect(environment()).toMatchObject({ finalFareMode: "booked", finalFareMaxEstimateMultiplier: 1.5, tripMeterMaxGapSeconds: 120 });
+    expect(environment()).toMatchObject({
+      finalFareMode: "booked",
+      finalFareMaxEstimateMultiplier: 1.5,
+      tripMeterMaxGapSeconds: 120,
+    });
+  });
+
+  it("accepts only known file-storage settings", () => {
+    expect(() => validateEnvironment({})).not.toThrow();
+    expect(() => validateEnvironment({ STORAGE_PROVIDER: "gridfs", STORAGE_GRIDFS_BUCKET: "tirvonaFiles" })).not.toThrow();
+    expect(() => validateEnvironment({ STORAGE_PROVIDER: "s3" })).toThrow("STORAGE_PROVIDER");
+    expect(() => validateEnvironment({ STORAGE_GRIDFS_BUCKET: "bad name!" })).toThrow("STORAGE_GRIDFS_BUCKET");
   });
 
   it("requires an HTTPS public base URL in production (share links)", () => {
     const input = productionInput();
     delete input.PUBLIC_BASE_URL;
-    expect(() => validateEnvironment(input)).toThrow("PUBLIC_BASE_URL is required");
-    expect(() => validateEnvironment({ ...productionInput(), PUBLIC_BASE_URL: "http://ride-api.tirvona.com" })).toThrow(
-      "HTTPS",
+    expect(() => validateEnvironment(input)).toThrow(
+      "PUBLIC_BASE_URL is required",
     );
-    expect(() => validateEnvironment({ PUBLIC_BASE_URL: "not a url" })).toThrow("valid HTTP(S) URL");
+    expect(() =>
+      validateEnvironment({
+        ...productionInput(),
+        PUBLIC_BASE_URL: "http://ride-api.tirvona.com",
+      }),
+    ).toThrow("HTTPS");
+    expect(() => validateEnvironment({ PUBLIC_BASE_URL: "not a url" })).toThrow(
+      "valid HTTP(S) URL",
+    );
   });
 
   it("requires the Firebase service account all-or-nothing", () => {
-    expect(() => validateEnvironment({ FIREBASE_PROJECT_ID: "tirvona" })).toThrow("set together");
+    expect(() =>
+      validateEnvironment({ FIREBASE_PROJECT_ID: "tirvona" }),
+    ).toThrow("set together");
     expect(() =>
       validateEnvironment({
         FIREBASE_PROJECT_ID: "tirvona",
@@ -207,15 +293,20 @@ describe("validateEnvironment", () => {
         FIREBASE_PRIVATE_KEY: "not-a-key",
       }),
     ).toThrow("PEM");
-    expect(() => validateEnvironment({ FIREBASE_SERVICE_ACCOUNT_BASE64: "%%%" })).toThrow("base64");
+    expect(() =>
+      validateEnvironment({ FIREBASE_SERVICE_ACCOUNT_BASE64: "%%%" }),
+    ).toThrow("base64");
     const account = Buffer.from(
       JSON.stringify({
         project_id: "tirvona",
         client_email: "push@tirvona.iam.gserviceaccount.com",
-        private_key: "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n",
+        private_key:
+          "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n",
       }),
     ).toString("base64");
-    expect(() => validateEnvironment({ FIREBASE_SERVICE_ACCOUNT_BASE64: account })).not.toThrow();
+    expect(() =>
+      validateEnvironment({ FIREBASE_SERVICE_ACCOUNT_BASE64: account }),
+    ).not.toThrow();
     const config = environment_({ FIREBASE_SERVICE_ACCOUNT_BASE64: account });
     expect(config.firebaseProjectId).toBe("tirvona");
     expect(config.firebasePrivateKey).toContain("\n");
@@ -231,17 +322,42 @@ describe("validateEnvironment", () => {
   });
 
   it("validates place-search settings", () => {
-    expect(() => validateEnvironment({ PLACES_PROVIDER: "mapquest" })).toThrow("PLACES_PROVIDER");
-    expect(() => validateEnvironment({ PLACES_PROVIDER: "google" })).toThrow("GOOGLE_MAPS_API_KEY");
-    expect(() => validateEnvironment({ PLACES_PROVIDER: "google", GOOGLE_MAPS_API_KEY: "key" })).not.toThrow();
-    expect(() => validateEnvironment({ PLACES_COUNTRY_CODES: "india" })).toThrow("PLACES_COUNTRY_CODES");
-    expect(() => validateEnvironment({ PLACES_BIAS_LATITUDE: "95" })).toThrow("PLACES_BIAS_LATITUDE");
-    expect(() => validateEnvironment({ NOMINATIM_BASE_URL: "nominatim" })).toThrow("NOMINATIM_BASE_URL");
-    expect(() => validateEnvironment({ NOMINATIM_MIN_INTERVAL_MS: "0" })).not.toThrow();
-    expect(() => validateEnvironment({ PLACES_PROVIDER: "photon" })).not.toThrow();
-    expect(() => validateEnvironment({ PHOTON_BASE_URL: "photon" })).toThrow("PHOTON_BASE_URL");
-    expect(() => validateEnvironment({ PHOTON_MIN_INTERVAL_MS: "-5" })).toThrow("PHOTON_MIN_INTERVAL_MS");
-    expect(() => validateEnvironment({ PLACES_FEATURED_RADIUS_KM: "0" })).toThrow("PLACES_FEATURED_RADIUS_KM");
+    expect(() => validateEnvironment({ PLACES_PROVIDER: "mapquest" })).toThrow(
+      "PLACES_PROVIDER",
+    );
+    expect(() => validateEnvironment({ PLACES_PROVIDER: "google" })).toThrow(
+      "GOOGLE_MAPS_API_KEY",
+    );
+    expect(() =>
+      validateEnvironment({
+        PLACES_PROVIDER: "google",
+        GOOGLE_MAPS_API_KEY: "key",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      validateEnvironment({ PLACES_COUNTRY_CODES: "india" }),
+    ).toThrow("PLACES_COUNTRY_CODES");
+    expect(() => validateEnvironment({ PLACES_BIAS_LATITUDE: "95" })).toThrow(
+      "PLACES_BIAS_LATITUDE",
+    );
+    expect(() =>
+      validateEnvironment({ NOMINATIM_BASE_URL: "nominatim" }),
+    ).toThrow("NOMINATIM_BASE_URL");
+    expect(() =>
+      validateEnvironment({ NOMINATIM_MIN_INTERVAL_MS: "0" }),
+    ).not.toThrow();
+    expect(() =>
+      validateEnvironment({ PLACES_PROVIDER: "photon" }),
+    ).not.toThrow();
+    expect(() => validateEnvironment({ PHOTON_BASE_URL: "photon" })).toThrow(
+      "PHOTON_BASE_URL",
+    );
+    expect(() => validateEnvironment({ PHOTON_MIN_INTERVAL_MS: "-5" })).toThrow(
+      "PHOTON_MIN_INTERVAL_MS",
+    );
+    expect(() =>
+      validateEnvironment({ PLACES_FEATURED_RADIUS_KM: "0" }),
+    ).toThrow("PLACES_FEATURED_RADIUS_KM");
   });
 
   it("falls back from Google Places to OSM by default, and validates the fallback", () => {
@@ -251,9 +367,15 @@ describe("validateEnvironment", () => {
       placesFailureThreshold: 3,
       placesFailureCooldownSeconds: 60,
     });
-    expect(environment_({ PLACES_FALLBACK: "NONE" }).placesFallback).toBe("none");
-    expect(() => validateEnvironment({ PLACES_FALLBACK: "bing" })).toThrow("PLACES_FALLBACK");
-    expect(() => validateEnvironment({ PLACES_FAILURE_THRESHOLD: "0" })).toThrow("PLACES_FAILURE_THRESHOLD");
+    expect(environment_({ PLACES_FALLBACK: "NONE" }).placesFallback).toBe(
+      "none",
+    );
+    expect(() => validateEnvironment({ PLACES_FALLBACK: "bing" })).toThrow(
+      "PLACES_FALLBACK",
+    );
+    expect(() =>
+      validateEnvironment({ PLACES_FAILURE_THRESHOLD: "0" }),
+    ).toThrow("PLACES_FAILURE_THRESHOLD");
   });
 
   it("picks Google Routes only when its key is set, and validates routing options", () => {
@@ -264,16 +386,36 @@ describe("validateEnvironment", () => {
       routesTravelMode: "DRIVE",
       routesTrafficAware: false,
     });
-    expect(environment_({ GOOGLE_ROUTES_API_KEY: "key", ROUTES_PROVIDER: "haversine" }).routesProvider).toBe(
-      "haversine",
+    expect(
+      environment_({
+        GOOGLE_ROUTES_API_KEY: "key",
+        ROUTES_PROVIDER: "haversine",
+      }).routesProvider,
+    ).toBe("haversine");
+    expect(() => validateEnvironment({ ROUTES_PROVIDER: "osrm" })).toThrow(
+      "ROUTES_PROVIDER",
     );
-    expect(() => validateEnvironment({ ROUTES_PROVIDER: "osrm" })).toThrow("ROUTES_PROVIDER");
-    expect(() => validateEnvironment({ ROUTES_PROVIDER: "google" })).toThrow("GOOGLE_ROUTES_API_KEY");
-    expect(() => validateEnvironment({ ROUTES_PROVIDER: "google", GOOGLE_ROUTES_API_KEY: "key" })).not.toThrow();
-    expect(() => validateEnvironment({ ROUTES_TRAVEL_MODE: "walk" })).toThrow("ROUTES_TRAVEL_MODE");
-    expect(() => validateEnvironment({ ROUTES_TRAVEL_MODE: "two_wheeler" })).not.toThrow();
-    expect(() => validateEnvironment({ ROUTES_TIMEOUT_MS: "0" })).toThrow("ROUTES_TIMEOUT_MS");
-    expect(() => validateEnvironment({ ROUTES_LIVE_REFRESH_METERS: "-1" })).toThrow("ROUTES_LIVE_REFRESH_METERS");
+    expect(() => validateEnvironment({ ROUTES_PROVIDER: "google" })).toThrow(
+      "GOOGLE_ROUTES_API_KEY",
+    );
+    expect(() =>
+      validateEnvironment({
+        ROUTES_PROVIDER: "google",
+        GOOGLE_ROUTES_API_KEY: "key",
+      }),
+    ).not.toThrow();
+    expect(() => validateEnvironment({ ROUTES_TRAVEL_MODE: "walk" })).toThrow(
+      "ROUTES_TRAVEL_MODE",
+    );
+    expect(() =>
+      validateEnvironment({ ROUTES_TRAVEL_MODE: "two_wheeler" }),
+    ).not.toThrow();
+    expect(() => validateEnvironment({ ROUTES_TIMEOUT_MS: "0" })).toThrow(
+      "ROUTES_TIMEOUT_MS",
+    );
+    expect(() =>
+      validateEnvironment({ ROUTES_LIVE_REFRESH_METERS: "-1" }),
+    ).toThrow("ROUTES_LIVE_REFRESH_METERS");
   });
 });
 

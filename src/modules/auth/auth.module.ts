@@ -13,9 +13,18 @@ import { AuthService } from "./auth.service";
 import { LoginOtpService } from "./login-otp.service";
 import { OtpService } from "./otp.service";
 import { PasswordResetService } from "./password-reset.service";
-import { OtpSendQuota, OtpSendQuotaSchema } from "./schemas/otp-send-quota.schema";
-import { PasswordReset, PasswordResetSchema } from "./schemas/password-reset.schema";
-import { PendingSignup, PendingSignupSchema } from "./schemas/pending-signup.schema";
+import {
+  OtpSendQuota,
+  OtpSendQuotaSchema,
+} from "./schemas/otp-send-quota.schema";
+import {
+  PasswordReset,
+  PasswordResetSchema,
+} from "./schemas/password-reset.schema";
+import {
+  PendingSignup,
+  PendingSignupSchema,
+} from "./schemas/pending-signup.schema";
 import { SignupService } from "./signup.service";
 import {
   OtpVerification,

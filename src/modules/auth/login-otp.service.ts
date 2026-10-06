@@ -48,8 +48,11 @@ export class LoginOtpService {
     await this.signInAccount(phone);
     const active = await this.otp.activeChallenge(phone, OtpPurpose.LOGIN);
     const challenge =
-      active && active.resendAvailableInSeconds > 0 ? active : await this.otp.issue(phone, OtpPurpose.LOGIN);
-    if (challenge.codeSent) this.logger.log(`Login code sent to ${maskPhone(phone)}`);
+      active && active.resendAvailableInSeconds > 0
+        ? active
+        : await this.otp.issue(phone, OtpPurpose.LOGIN);
+    if (challenge.codeSent)
+      this.logger.log(`Login code sent to ${maskPhone(phone)}`);
     return toOtpChallengeView(phone, challenge);
   }
 
@@ -58,12 +61,17 @@ export class LoginOtpService {
    * The account is checked again before the code is spent, so a block that
    * landed after the request still wins.
    */
-  async verify(phone: string, code: string, device: DeviceMetadata): Promise<AuthSession> {
+  async verify(
+    phone: string,
+    code: string,
+    device: DeviceMetadata,
+  ): Promise<AuthSession> {
     const user = await this.signInAccount(phone);
     await this.otp.verify(phone, OtpPurpose.LOGIN, code);
 
     // Receiving the code on this number proves it (accounts created before signup OTP).
-    if (!user.isPhoneVerified) await this.users.markPhoneVerified(user._id.toString());
+    if (!user.isPhoneVerified)
+      await this.users.markPhoneVerified(user._id.toString());
     this.logger.log(`Signed in with a WhatsApp code: ${maskPhone(phone)}`);
     return this.auth.completeSignIn(user, device);
   }

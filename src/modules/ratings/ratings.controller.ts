@@ -10,7 +10,12 @@ import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
 import { CreateRatingDto, DriverReviewsQueryDto } from "./dto/rating.dto";
 import { RatingsService } from "./ratings.service";
-import type { DriverRatingSummary, DriverReviewsPage, RatingView, RideRatingStatus } from "./ratings.service";
+import type {
+  DriverRatingSummary,
+  DriverReviewsPage,
+  RatingView,
+  RideRatingStatus,
+} from "./ratings.service";
 
 @ApiTags("Ratings")
 @ApiBearerAuth()
@@ -32,7 +37,9 @@ export class RideRatingsController {
 
   @Get(":id/rating")
   @Roles(UserRole.CUSTOMER)
-  @ApiOperation({ summary: "The caller's rating of a ride, or whether they can rate it" })
+  @ApiOperation({
+    summary: "The caller's rating of a ride, or whether they can rate it",
+  })
   async status(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id", ParseObjectIdPipe) id: string,
@@ -49,16 +56,22 @@ export class DriverRatingsController {
 
   @Get()
   @Roles(UserRole.DRIVER)
-  @ApiOperation({ summary: "The driver's average rating, count and star distribution" })
-  async summary(@CurrentUser() user: AuthenticatedUser): Promise<ApiSuccessBody<DriverRatingSummary>> {
+  @ApiOperation({
+    summary: "The driver's average rating, count and star distribution",
+  })
+  async summary(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ApiSuccessBody<DriverRatingSummary>> {
     return ok(await this.ratings.summaryForDriverUser(user.userId));
   }
 
   @Get("reviews")
   @Roles(UserRole.DRIVER)
   @ApiOperation({
-    summary: "The driver's individual ratings, newest first: stars, comment and day only",
-    description: "Anonymous by design: no ride, rider or time of day is returned.",
+    summary:
+      "The driver's individual ratings, newest first: stars, comment and day only",
+    description:
+      "Anonymous by design: no ride, rider or time of day is returned.",
   })
   async reviews(
     @CurrentUser() user: AuthenticatedUser,

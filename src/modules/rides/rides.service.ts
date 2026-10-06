@@ -3,7 +3,11 @@ import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model, QueryFilter } from "mongoose";
 import { Types } from "mongoose";
-import { ApiException, apiBadRequest, apiForbidden } from "../../common/exceptions/api.exception";
+import {
+  ApiException,
+  apiBadRequest,
+  apiForbidden,
+} from "../../common/exceptions/api.exception";
 import { UserRole } from "../../common/types/user-role.enum";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { DriversService } from "../drivers/drivers.service";
@@ -22,7 +26,11 @@ import type { RideTypeDocument } from "../ride-types/schemas/ride-type.schema";
 import type { VehicleType } from "../vehicles/schemas/vehicle.schema";
 import { UserStatus } from "../users/schemas/user.schema";
 import { UsersService } from "../users/users.service";
-import type { CreateRideDto, RideRequestDto, TripDto } from "./dto/ride-requests.dto";
+import type {
+  CreateRideDto,
+  RideRequestDto,
+  TripDto,
+} from "./dto/ride-requests.dto";
 import { PromotionsService } from "../promotions/promotions.service";
 import type { AppliedPromo } from "../promotions/promotions.service";
 import { ZonesService } from "../zones/zones.service";
@@ -30,10 +38,18 @@ import { generateRideCode } from "./ride-code";
 import { RideDispatchService } from "./ride-dispatch.service";
 import { RideEventsService } from "./ride-events.service";
 import { rideNotFound } from "./ride-errors";
-import { DRIVER_ENGAGED_STATUSES, RideActorType, RideStatus } from "./ride-state-machine";
+import {
+  DRIVER_ENGAGED_STATUSES,
+  RideActorType,
+  RideStatus,
+} from "./ride-state-machine";
 import { RideTransitionService } from "./ride-transition.service";
 import { RideViewService } from "./ride-view.service";
-import type { CustomerRideView, DriverRideView, RideView } from "./ride-view.service";
+import type {
+  CustomerRideView,
+  DriverRideView,
+  RideView,
+} from "./ride-view.service";
 import { Ride } from "./schemas/ride.schema";
 import type { RideDocument } from "./schemas/ride.schema";
 
@@ -94,7 +110,10 @@ const MIN_PICKUP_ETA_SECONDS = 60;
 
 const isDuplicateKey = (error: unknown, index?: string): boolean => {
   const mongoError = error as { code?: number; message?: string } | undefined;
-  return mongoError?.code === 11000 && (!index || (mongoError.message ?? "").includes(index));
+  return (
+    mongoError?.code === 11000 &&
+    (!index || (mongoError.message ?? "").includes(index))
+  );
 };
 
 @Injectable()
@@ -120,8 +139,10 @@ export class RidesService {
     private readonly platformSettings: PlatformSettingsService,
     config: ConfigService,
   ) {
-    this.searchTimeoutMs = config.getOrThrow<number>("rideSearchTimeoutSeconds") * 1000;
-    this.averageSpeedMps = (config.getOrThrow<number>("routeAverageSpeedKmph") * 1000) / 3600;
+    this.searchTimeoutMs =
+      config.getOrThrow<number>("rideSearchTimeoutSeconds") * 1000;
+    this.averageSpeedMps =
+      (config.getOrThrow<number>("routeAverageSpeedKmph") * 1000) / 3600;
   }
 
   // ── Estimates ─────────────────────────────────────────────────────────
@@ -134,37 +155,57 @@ export class RidesService {
       this.tripPolicy.estimateTrip(rideType.code, dto.pickup, dto.destination),
       this.driverSupply(dto.pickup),
     ]);
-    const fare = await this.pricing.priceTrip(rideType.code, route.distanceMeters, route.durationSeconds);
+    const fare = await this.pricing.priceTrip(
+      rideType.code,
+      route.distanceMeters,
+      route.durationSeconds,
+    );
     return this.toEstimate(rideType, route, fare, supply);
   }
 
   /** One route calculation, priced for every bookable ride type. */
   async estimateAll(dto: TripDto): Promise<FareEstimateView[]> {
     await this.zones.assertServiceable(dto.pickup);
-    const [rideTypes, supply] = await Promise.all([this.rideTypes.listActive(), this.driverSupply(dto.pickup)]);
+    const [rideTypes, supply] = await Promise.all([
+      this.rideTypes.listActive(),
+      this.driverSupply(dto.pickup),
+    ]);
     // Each ride type is judged by its own distance limits; the route is fetched once.
     const outcomes = await this.tripPolicy.estimateTripForAll(
       rideTypes.map((rideType) => rideType.code),
       dto.pickup,
       dto.destination,
     );
-    const trips = new Map(outcomes.map((outcome) => [outcome.ok ? outcome.policy.rideType : outcome.rideType, outcome]));
+    const trips = new Map(
+      outcomes.map((outcome) => [
+        outcome.ok ? outcome.policy.rideType : outcome.rideType,
+        outcome,
+      ]),
+    );
     const estimates = await Promise.all(
       rideTypes.map(async (rideType) => {
         const outcome = trips.get(rideType.code);
         if (!outcome?.ok) return null;
         const { route } = outcome;
         try {
-          const fare = await this.pricing.priceTrip(rideType.code, route.distanceMeters, route.durationSeconds);
+          const fare = await this.pricing.priceTrip(
+            rideType.code,
+            route.distanceMeters,
+            route.durationSeconds,
+          );
           return this.toEstimate(rideType, route, fare, supply);
         } catch (error) {
           // A ride type without a tariff is hidden rather than failing the list.
-          this.logger.warn(`Skipping ${rideType.code} estimate: ${(error as Error).message}`);
+          this.logger.warn(
+            `Skipping ${rideType.code} estimate: ${(error as Error).message}`,
+          );
           return null;
         }
       }),
     );
-    const quoted = estimates.filter((estimate): estimate is FareEstimateView => estimate !== null);
+    const quoted = estimates.filter(
+      (estimate): estimate is FareEstimateView => estimate !== null,
+    );
     // Nothing fits (too short / too long for every ride type, or no limits on file): say why.
     if (quoted.length === 0) {
       const failure = outcomes.find((outcome) => !outcome.ok);
@@ -175,7 +216,10 @@ export class RidesService {
 
   // ── Booking ───────────────────────────────────────────────────────────
 
-  async create(customerUserId: string, dto: CreateRideDto): Promise<CustomerRideView> {
+  async create(
+    customerUserId: string,
+    dto: CreateRideDto,
+  ): Promise<CustomerRideView> {
     const customerId = new Types.ObjectId(customerUserId);
     const customer = await this.users.findById(customerUserId);
     if (customer.status !== UserStatus.ACTIVE)
@@ -186,8 +230,16 @@ export class RidesService {
     // Re-price from scratch: whatever estimate the app showed is advisory.
     const rideType = await this.rideTypes.getBookable(dto.rideType);
     // Distance limits are re-read and re-checked now: an earlier estimate proves nothing.
-    const { route, policy } = await this.tripPolicy.estimateTrip(rideType.code, dto.pickup, dto.destination);
-    const fare = await this.pricing.priceTrip(rideType.code, route.distanceMeters, route.durationSeconds);
+    const { route, policy } = await this.tripPolicy.estimateTrip(
+      rideType.code,
+      dto.pickup,
+      dto.destination,
+    );
+    const fare = await this.pricing.priceTrip(
+      rideType.code,
+      route.distanceMeters,
+      route.durationSeconds,
+    );
     // Service availability: once zones are defined, pickups must lie in one.
     const zone = await this.zones.assertServiceable(dto.pickup);
 
@@ -233,7 +285,12 @@ export class RidesService {
           minimumFareApplied: fare.minimumFareApplied,
           estimatedFare: fare.total,
           pricingVersion: fare.pricingVersion,
-          ...(promo ? { discount: promo.estimatedDiscount, payableFare: fare.total - promo.estimatedDiscount } : {}),
+          ...(promo
+            ? {
+                discount: promo.estimatedDiscount,
+                payableFare: fare.total - promo.estimatedDiscount,
+              }
+            : {}),
         },
         ...(promo
           ? {
@@ -266,8 +323,12 @@ export class RidesService {
       metadata: {
         estimatedFare: fare.total,
         pricingVersion: fare.pricingVersion,
-        ...(fare.peak ? { peakSlot: fare.peak.name, peakHikePercent: fare.peak.hikePercent } : {}),
-        ...(promo ? { promoCode: promo.code, discount: promo.estimatedDiscount } : {}),
+        ...(fare.peak
+          ? { peakSlot: fare.peak.name, peakHikePercent: fare.peak.hikePercent }
+          : {}),
+        ...(promo
+          ? { promoCode: promo.code, discount: promo.estimatedDiscount }
+          : {}),
         ...(zone ? { zone: zone.zoneName } : {}),
       },
     });
@@ -291,26 +352,38 @@ export class RidesService {
 
   // ── Reads ─────────────────────────────────────────────────────────────
 
-  async getForUser(user: AuthenticatedUser, rideId: string): Promise<CustomerRideView | DriverRideView> {
+  async getForUser(
+    user: AuthenticatedUser,
+    rideId: string,
+  ): Promise<CustomerRideView | DriverRideView> {
     if (user.role === UserRole.DRIVER) {
       const driver = await this.resolveDriver(user.userId);
-      const ride = await this.rideModel.findOne({ _id: rideId, driverId: driver._id }).exec();
+      const ride = await this.rideModel
+        .findOne({ _id: rideId, driverId: driver._id })
+        .exec();
       if (!ride) throw rideNotFound();
       await this.matching.touch(driver._id);
       return this.views.forDriver(await this.dispatch.settle(ride), driver);
     }
 
-    const ride = await this.findCustomerRide(user.userId, { _id: new Types.ObjectId(rideId) });
+    const ride = await this.findCustomerRide(user.userId, {
+      _id: new Types.ObjectId(rideId),
+    });
     if (!ride) throw rideNotFound();
     return this.views.forCustomer(await this.settleWithOtp(ride));
   }
 
   /** The caller's in-flight ride, if any — used to resume after an app restart. */
-  async getActive(user: AuthenticatedUser): Promise<CustomerRideView | DriverRideView | null> {
+  async getActive(
+    user: AuthenticatedUser,
+  ): Promise<CustomerRideView | DriverRideView | null> {
     if (user.role === UserRole.DRIVER) {
       const driver = await this.resolveDriver(user.userId);
       const ride = await this.rideModel
-        .findOne({ driverId: driver._id, status: { $in: DRIVER_ENGAGED_STATUSES } })
+        .findOne({
+          driverId: driver._id,
+          status: { $in: DRIVER_ENGAGED_STATUSES },
+        })
         .exec();
       return ride ? this.views.forDriver(ride, driver) : null;
     }
@@ -323,12 +396,21 @@ export class RidesService {
 
   async history(
     user: AuthenticatedUser,
-    query: { page: number; limit: number; status?: RideStatus; startDate?: string; endDate?: string },
+    query: {
+      page: number;
+      limit: number;
+      status?: RideStatus;
+      startDate?: string;
+      endDate?: string;
+    },
   ): Promise<Page<RideView>> {
     const start = query.startDate ? new Date(query.startDate) : undefined;
     const end = query.endDate ? new Date(query.endDate) : undefined;
     if (start && end && start.getTime() >= end.getTime()) {
-      throw apiBadRequest("startDate must be before endDate", "RIDE_HISTORY_RANGE_INVALID");
+      throw apiBadRequest(
+        "startDate must be before endDate",
+        "RIDE_HISTORY_RANGE_INVALID",
+      );
     }
 
     let filter: QueryFilter<Ride>;
@@ -341,7 +423,13 @@ export class RidesService {
     }
     if (query.status) filter = { ...filter, status: query.status };
     if (start || end) {
-      filter = { ...filter, requestedAt: { ...(start && { $gte: start }), ...(end && { $lt: end }) } };
+      filter = {
+        ...filter,
+        requestedAt: {
+          ...(start && { $gte: start }),
+          ...(end && { $lt: end }),
+        },
+      };
     }
 
     const [rides, total] = await Promise.all([
@@ -377,7 +465,10 @@ export class RidesService {
     const views: DriverRideView[] = [];
     for (const ride of rides) {
       const settled = await this.dispatch.settle(ride);
-      if (settled.status === RideStatus.DRIVER_ASSIGNED && settled.driverId?.equals(driver._id))
+      if (
+        settled.status === RideStatus.DRIVER_ASSIGNED &&
+        settled.driverId?.equals(driver._id)
+      )
         views.push(await this.views.forDriver(settled, driver));
     }
     return views;
@@ -389,13 +480,19 @@ export class RidesService {
   async resolveDriver(driverUserId: string): Promise<DriverProfileDocument> {
     const driver = await this.drivers.getByUserId(driverUserId);
     if (driver.driverStatus !== DriverStatus.APPROVED)
-      throw apiForbidden("Your driver account is not approved to take rides", "DRIVER_NOT_APPROVED");
+      throw apiForbidden(
+        "Your driver account is not approved to take rides",
+        "DRIVER_NOT_APPROVED",
+      );
     return driver;
   }
 
   /** A customer may have one active ride at a time, normal or circuit. */
   async assertNoActiveRide(customerId: Types.ObjectId): Promise<void> {
-    const active = await this.rideModel.findOne({ customerId, isActive: true }).select("_id status").exec();
+    const active = await this.rideModel
+      .findOne({ customerId, isActive: true })
+      .select("_id status")
+      .exec();
     if (active) throw this.alreadyActive(active._id);
   }
 
@@ -409,10 +506,15 @@ export class RidesService {
   }
 
   /** Inserts a ride with a fresh code; the partial unique indexes are the real one-active-ride guard. */
-  async insertRide(fields: Partial<Ride> & { _id?: Types.ObjectId }): Promise<RideDocument> {
+  async insertRide(
+    fields: Partial<Ride> & { _id?: Types.ObjectId },
+  ): Promise<RideDocument> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
-        return await this.rideModel.create({ ...fields, rideCode: generateRideCode() });
+        return await this.rideModel.create({
+          ...fields,
+          rideCode: generateRideCode(),
+        });
       } catch (error) {
         // Lost a double-tap race: the partial unique index is the real guard.
         if (isDuplicateKey(error, "uniq_active_ride_per_customer")) {
@@ -428,7 +530,10 @@ export class RidesService {
     throw new Error("Could not allocate a unique ride code");
   }
 
-  private findCustomerRide(customerUserId: string, filter: QueryFilter<Ride>): Promise<RideDocument | null> {
+  private findCustomerRide(
+    customerUserId: string,
+    filter: QueryFilter<Ride>,
+  ): Promise<RideDocument | null> {
     return this.rideModel
       .findOne({ ...filter, customerId: new Types.ObjectId(customerUserId) })
       .sort({ requestedAt: -1 })
@@ -439,8 +544,12 @@ export class RidesService {
   /** settle() re-reads without +otpCode; re-fetch when the OTP must be shown. */
   private async settleWithOtp(ride: RideDocument): Promise<RideDocument> {
     const settled = await this.dispatch.settle(ride);
-    if (settled === ride || settled.status !== RideStatus.DRIVER_ARRIVED) return settled;
-    return (await this.rideModel.findById(settled._id).select("+otpCode").exec()) ?? settled;
+    if (settled === ride || settled.status !== RideStatus.DRIVER_ARRIVED)
+      return settled;
+    return (
+      (await this.rideModel.findById(settled._id).select("+otpCode").exec()) ??
+      settled
+    );
   }
 
   /**
@@ -451,16 +560,26 @@ export class RidesService {
   private async driverSupply(pickup: GeoCoordinates): Promise<DriverSupply> {
     const supply: DriverSupply = new Map();
     try {
-      const drivers = await this.matching.nearbyAvailable(pickup, await this.platformSettings.matchingRadiusMeters(), SUPPLY_SCAN_LIMIT);
+      const drivers = await this.matching.nearbyAvailable(
+        pickup,
+        await this.platformSettings.matchingRadiusMeters(),
+        SUPPLY_SCAN_LIMIT,
+      );
       for (const driver of drivers) {
         if (!driver.vehicleType) continue;
         const entry = supply.get(driver.vehicleType);
         // Sorted nearest first by $geoNear: the first seen is the nearest.
         if (entry) entry.count += 1;
-        else supply.set(driver.vehicleType, { count: 1, nearestMeters: driver.distanceMeters });
+        else
+          supply.set(driver.vehicleType, {
+            count: 1,
+            nearestMeters: driver.distanceMeters,
+          });
       }
     } catch (error) {
-      this.logger.warn(`Driver supply lookup failed: ${(error as Error).message}`);
+      this.logger.warn(
+        `Driver supply lookup failed: ${(error as Error).message}`,
+      );
     }
     return supply;
   }
@@ -472,7 +591,9 @@ export class RidesService {
   ): Promise<{ pickupEtaSeconds: number | null; driversNearby: number }> {
     const available = (await this.driverSupply(pickup)).get(vehicleType);
     return {
-      pickupEtaSeconds: available ? this.pickupEtaSeconds(available.nearestMeters) : null,
+      pickupEtaSeconds: available
+        ? this.pickupEtaSeconds(available.nearestMeters)
+        : null,
       driversNearby: available?.count ?? 0,
     };
   }
@@ -483,7 +604,12 @@ export class RidesService {
     return Math.max(MIN_PICKUP_ETA_SECONDS, Math.round(seconds / 60) * 60);
   }
 
-  private toEstimate(rideType: RideTypeDocument, route: RouteEstimate, fare: PricedFare, supply: DriverSupply): FareEstimateView {
+  private toEstimate(
+    rideType: RideTypeDocument,
+    route: RouteEstimate,
+    fare: PricedFare,
+    supply: DriverSupply,
+  ): FareEstimateView {
     const available = supply.get(rideType.vehicleType);
     return {
       rideType: rideType.code,
@@ -510,7 +636,9 @@ export class RidesService {
         estimatedFare: fare.total,
       },
       pricingVersion: fare.pricingVersion,
-      pickupEtaSeconds: available ? this.pickupEtaSeconds(available.nearestMeters) : null,
+      pickupEtaSeconds: available
+        ? this.pickupEtaSeconds(available.nearestMeters)
+        : null,
       driversNearby: available?.count ?? 0,
     };
   }

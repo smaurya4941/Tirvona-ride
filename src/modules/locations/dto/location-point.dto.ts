@@ -1,5 +1,11 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { IsLatitude, IsLongitude, IsNumber, IsString, Length } from "class-validator";
+import {
+  IsLatitude,
+  IsLongitude,
+  IsNumber,
+  IsString,
+  Length,
+} from "class-validator";
 
 export class LocationPointDto {
   @ApiProperty({ example: "Prem Mandir, Vrindavan" })

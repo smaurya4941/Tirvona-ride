@@ -55,19 +55,32 @@ export type PromoEvaluation =
  * Discount in whole rupees (fares are whole rupees), rounded down, capped by
  * maxDiscount and by fare − ₹1. Pure and deterministic.
  */
-export function computeDiscount(rules: PromoDiscountRules, fare: number): number {
+export function computeDiscount(
+  rules: PromoDiscountRules,
+  fare: number,
+): number {
   if (!Number.isFinite(fare) || fare <= MIN_PAYABLE_RUPEES) return 0;
   const raw =
     rules.discountType === PromoDiscountType.PERCENTAGE
-      ? Math.floor((fare * Math.min(100, Math.max(0, rules.discountValue))) / 100)
+      ? Math.floor(
+          (fare * Math.min(100, Math.max(0, rules.discountValue))) / 100,
+        )
       : Math.floor(Math.max(0, rules.discountValue));
-  const capped = rules.maxDiscount !== undefined && rules.maxDiscount !== null ? Math.min(raw, Math.floor(rules.maxDiscount)) : raw;
+  const capped =
+    rules.maxDiscount !== undefined && rules.maxDiscount !== null
+      ? Math.min(raw, Math.floor(rules.maxDiscount))
+      : raw;
   return Math.max(0, Math.min(capped, Math.floor(fare - MIN_PAYABLE_RUPEES)));
 }
 
-const fail = (code: ErrorCode, message: string): PromoEvaluation => ({ ok: false, code, message });
+const fail = (code: ErrorCode, message: string): PromoEvaluation => ({
+  ok: false,
+  code,
+  message,
+});
 
-const rupees = (value: number): string => `₹${Number.isInteger(value) ? value : value.toFixed(2)}`;
+const rupees = (value: number): string =>
+  `₹${Number.isInteger(value) ? value : value.toFixed(2)}`;
 
 /**
  * The checks that need no trip: used when a rider saves a code from the
@@ -78,13 +91,40 @@ export function precheckPromo(
   promo: PromoEligibilityRules,
   context: Pick<PromoContext, "now" | "userUses">,
 ): { ok: true } | { ok: false; code: ErrorCode; message: string } {
-  if (promo.status !== PromoStatus.ACTIVE) return { ok: false, code: "PROMO_INACTIVE", message: "This promo code is not active" };
-  if (context.now < promo.startsAt) return { ok: false, code: "PROMO_NOT_STARTED", message: "This promo code is not valid yet" };
-  if (context.now >= promo.endsAt) return { ok: false, code: "PROMO_EXPIRED", message: "This promo code has expired" };
-  if (promo.usageLimit !== undefined && promo.usageLimit !== null && promo.usedCount >= promo.usageLimit)
-    return { ok: false, code: "PROMO_USAGE_LIMIT_REACHED", message: "This promo code has been fully used" };
+  if (promo.status !== PromoStatus.ACTIVE)
+    return {
+      ok: false,
+      code: "PROMO_INACTIVE",
+      message: "This promo code is not active",
+    };
+  if (context.now < promo.startsAt)
+    return {
+      ok: false,
+      code: "PROMO_NOT_STARTED",
+      message: "This promo code is not valid yet",
+    };
+  if (context.now >= promo.endsAt)
+    return {
+      ok: false,
+      code: "PROMO_EXPIRED",
+      message: "This promo code has expired",
+    };
+  if (
+    promo.usageLimit !== undefined &&
+    promo.usageLimit !== null &&
+    promo.usedCount >= promo.usageLimit
+  )
+    return {
+      ok: false,
+      code: "PROMO_USAGE_LIMIT_REACHED",
+      message: "This promo code has been fully used",
+    };
   if (context.userUses >= promo.perUserLimit)
-    return { ok: false, code: "PROMO_USER_LIMIT_REACHED", message: "You have already used this promo code" };
+    return {
+      ok: false,
+      code: "PROMO_USER_LIMIT_REACHED",
+      message: "You have already used this promo code",
+    };
   return { ok: true };
 }
 
@@ -92,20 +132,53 @@ export function precheckPromo(
  * Every check the backend runs before a promo may be applied, in the order
  * the customer should hear about them. The app never decides validity.
  */
-export function evaluatePromo(promo: PromoEligibilityRules, context: PromoContext): PromoEvaluation {
-  if (promo.status !== PromoStatus.ACTIVE) return fail("PROMO_INACTIVE", "This promo code is not active");
-  if (context.now < promo.startsAt) return fail("PROMO_NOT_STARTED", "This promo code is not valid yet");
-  if (context.now >= promo.endsAt) return fail("PROMO_EXPIRED", "This promo code has expired");
-  if (promo.applicableRideTypes.length > 0 && !promo.applicableRideTypes.includes(context.rideType))
-    return fail("PROMO_RIDE_TYPE_NOT_ELIGIBLE", "This promo code cannot be used for this ride type");
-  if (promo.minRideValue !== undefined && promo.minRideValue !== null && context.fare < promo.minRideValue)
-    return fail("PROMO_MIN_FARE_NOT_MET", `This promo code needs a fare of at least ${rupees(promo.minRideValue)}`);
-  if (promo.usageLimit !== undefined && promo.usageLimit !== null && promo.usedCount >= promo.usageLimit)
-    return fail("PROMO_USAGE_LIMIT_REACHED", "This promo code has been fully used");
+export function evaluatePromo(
+  promo: PromoEligibilityRules,
+  context: PromoContext,
+): PromoEvaluation {
+  if (promo.status !== PromoStatus.ACTIVE)
+    return fail("PROMO_INACTIVE", "This promo code is not active");
+  if (context.now < promo.startsAt)
+    return fail("PROMO_NOT_STARTED", "This promo code is not valid yet");
+  if (context.now >= promo.endsAt)
+    return fail("PROMO_EXPIRED", "This promo code has expired");
+  if (
+    promo.applicableRideTypes.length > 0 &&
+    !promo.applicableRideTypes.includes(context.rideType)
+  )
+    return fail(
+      "PROMO_RIDE_TYPE_NOT_ELIGIBLE",
+      "This promo code cannot be used for this ride type",
+    );
+  if (
+    promo.minRideValue !== undefined &&
+    promo.minRideValue !== null &&
+    context.fare < promo.minRideValue
+  )
+    return fail(
+      "PROMO_MIN_FARE_NOT_MET",
+      `This promo code needs a fare of at least ${rupees(promo.minRideValue)}`,
+    );
+  if (
+    promo.usageLimit !== undefined &&
+    promo.usageLimit !== null &&
+    promo.usedCount >= promo.usageLimit
+  )
+    return fail(
+      "PROMO_USAGE_LIMIT_REACHED",
+      "This promo code has been fully used",
+    );
   if (context.userUses >= promo.perUserLimit)
-    return fail("PROMO_USER_LIMIT_REACHED", "You have already used this promo code");
+    return fail(
+      "PROMO_USER_LIMIT_REACHED",
+      "You have already used this promo code",
+    );
 
   const discount = computeDiscount(promo, context.fare);
-  if (discount <= 0) return fail("PROMO_MIN_FARE_NOT_MET", "This fare is too low for this promo code");
+  if (discount <= 0)
+    return fail(
+      "PROMO_MIN_FARE_NOT_MET",
+      "This fare is too low for this promo code",
+    );
   return { ok: true, discount, payable: context.fare - discount };
 }

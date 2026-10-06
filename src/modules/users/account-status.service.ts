@@ -18,9 +18,14 @@ const CACHE_MAX_ENTRIES = 10_000;
  */
 @Injectable()
 export class AccountStatusService {
-  private readonly cache = new Map<string, { allowed: boolean; expiresAt: number }>();
+  private readonly cache = new Map<
+    string,
+    { allowed: boolean; expiresAt: number }
+  >();
 
-  constructor(@InjectModel(User.name) private readonly userModel: Model<User>) {}
+  constructor(
+    @InjectModel(User.name) private readonly userModel: Model<User>,
+  ) {}
 
   async isAllowed(userId: string): Promise<boolean> {
     const now = Date.now();
@@ -28,8 +33,15 @@ export class AccountStatusService {
     if (cached && cached.expiresAt > now) return cached.allowed;
 
     if (!isValidObjectId(userId)) return false;
-    const user = await this.userModel.findById(userId).select("status").lean().exec();
-    const allowed = Boolean(user) && user!.status !== UserStatus.BLOCKED && user!.status !== UserStatus.DELETED;
+    const user = await this.userModel
+      .findById(userId)
+      .select("status")
+      .lean()
+      .exec();
+    const allowed =
+      Boolean(user) &&
+      user!.status !== UserStatus.BLOCKED &&
+      user!.status !== UserStatus.DELETED;
 
     if (this.cache.size >= CACHE_MAX_ENTRIES) this.cache.clear();
     this.cache.set(userId, { allowed, expiresAt: now + CACHE_TTL_MS });

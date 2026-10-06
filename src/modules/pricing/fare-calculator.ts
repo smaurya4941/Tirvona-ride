@@ -37,9 +37,14 @@ export function calculateFare(
   if (distanceMeters < 0 || durationSeconds < 0)
     throw new RangeError("Distance and duration must be non-negative");
 
-  const distanceChargePaise = Math.round((toPaise(rates.perKmRate) * distanceMeters) / 1000);
-  const timeChargePaise = Math.round((toPaise(rates.perMinuteRate) * durationSeconds) / 60);
-  const subtotalPaise = toPaise(rates.baseFare) + distanceChargePaise + timeChargePaise;
+  const distanceChargePaise = Math.round(
+    (toPaise(rates.perKmRate) * distanceMeters) / 1000,
+  );
+  const timeChargePaise = Math.round(
+    (toPaise(rates.perMinuteRate) * durationSeconds) / 60,
+  );
+  const subtotalPaise =
+    toPaise(rates.baseFare) + distanceChargePaise + timeChargePaise;
   const minimumPaise = toPaise(rates.minimumFare);
   const minimumFareApplied = subtotalPaise < minimumPaise;
   const payablePaise = Math.max(subtotalPaise, minimumPaise);

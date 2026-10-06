@@ -3,7 +3,10 @@ import { ConfigService } from "@nestjs/config";
 import type { GeoCoordinates } from "../../locations/geo";
 import { bookingAddress, secondaryLine } from "../place-text";
 import type { PlaceSuggestion, ResolvedPlace } from "../places.types";
-import { GeocodingProvider, GeocodingProviderError } from "./geocoding.provider";
+import {
+  GeocodingProvider,
+  GeocodingProviderError,
+} from "./geocoding.provider";
 import type { ProviderSearchRequest } from "./geocoding.provider";
 import { RequestSpacer } from "./request-spacer";
 
@@ -51,15 +54,22 @@ export class NominatimProvider extends GeocodingProvider {
       config.getOrThrow<number>("nominatimMinIntervalMs"),
       Math.min(this.timeoutMs, 3_000),
     );
-    if (this.baseUrl.includes("nominatim.openstreetmap.org") && !this.contactEmail)
+    if (
+      this.baseUrl.includes("nominatim.openstreetmap.org") &&
+      !this.contactEmail
+    )
       this.logger.warn(
         "NOMINATIM_CONTACT_EMAIL is not set: the public Nominatim may block this server. Set it, self-host, or use PLACES_PROVIDER=osm",
       );
   }
 
-  async autocomplete(request: ProviderSearchRequest): Promise<Array<Omit<PlaceSuggestion, "featured">>> {
+  async autocomplete(
+    request: ProviderSearchRequest,
+  ): Promise<Array<Omit<PlaceSuggestion, "featured">>> {
     const latDelta = request.biasRadiusMeters / 1000 / KM_PER_DEGREE;
-    const lngDelta = latDelta / Math.max(0.1, Math.cos((request.bias.latitude * Math.PI) / 180));
+    const lngDelta =
+      latDelta /
+      Math.max(0.1, Math.cos((request.bias.latitude * Math.PI) / 180));
     const params = new URLSearchParams({
       q: request.query,
       format: "jsonv2",
@@ -76,11 +86,15 @@ export class NominatimProvider extends GeocodingProvider {
         .join(","),
       bounded: "0",
     });
-    if (request.countryCodes.length) params.set("countrycodes", request.countryCodes.join(","));
+    if (request.countryCodes.length)
+      params.set("countrycodes", request.countryCodes.join(","));
     const places = await this.get<NominatimPlace[]>("/search", params);
     return (Array.isArray(places) ? places : [])
       .map((place) => this.toResolved(place))
-      .filter((place): place is ResolvedPlace & { secondaryText: string } => place !== null)
+      .filter(
+        (place): place is ResolvedPlace & { secondaryText: string } =>
+          place !== null,
+      )
       .map(({ id, name, secondaryText, address, latitude, longitude }) => ({
         id,
         name,
@@ -96,7 +110,10 @@ export class NominatimProvider extends GeocodingProvider {
     if (!match) return null;
     const places = await this.get<NominatimPlace[]>(
       "/lookup",
-      new URLSearchParams({ osm_ids: `${match[1]}${match[2]}`, format: "jsonv2" }),
+      new URLSearchParams({
+        osm_ids: `${match[1]}${match[2]}`,
+        format: "jsonv2",
+      }),
     );
     const place = Array.isArray(places) ? this.toResolved(places[0]) : null;
     return place ? this.withoutSecondary(place) : null;
@@ -116,15 +133,30 @@ export class NominatimProvider extends GeocodingProvider {
     if (!place || place.error) return null;
     const resolved = this.toResolved(place);
     // The rider's pin is the truth; the provider only names it.
-    return resolved ? { ...this.withoutSecondary(resolved), latitude: point.latitude, longitude: point.longitude } : null;
+    return resolved
+      ? {
+          ...this.withoutSecondary(resolved),
+          latitude: point.latitude,
+          longitude: point.longitude,
+        }
+      : null;
   }
 
-  private withoutSecondary({ id, name, address, latitude, longitude }: ResolvedPlace): ResolvedPlace {
+  private withoutSecondary({
+    id,
+    name,
+    address,
+    latitude,
+    longitude,
+  }: ResolvedPlace): ResolvedPlace {
     return { id, name, address, latitude, longitude };
   }
 
-  private toResolved(place: NominatimPlace | undefined): (ResolvedPlace & { secondaryText: string }) | null {
-    if (!place?.display_name || !place.osm_type || place.osm_id === undefined) return null;
+  private toResolved(
+    place: NominatimPlace | undefined,
+  ): (ResolvedPlace & { secondaryText: string }) | null {
+    if (!place?.display_name || !place.osm_type || place.osm_id === undefined)
+      return null;
     const latitude = Number(place.lat);
     const longitude = Number(place.lon);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
@@ -156,7 +188,10 @@ export class NominatimProvider extends GeocodingProvider {
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      throw new GeocodingProviderError(`Nominatim unreachable: ${reason}`, true);
+      throw new GeocodingProviderError(
+        `Nominatim unreachable: ${reason}`,
+        true,
+      );
     }
     if (!response.ok)
       throw new GeocodingProviderError(
@@ -166,7 +201,10 @@ export class NominatimProvider extends GeocodingProvider {
     try {
       return (await response.json()) as T;
     } catch {
-      throw new GeocodingProviderError("Nominatim returned malformed JSON", true);
+      throw new GeocodingProviderError(
+        "Nominatim returned malformed JSON",
+        true,
+      );
     }
   }
 }

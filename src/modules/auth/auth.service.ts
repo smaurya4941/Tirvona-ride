@@ -6,7 +6,10 @@ import type { UserDocument } from "../users/schemas/user.schema";
 import type { UserSummary } from "../users/users.service";
 import { UsersService } from "../users/users.service";
 import { DriversService } from "../drivers/drivers.service";
-import { apiForbidden, apiUnauthorized } from "../../common/exceptions/api.exception";
+import {
+  apiForbidden,
+  apiUnauthorized,
+} from "../../common/exceptions/api.exception";
 import { LoginDto } from "./dto/login.dto";
 import type { DeviceMetadata } from "./token.service";
 import { TokenService } from "./token.service";
@@ -34,7 +37,11 @@ export class AuthService {
   ) {}
 
   /** Issues a token pair for a user who just proved who they are. */
-  async startSession(userId: string, role: UserRole, device: DeviceMetadata): Promise<AuthSession> {
+  async startSession(
+    userId: string,
+    role: UserRole,
+    device: DeviceMetadata,
+  ): Promise<AuthSession> {
     const tokens = await this.tokens.issueTokenPair(userId, role, device);
     return { user: await this.buildUserView(userId), ...tokens };
   }
@@ -48,11 +55,18 @@ export class AuthService {
    * account receives the same generic error as a wrong password, so this
    * endpoint cannot be used to learn which phone numbers are admins.
    */
-  async loginAdmin(dto: LoginDto, device: DeviceMetadata): Promise<AuthSession> {
+  async loginAdmin(
+    dto: LoginDto,
+    device: DeviceMetadata,
+  ): Promise<AuthSession> {
     return this.authenticate(dto, device, UserRole.ADMIN);
   }
 
-  private async authenticate(dto: LoginDto, device: DeviceMetadata, requiredRole?: UserRole): Promise<AuthSession> {
+  private async authenticate(
+    dto: LoginDto,
+    device: DeviceMetadata,
+    requiredRole?: UserRole,
+  ): Promise<AuthSession> {
     const user = await this.users.findByPhoneWithPassword(dto.phone);
     // Same generic error whether the phone is unknown or the password is
     // wrong — distinguishing the two lets an attacker enumerate accounts.
@@ -81,19 +95,30 @@ export class AuthService {
   }
 
   /** Records the login and opens a session for a user who passed assertCanSignIn. */
-  async completeSignIn(user: Pick<UserDocument, "_id" | "role">, device: DeviceMetadata): Promise<AuthSession> {
+  async completeSignIn(
+    user: Pick<UserDocument, "_id" | "role">,
+    device: DeviceMetadata,
+  ): Promise<AuthSession> {
     const userId = user._id.toString();
     await this.users.recordLogin(userId);
     return this.startSession(userId, user.role, device);
   }
 
-  async refresh(refreshToken: string, device: DeviceMetadata): Promise<AuthSession> {
+  async refresh(
+    refreshToken: string,
+    device: DeviceMetadata,
+  ): Promise<AuthSession> {
     const session = await this.tokens.verifyRefreshToken(refreshToken);
     const user = await this.users.findById(session.userId.toString());
-    if (user.status === UserStatus.BLOCKED || user.status === UserStatus.DELETED) {
+    if (
+      user.status === UserStatus.BLOCKED ||
+      user.status === UserStatus.DELETED
+    ) {
       await this.tokens.revokeSession(session._id);
       throw apiForbidden(
-        user.status === UserStatus.DELETED ? "This account has been deleted" : "This account has been blocked",
+        user.status === UserStatus.DELETED
+          ? "This account has been deleted"
+          : "This account has been blocked",
         user.status === UserStatus.DELETED ? "ACCOUNT_DELETED" : "USER_BLOCKED",
       );
     }
@@ -125,7 +150,10 @@ export class AuthService {
   /** Ends every session of the user (all devices, the caller's included). */
   async logoutEverywhere(userId: string): Promise<number> {
     const ended = await this.tokens.revokeAllForUser(userId);
-    this.domainEvents.emit("auth.sessions_revoked", { userId, reason: "SIGN_OUT_EVERYWHERE" });
+    this.domainEvents.emit("auth.sessions_revoked", {
+      userId,
+      reason: "SIGN_OUT_EVERYWHERE",
+    });
     return ended;
   }
 

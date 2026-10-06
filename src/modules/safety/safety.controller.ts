@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Res } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Res,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
@@ -11,7 +22,10 @@ import type { ApiSuccessBody } from "../../common/http/api-response";
 import { ParseObjectIdPipe } from "../../common/pipes/parse-object-id.pipe";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
-import { CreateEmergencyContactDto, UpdateEmergencyContactDto } from "./dto/emergency-contact.dto";
+import {
+  CreateEmergencyContactDto,
+  UpdateEmergencyContactDto,
+} from "./dto/emergency-contact.dto";
 import { TriggerSosDto } from "./dto/sos.dto";
 import { EmergencyContactsService } from "./emergency-contacts.service";
 import type { EmergencyContactView } from "./emergency-contacts.service";
@@ -31,12 +45,16 @@ export class EmergencyContactsController {
 
   @Get()
   @ApiOperation({ summary: "The caller's emergency contacts (primary first)" })
-  async list(@CurrentUser() user: AuthenticatedUser): Promise<ApiSuccessBody<EmergencyContactView[]>> {
+  async list(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ApiSuccessBody<EmergencyContactView[]>> {
     return ok(await this.contacts.list(user.userId));
   }
 
   @Post()
-  @ApiOperation({ summary: "Add an emergency contact (the first one becomes primary)" })
+  @ApiOperation({
+    summary: "Add an emergency contact (the first one becomes primary)",
+  })
   async create(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateEmergencyContactDto,
@@ -78,7 +96,9 @@ export class RideSafetyController {
   @Roles(UserRole.CUSTOMER, UserRole.DRIVER)
   // Generous: a person in danger may press repeatedly; repeats update one incident.
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
-  @ApiOperation({ summary: "Raise an SOS on a ride you are part of (alerts the safety team)" })
+  @ApiOperation({
+    summary: "Raise an SOS on a ride you are part of (alerts the safety team)",
+  })
   async triggerSos(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id", ParseObjectIdPipe) id: string,
@@ -100,7 +120,9 @@ export class RideSafetyController {
   @Post(":id/share")
   @Roles(UserRole.CUSTOMER)
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
-  @ApiOperation({ summary: "Create a public read-only link to this ride's live status" })
+  @ApiOperation({
+    summary: "Create a public read-only link to this ride's live status",
+  })
   async createShare(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id", ParseObjectIdPipe) id: string,
@@ -120,7 +142,9 @@ export class RideSafetyController {
 
   @Delete(":id/share")
   @Roles(UserRole.CUSTOMER)
-  @ApiOperation({ summary: "Stop sharing: every link of this ride stops working" })
+  @ApiOperation({
+    summary: "Stop sharing: every link of this ride stops working",
+  })
   async revokeShare(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id", ParseObjectIdPipe) id: string,
@@ -147,14 +171,21 @@ export class SharedRidesController {
   // Declared before ":token" so "view" is never read as a token.
   @Get("view/:token")
   @ApiOperation({ summary: "The share link's page (HTML)" })
-  async page(@Param("token") token: string, @Res({ passthrough: true }) response: Response): Promise<string> {
+  async page(
+    @Param("token") token: string,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<string> {
     response.setHeader("Content-Type", "text/html; charset=utf-8");
     this.privateHeaders(response);
     try {
-      return renderSharedRidePage(await this.share.publicView(token), this.timeZone);
+      return renderSharedRidePage(
+        await this.share.publicView(token),
+        this.timeZone,
+      );
     } catch (error) {
       const status = (error as { getStatus?: () => number }).getStatus?.();
-      if (status !== HttpStatus.NOT_FOUND && status !== HttpStatus.GONE) throw error;
+      if (status !== HttpStatus.NOT_FOUND && status !== HttpStatus.GONE)
+        throw error;
       response.status(status);
       return renderShareErrorPage(status === HttpStatus.GONE);
     }

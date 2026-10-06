@@ -24,7 +24,9 @@ export enum RideActorType {
  * (SEARCHING → COMPLETED, CANCELLED → DRIVER_ACCEPTED, …) is impossible even
  * under concurrent requests.
  */
-export const RIDE_TRANSITIONS: Readonly<Record<RideStatus, readonly RideStatus[]>> = {
+export const RIDE_TRANSITIONS: Readonly<
+  Record<RideStatus, readonly RideStatus[]>
+> = {
   [RideStatus.SEARCHING]: [
     RideStatus.DRIVER_ASSIGNED,
     RideStatus.CANCELLED,
@@ -36,7 +38,10 @@ export const RIDE_TRANSITIONS: Readonly<Record<RideStatus, readonly RideStatus[]
     RideStatus.SEARCHING,
     RideStatus.CANCELLED,
   ],
-  [RideStatus.DRIVER_ACCEPTED]: [RideStatus.DRIVER_ARRIVED, RideStatus.CANCELLED],
+  [RideStatus.DRIVER_ACCEPTED]: [
+    RideStatus.DRIVER_ARRIVED,
+    RideStatus.CANCELLED,
+  ],
   [RideStatus.DRIVER_ARRIVED]: [RideStatus.RIDE_STARTED, RideStatus.CANCELLED],
   [RideStatus.RIDE_STARTED]: [RideStatus.COMPLETED],
   [RideStatus.COMPLETED]: [],
@@ -50,9 +55,9 @@ export const TERMINAL_RIDE_STATUSES: readonly RideStatus[] = [
   RideStatus.NO_DRIVER_AVAILABLE,
 ];
 
-export const ACTIVE_RIDE_STATUSES: readonly RideStatus[] = Object.values(RideStatus).filter(
-  (status) => !TERMINAL_RIDE_STATUSES.includes(status),
-);
+export const ACTIVE_RIDE_STATUSES: readonly RideStatus[] = Object.values(
+  RideStatus,
+).filter((status) => !TERMINAL_RIDE_STATUSES.includes(status));
 
 /** Statuses in which the driver is committed to the ride (post-accept). */
 export const DRIVER_ENGAGED_STATUSES: readonly RideStatus[] = [

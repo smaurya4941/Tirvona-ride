@@ -5,7 +5,10 @@ import { haversineMeters } from "../locations/geo";
 import { LocationsService } from "../locations/locations.service";
 import type { RouteEstimate } from "../locations/route-estimator";
 import { checkTripDistance, maxDistanceMeters } from "./distance-policy";
-import type { AppliedDistancePolicy, DistanceViolation } from "./distance-policy";
+import type {
+  AppliedDistancePolicy,
+  DistanceViolation,
+} from "./distance-policy";
 import { RideDistanceConfigService } from "./ride-distance-config.service";
 import type { RideDistanceConfigDocument } from "./schemas/ride-distance-config.schema";
 
@@ -15,13 +18,14 @@ export interface PolicedTrip {
 }
 
 export type TripOutcome =
-  | ({ ok: true } & PolicedTrip)
-  | { ok: false; rideType: string; error: Error };
+  ({ ok: true } & PolicedTrip) | { ok: false; rideType: string; error: Error };
 
 const violationError = (violation: DistanceViolation): Error =>
   apiBadRequest(violation.message, violation.code, violation.data);
 
-const snapshotOf = (config: RideDistanceConfigDocument): AppliedDistancePolicy => ({
+const snapshotOf = (
+  config: RideDistanceConfigDocument,
+): AppliedDistancePolicy => ({
   rideType: config.rideType,
   minDistanceMeters: config.minDistanceMeters,
   maxDistanceMeters: maxDistanceMeters(config),
@@ -47,11 +51,21 @@ export class TripPolicyService {
   ) {}
 
   /** Route + the policy the trip was accepted under, or the business error (400 short/long, 503 missing config). */
-  async estimateTrip(rideType: string, pickup: GeoCoordinates, destination: GeoCoordinates): Promise<PolicedTrip> {
+  async estimateTrip(
+    rideType: string,
+    pickup: GeoCoordinates,
+    destination: GeoCoordinates,
+  ): Promise<PolicedTrip> {
     const config = await this.distanceConfigs.getRequired(rideType);
-    const violation = checkTripDistance(config, haversineMeters(pickup, destination));
+    const violation = checkTripDistance(
+      config,
+      haversineMeters(pickup, destination),
+    );
     if (violation) throw violationError(violation);
-    return { route: await this.locations.routeBetween(pickup, destination), policy: snapshotOf(config) };
+    return {
+      route: await this.locations.routeBetween(pickup, destination),
+      policy: snapshotOf(config),
+    };
   }
 
   /**
@@ -67,12 +81,19 @@ export class TripPolicyService {
   ): Promise<TripOutcome[]> {
     const straightLine = haversineMeters(pickup, destination);
     const configs = await this.distanceConfigs.findMany(rideTypes);
-    type Verdict = { rideType: string; policy: AppliedDistancePolicy } | { rideType: string; error: Error };
+    type Verdict =
+      | { rideType: string; policy: AppliedDistancePolicy }
+      | { rideType: string; error: Error };
     const verdicts = rideTypes.map((rideType): Verdict => {
       try {
-        const config = this.distanceConfigs.assertUsable(rideType, configs.get(rideType) ?? null);
+        const config = this.distanceConfigs.assertUsable(
+          rideType,
+          configs.get(rideType) ?? null,
+        );
         const violation = checkTripDistance(config, straightLine);
-        return violation ? { rideType, error: violationError(violation) } : { rideType, policy: snapshotOf(config) };
+        return violation
+          ? { rideType, error: violationError(violation) }
+          : { rideType, policy: snapshotOf(config) };
       } catch (error) {
         return { rideType, error: error as Error };
       }
@@ -83,7 +104,11 @@ export class TripPolicyService {
     return verdicts.map((verdict): TripOutcome =>
       "policy" in verdict && route
         ? { ok: true, route, policy: verdict.policy }
-        : { ok: false, rideType: verdict.rideType, error: "error" in verdict ? verdict.error : new Error("No route") },
+        : {
+            ok: false,
+            rideType: verdict.rideType,
+            error: "error" in verdict ? verdict.error : new Error("No route"),
+          },
     );
   }
 }

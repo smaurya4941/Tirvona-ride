@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Patch, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -38,7 +48,11 @@ import {
   ReconciliationRunsQueryDto,
   ResolveExceptionDto,
 } from "../payments/dto/reconciliation.dto";
-import { AdminRefundsQueryDto, CreateRefundDto, ReviewRefundDto } from "../payments/dto/refund.dto";
+import {
+  AdminRefundsQueryDto,
+  CreateRefundDto,
+  ReviewRefundDto,
+} from "../payments/dto/refund.dto";
 import { PaymentEventSource } from "../payments/interfaces/payment-status";
 import type {
   AdminPaymentDetail,
@@ -70,26 +84,39 @@ export class AdminPaymentsController {
   // Static segments first so Express never reads them as a payment id.
 
   @Get()
-  @ApiOperation({ summary: "Payments with filters (status, date, ride, customer, driver, payment id)" })
-  async list(@Query() query: AdminPaymentsQueryDto): Promise<ApiSuccessBody<Paged<AdminPaymentListItem>>> {
+  @ApiOperation({
+    summary:
+      "Payments with filters (status, date, ride, customer, driver, payment id)",
+  })
+  async list(
+    @Query() query: AdminPaymentsQueryDto,
+  ): Promise<ApiSuccessBody<Paged<AdminPaymentListItem>>> {
     return ok(await this.payments.list(query));
   }
 
   @Get("summary")
-  @ApiOperation({ summary: "Collected today/total, commission, refunds, failures, unpaid completed rides" })
+  @ApiOperation({
+    summary:
+      "Collected today/total, commission, refunds, failures, unpaid completed rides",
+  })
   async summary(): Promise<ApiSuccessBody<AdminPaymentsSummary>> {
     return ok(await this.payments.summary());
   }
 
   @Get("refunds")
   @ApiOperation({ summary: "Every refund (admin and dashboard), newest first" })
-  async refundList(@Query() query: AdminRefundsQueryDto): Promise<ApiSuccessBody<Paged<AdminRefundListItem>>> {
+  async refundList(
+    @Query() query: AdminRefundsQueryDto,
+  ): Promise<ApiSuccessBody<Paged<AdminRefundListItem>>> {
     return ok(await this.refunds.list(query));
   }
 
   @Post("refunds/:refundId/review")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Decide the driver's share of a refund made in the Razorpay dashboard" })
+  @ApiOperation({
+    summary:
+      "Decide the driver's share of a refund made in the Razorpay dashboard",
+  })
   async reviewRefund(
     @Param("refundId", ParseObjectIdPipe) refundId: string,
     @Body() dto: ReviewRefundDto,
@@ -103,26 +130,40 @@ export class AdminPaymentsController {
       targetId: refund.paymentId,
       targetLabel: refund.rideCode,
       reason: dto.note,
-      metadata: { refundId, driverImpact: dto.driverImpact, amount: refund.amount },
+      metadata: {
+        refundId,
+        driverImpact: dto.driverImpact,
+        amount: refund.amount,
+      },
     });
     return ok(refund);
   }
 
   @Get("exceptions")
-  @ApiOperation({ summary: "Money needing attention now: duplicates, failed/stuck refunds, flagged webhooks, run exceptions" })
+  @ApiOperation({
+    summary:
+      "Money needing attention now: duplicates, failed/stuck refunds, flagged webhooks, run exceptions",
+  })
   async exceptions(): Promise<ApiSuccessBody<PaymentExceptionsView>> {
     return ok(await this.reconciliation.exceptions());
   }
 
   @Get("reconciliation/runs")
-  @ApiOperation({ summary: "Razorpay ↔ MongoDB reconciliation runs, newest first" })
-  async runs(@Query() query: ReconciliationRunsQueryDto): Promise<ApiSuccessBody<Paged<ReconciliationRunView>>> {
+  @ApiOperation({
+    summary: "Razorpay ↔ MongoDB reconciliation runs, newest first",
+  })
+  async runs(
+    @Query() query: ReconciliationRunsQueryDto,
+  ): Promise<ApiSuccessBody<Paged<ReconciliationRunView>>> {
     return ok(await this.reconciliation.listRuns(query.page, query.limit));
   }
 
   @Post("reconciliation/runs")
   @HttpCode(HttpStatus.ACCEPTED)
-  @ApiOperation({ summary: "Start a reconciliation of a time window (runs in the background; poll the run)" })
+  @ApiOperation({
+    summary:
+      "Start a reconciliation of a time window (runs in the background; poll the run)",
+  })
   async startRun(
     @Body() dto: ReconciliationRunDto,
     @CurrentUser() admin: AuthenticatedUser,
@@ -140,20 +181,29 @@ export class AdminPaymentsController {
 
   @Get("reconciliation/runs/:runId")
   @ApiOperation({ summary: "One reconciliation run with its exceptions" })
-  async run(@Param("runId", ParseObjectIdPipe) runId: string): Promise<ApiSuccessBody<ReconciliationRunView>> {
+  async run(
+    @Param("runId", ParseObjectIdPipe) runId: string,
+  ): Promise<ApiSuccessBody<ReconciliationRunView>> {
     return ok(await this.reconciliation.getRun(runId));
   }
 
   @Post("reconciliation/runs/:runId/exceptions/:exceptionId/resolve")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Mark a reconciliation exception resolved (with a note)" })
+  @ApiOperation({
+    summary: "Mark a reconciliation exception resolved (with a note)",
+  })
   async resolveException(
     @Param("runId", ParseObjectIdPipe) runId: string,
     @Param("exceptionId", ParseObjectIdPipe) exceptionId: string,
     @Body() dto: ResolveExceptionDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApiSuccessBody<ReconciliationRunView>> {
-    const run = await this.reconciliation.resolveException(runId, exceptionId, admin.userId, dto);
+    const run = await this.reconciliation.resolveException(
+      runId,
+      exceptionId,
+      admin.userId,
+      dto,
+    );
     await this.audit.record({
       adminId: admin.userId,
       action: "payment.reconciliation_resolve",
@@ -166,15 +216,22 @@ export class AdminPaymentsController {
   }
 
   @Get(":id")
-  @ApiOperation({ summary: "Payment detail: Razorpay references, attempts, audit trail, commission split" })
-  async detail(@Param("id", ParseObjectIdPipe) id: string): Promise<ApiSuccessBody<AdminPaymentDetail>> {
+  @ApiOperation({
+    summary:
+      "Payment detail: Razorpay references, attempts, audit trail, commission split",
+  })
+  async detail(
+    @Param("id", ParseObjectIdPipe) id: string,
+  ): Promise<ApiSuccessBody<AdminPaymentDetail>> {
     return ok(await this.payments.detail(id));
   }
 
   @Post(":id/reconcile")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Re-check an unfinished payment with Razorpay now" })
-  async reconcile(@Param("id", ParseObjectIdPipe) id: string): Promise<ApiSuccessBody<AdminPaymentDetail>> {
+  async reconcile(
+    @Param("id", ParseObjectIdPipe) id: string,
+  ): Promise<ApiSuccessBody<AdminPaymentDetail>> {
     const payment = await this.paymentsService.findById(id);
     if (!payment) throw apiNotFound("Payment not found", "PAYMENT_NOT_FOUND");
     await this.paymentsService.reconcile(payment, PaymentEventSource.RECONCILE);
@@ -207,7 +264,11 @@ export class AdminPaymentsController {
         targetType: "PAYMENT",
         targetId: id,
         reason: dto.note,
-        metadata: { amount: dto.amount ?? "FULL", reason: dto.reason, error: (error as Error).message.slice(0, 200) },
+        metadata: {
+          amount: dto.amount ?? "FULL",
+          reason: dto.reason,
+          error: (error as Error).message.slice(0, 200),
+        },
       });
       throw error;
     }
@@ -242,22 +303,32 @@ export class AdminCommissionController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: "Every ride type with its commission in force now and any scheduled change" })
+  @ApiOperation({
+    summary:
+      "Every ride type with its commission in force now and any scheduled change",
+  })
   async overview(): Promise<ApiSuccessBody<RideTypeCommissionView[]>> {
     return ok(await this.commission.overview());
   }
 
   @Get(":rideType")
-  @ApiOperation({ summary: "One ride type: current rate, scheduled changes and the full version history" })
+  @ApiOperation({
+    summary:
+      "One ride type: current rate, scheduled changes and the full version history",
+  })
   async forRideType(
     @Param("rideType", ParseRideTypeCodePipe) rideType: string,
-  ): Promise<ApiSuccessBody<RideTypeCommissionView & { history: CommissionView[] }>> {
+  ): Promise<
+    ApiSuccessBody<RideTypeCommissionView & { history: CommissionView[] }>
+  > {
     return ok(await this.commission.forRideType(rideType));
   }
 
   @Get(":rideType/history")
   @ApiOperation({ summary: "A ride type's commission versions, newest first" })
-  async history(@Param("rideType", ParseRideTypeCodePipe) rideType: string): Promise<ApiSuccessBody<CommissionView[]>> {
+  async history(
+    @Param("rideType", ParseRideTypeCodePipe) rideType: string,
+  ): Promise<ApiSuccessBody<CommissionView[]>> {
     return ok(await this.commission.history(rideType));
   }
 
@@ -271,7 +342,11 @@ export class AdminCommissionController {
     @Body() dto: UpdateCommissionDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApiSuccessBody<CommissionView>> {
-    const { commission, previousValue } = await this.commission.update(rideType, dto, admin.userId);
+    const { commission, previousValue } = await this.commission.update(
+      rideType,
+      dto,
+      admin.userId,
+    );
     await this.audit.record({
       adminId: admin.userId,
       action: "commission.update",
@@ -293,7 +368,9 @@ export class AdminCommissionController {
 
   @Post(":id/cancel")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Withdraw a scheduled commission change before it takes effect" })
+  @ApiOperation({
+    summary: "Withdraw a scheduled commission change before it takes effect",
+  })
   async cancel(
     @Param("id", ParseObjectIdPipe) id: string,
     @CurrentUser() admin: AuthenticatedUser,
@@ -327,8 +404,12 @@ export class AdminEarningsController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: "Per-driver gross, commission, net, pending, available and paid" })
-  async list(@Query() query: AdminEarningsQueryDto): Promise<ApiSuccessBody<Paged<AdminDriverEarningsRow>>> {
+  @ApiOperation({
+    summary: "Per-driver gross, commission, net, pending, available and paid",
+  })
+  async list(
+    @Query() query: AdminEarningsQueryDto,
+  ): Promise<ApiSuccessBody<Paged<AdminDriverEarningsRow>>> {
     return ok(await this.earnings.listDrivers(query));
   }
 
@@ -340,20 +421,31 @@ export class AdminEarningsController {
 
   @Post("payouts/preview")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "What a payout of these earnings would transfer after refund deductions" })
-  async previewPayout(@Body() dto: PayoutPreviewDto): Promise<ApiSuccessBody<PayoutPreview>> {
+  @ApiOperation({
+    summary:
+      "What a payout of these earnings would transfer after refund deductions",
+  })
+  async previewPayout(
+    @Body() dto: PayoutPreviewDto,
+  ): Promise<ApiSuccessBody<PayoutPreview>> {
     return ok(await this.earnings.previewPayout(dto));
   }
 
   @Post("adjustments/:id/waive")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Write off an outstanding refund deduction (Tirvona bears it)" })
+  @ApiOperation({
+    summary: "Write off an outstanding refund deduction (Tirvona bears it)",
+  })
   async waive(
     @Param("id", ParseObjectIdPipe) id: string,
     @Body() dto: WaiveAdjustmentDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApiSuccessBody<AdjustmentView>> {
-    const adjustment = await this.earnings.waiveAdjustment(id, dto.note, admin.userId);
+    const adjustment = await this.earnings.waiveAdjustment(
+      id,
+      dto.note,
+      admin.userId,
+    );
     await this.audit.record({
       adminId: admin.userId,
       action: "earnings.adjustment_waive",
@@ -367,7 +459,10 @@ export class AdminEarningsController {
   }
 
   @Post("payouts")
-  @ApiOperation({ summary: "Record a manual payout covering selected AVAILABLE earnings of one driver" })
+  @ApiOperation({
+    summary:
+      "Record a manual payout covering selected AVAILABLE earnings of one driver",
+  })
   async payout(
     @Body() dto: CreatePayoutDto,
     @CurrentUser() admin: AuthenticatedUser,
@@ -376,7 +471,9 @@ export class AdminEarningsController {
   }
 
   @Get(":driverId")
-  @ApiOperation({ summary: "One driver's totals, earning ledger and payout history" })
+  @ApiOperation({
+    summary: "One driver's totals, earning ledger and payout history",
+  })
   async driver(
     @Param("driverId", ParseObjectIdPipe) driverId: string,
     @Query() query: AdminDriverLedgerQueryDto,
@@ -386,7 +483,9 @@ export class AdminEarningsController {
 
   @Post(":id/mark-paid")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Mark one AVAILABLE earning as paid (manual payout)" })
+  @ApiOperation({
+    summary: "Mark one AVAILABLE earning as paid (manual payout)",
+  })
   async markPaid(
     @Param("id", ParseObjectIdPipe) id: string,
     @Body() dto: MarkEarningPaidDto,

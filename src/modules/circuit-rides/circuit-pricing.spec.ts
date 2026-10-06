@@ -18,7 +18,9 @@ describe("calculateCircuitFare", () => {
     ["both exceeded (35 km, 6 h)", 35_000, 6 * HOUR, 725],
     ["exactly the included usage", 30_000, 5 * HOUR, 600],
   ])("%s → ₹%d", (_label, distance, duration, expected) => {
-    expect(calculateCircuitFare(tariff, distance, duration).total).toBe(expected);
+    expect(calculateCircuitFare(tariff, distance, duration).total).toBe(
+      expected,
+    );
   });
 
   it("bills started kilometres and started 15-minute blocks", () => {
@@ -39,7 +41,13 @@ describe("calculateCircuitFare", () => {
   });
 
   it("is free of extras when the rates are zero", () => {
-    expect(calculateCircuitFare({ ...tariff, extraDistanceRatePerKm: 0, extraDurationRatePerHour: 0 }, 99_000, 9 * HOUR).total).toBe(600);
+    expect(
+      calculateCircuitFare(
+        { ...tariff, extraDistanceRatePerKm: 0, extraDurationRatePerHour: 0 },
+        99_000,
+        9 * HOUR,
+      ).total,
+    ).toBe(600);
   });
 
   it("rejects negative usage", () => {
@@ -48,15 +56,22 @@ describe("calculateCircuitFare", () => {
 });
 
 describe("dueWarnings", () => {
-  const included = { includedDistanceMeters: 30_000, includedDurationSeconds: 5 * HOUR };
+  const included = {
+    includedDistanceMeters: 30_000,
+    includedDurationSeconds: 5 * HOUR,
+  };
 
   it("is quiet while there is plenty of both", () => {
     expect(dueWarnings(included, 5_000, 1 * HOUR)).toEqual([]);
   });
 
   it("warns 30 and then 10 minutes before the included time ends, never both at once", () => {
-    expect(dueWarnings(included, 0, 5 * HOUR - 29 * 60)).toEqual(["TIME_30_MIN"]);
-    expect(dueWarnings(included, 0, 5 * HOUR - 9 * 60)).toEqual(["TIME_10_MIN"]);
+    expect(dueWarnings(included, 0, 5 * HOUR - 29 * 60)).toEqual([
+      "TIME_30_MIN",
+    ]);
+    expect(dueWarnings(included, 0, 5 * HOUR - 9 * 60)).toEqual([
+      "TIME_10_MIN",
+    ]);
     expect(dueWarnings(included, 0, 5 * HOUR + 1)).toEqual(["TIME_EXHAUSTED"]);
   });
 
@@ -67,6 +82,9 @@ describe("dueWarnings", () => {
   });
 
   it("can warn about time and distance together", () => {
-    expect(dueWarnings(included, 31_000, 5 * HOUR - 5 * 60)).toEqual(["TIME_10_MIN", "DISTANCE_EXHAUSTED"]);
+    expect(dueWarnings(included, 31_000, 5 * HOUR - 5 * 60)).toEqual([
+      "TIME_10_MIN",
+      "DISTANCE_EXHAUSTED",
+    ]);
   });
 });

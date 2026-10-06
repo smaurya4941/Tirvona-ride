@@ -19,8 +19,10 @@ import { RIDE_TYPE_CODE_PATTERN } from "../../ride-types/schemas/ride-type.schem
 import { RideStatus } from "../../rides/ride-state-machine";
 import { CircuitExceptionResolution } from "../circuit-ride.types";
 
-const trim = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value);
-const toInt = ({ value }: { value: unknown }) => (typeof value === "string" && value.trim() !== "" ? Number(value) : value);
+const trim = ({ value }: { value: unknown }) =>
+  typeof value === "string" ? value.trim() : value;
+const toInt = ({ value }: { value: unknown }) =>
+  typeof value === "string" && value.trim() !== "" ? Number(value) : value;
 
 /**
  * Body of POST /circuit-rides/estimate and POST /circuit-rides. There is
@@ -33,10 +35,16 @@ export class CircuitEstimateDto {
   packageId!: string;
 
   @ApiProperty({ example: "AUTO" })
-  @Matches(RIDE_TYPE_CODE_PATTERN, { message: "rideType must be a ride type code such as AUTO" })
+  @Matches(RIDE_TYPE_CODE_PATTERN, {
+    message: "rideType must be a ride type code such as AUTO",
+  })
   rideType!: string;
 
-  @ApiProperty({ type: LocationPointDto, description: "Where the driver picks you up. It is the origin, never a stop." })
+  @ApiProperty({
+    type: LocationPointDto,
+    description:
+      "Where the driver picks you up. It is the origin, never a stop.",
+  })
   @ValidateNested()
   @Type(() => LocationPointDto)
   pickup!: LocationPointDto;
@@ -50,7 +58,8 @@ export class CircuitEstimateDto {
 
 export class CreateCircuitRideDto extends CircuitEstimateDto {
   @ApiPropertyOptional({
-    description: "Same value for every retry of one booking (also accepted as the Idempotency-Key header)",
+    description:
+      "Same value for every retry of one booking (also accepted as the Idempotency-Key header)",
   })
   @IsOptional()
   @IsString()
@@ -139,7 +148,9 @@ export class AdminListCircuitRidesQueryDto {
   @Matches(/^[A-Z_]{3,30}$/)
   paymentStatus?: string;
 
-  @ApiPropertyOptional({ description: "Booked at or after (ISO 8601, with offset)" })
+  @ApiPropertyOptional({
+    description: "Booked at or after (ISO 8601, with offset)",
+  })
   @IsOptional()
   @IsISO8601({ strict: true })
   startDate?: string;
@@ -158,7 +169,9 @@ export class AdminListCircuitRidesQueryDto {
 }
 
 export class CircuitReportQueryDto {
-  @ApiPropertyOptional({ description: "Booked at or after (ISO 8601, with offset)" })
+  @ApiPropertyOptional({
+    description: "Booked at or after (ISO 8601, with offset)",
+  })
   @IsOptional()
   @IsISO8601({ strict: true })
   startDate?: string;

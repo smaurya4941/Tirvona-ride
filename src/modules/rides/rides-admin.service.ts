@@ -6,7 +6,10 @@ import { Types } from "mongoose";
 import { startOfDayInTimeZone } from "../../common/utils/time";
 import { DriverProfile } from "../drivers/schemas/driver-profile.schema";
 import { DriverLocationService } from "../locations/driver-location.service";
-import type { CheckpointKind, CheckpointSource } from "../locations/schemas/driver-location-checkpoint.schema";
+import type {
+  CheckpointKind,
+  CheckpointSource,
+} from "../locations/schemas/driver-location-checkpoint.schema";
 import { MatchingService } from "../matching/matching.service";
 import { CancellationsService } from "../cancellations/cancellations.service";
 import type { CancellationView } from "../cancellations/cancellations.service";
@@ -47,13 +50,25 @@ export interface AdminRideDetail {
     driverDistanceMeters?: number;
     assignmentExpiresAt?: Date;
     searchExpiresAt: Date;
-    otp: { issued: boolean; attempts: number; expiresAt?: Date; verifiedAt?: Date };
+    otp: {
+      issued: boolean;
+      attempts: number;
+      expiresAt?: Date;
+      verifiedAt?: Date;
+    };
     vehicle?: Omit<RideVehicle, "vehicleId"> & { vehicleId?: string };
     createdAt: Date;
     updatedAt: Date;
   };
   customer: PersonRef | null;
-  driver: (PersonRef & { driverId: string; driverCode: string; ratingAverage: number; totalRides: number }) | null;
+  driver:
+    | (PersonRef & {
+        driverId: string;
+        driverCode: string;
+        ratingAverage: number;
+        totalRides: number;
+      })
+    | null;
   history: Array<{
     id: string;
     fromStatus?: RideStatus;
@@ -98,9 +113,11 @@ export interface AdminRideListQuery {
   search?: string;
 }
 
-const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const nameOf = (user?: { firstName?: string; lastName?: string } | null): string =>
-  [user?.firstName, user?.lastName].filter(Boolean).join(" ");
+const escapeRegex = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const nameOf = (
+  user?: { firstName?: string; lastName?: string } | null,
+): string => [user?.firstName, user?.lastName].filter(Boolean).join(" ");
 
 @Injectable()
 export class RidesAdminService {
@@ -109,7 +126,8 @@ export class RidesAdminService {
   constructor(
     @InjectModel(Ride.name) private readonly rideModel: Model<Ride>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
-    @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
+    @InjectModel(DriverProfile.name)
+    private readonly driverModel: Model<DriverProfile>,
     private readonly transitions: RideTransitionService,
     private readonly matching: MatchingService,
     private readonly views: RideViewService,
@@ -127,7 +145,8 @@ export class RidesAdminService {
     if (query.rideType) filter.rideType = query.rideType;
     if (query.search) {
       const term = query.search.trim();
-      if (Types.ObjectId.isValid(term) && /^[0-9a-f]{24}$/i.test(term)) filter._id = new Types.ObjectId(term);
+      if (Types.ObjectId.isValid(term) && /^[0-9a-f]{24}$/i.test(term))
+        filter._id = new Types.ObjectId(term);
       else {
         // Ride code prefix, or the customer's phone.
         const customers = await this.userModel
@@ -159,7 +178,9 @@ export class RidesAdminService {
         _id: {
           $in: [
             ...rides.map((ride) => ride.customerId),
-            ...rides.flatMap((ride) => (ride.driverUserId ? [ride.driverUserId] : [])),
+            ...rides.flatMap((ride) =>
+              ride.driverUserId ? [ride.driverUserId] : [],
+            ),
           ],
         },
       })
@@ -167,22 +188,36 @@ export class RidesAdminService {
       .lean()
       .exec();
     const drivers = await this.driverModel
-      .find({ _id: { $in: rides.flatMap((ride) => (ride.driverId ? [ride.driverId] : [])) } })
+      .find({
+        _id: {
+          $in: rides.flatMap((ride) => (ride.driverId ? [ride.driverId] : [])),
+        },
+      })
       .select("driverCode userId")
       .lean()
       .exec();
     const userById = new Map(users.map((user) => [user._id.toString(), user]));
-    const driverById = new Map(drivers.map((driver) => [driver._id.toString(), driver]));
+    const driverById = new Map(
+      drivers.map((driver) => [driver._id.toString(), driver]),
+    );
 
     return {
       items: rides.map((ride) => {
         const customer = userById.get(ride.customerId.toString());
-        const driverProfile = ride.driverId ? driverById.get(ride.driverId.toString()) : undefined;
-        const driverUser = driverProfile ? userById.get(driverProfile.userId.toString()) : undefined;
+        const driverProfile = ride.driverId
+          ? driverById.get(ride.driverId.toString())
+          : undefined;
+        const driverUser = driverProfile
+          ? userById.get(driverProfile.userId.toString())
+          : undefined;
         return {
           ...this.views.base(ride),
           customer: customer
-            ? { id: customer._id.toString(), name: nameOf(customer), phone: customer.phone }
+            ? {
+                id: customer._id.toString(),
+                name: nameOf(customer),
+                phone: customer.phone,
+              }
             : null,
           driver:
             driverProfile && driverUser
@@ -207,26 +242,45 @@ export class RidesAdminService {
     const ride = await this.rideModel.findById(rideId).exec();
     if (!ride) throw rideNotFound();
 
-    const [history, customer, driverProfile, checkpoints, cancellation] = await Promise.all([
-      this.transitions.history(ride._id),
-      this.userModel.findById(ride.customerId).select("firstName lastName phone").lean().exec(),
-      ride.driverId ? this.driverModel.findById(ride.driverId).lean().exec() : null,
-      this.locations.checkpoints(ride._id),
-      ride.status === RideStatus.CANCELLED ? this.cancellations.findByRide(ride._id) : Promise.resolve(null),
-    ]);
+    const [history, customer, driverProfile, checkpoints, cancellation] =
+      await Promise.all([
+        this.transitions.history(ride._id),
+        this.userModel
+          .findById(ride.customerId)
+          .select("firstName lastName phone")
+          .lean()
+          .exec(),
+        ride.driverId
+          ? this.driverModel.findById(ride.driverId).lean().exec()
+          : null,
+        this.locations.checkpoints(ride._id),
+        ride.status === RideStatus.CANCELLED
+          ? this.cancellations.findByRide(ride._id)
+          : Promise.resolve(null),
+      ]);
     const driverUser = driverProfile
-      ? await this.userModel.findById(driverProfile.userId).select("firstName lastName phone").lean().exec()
+      ? await this.userModel
+          .findById(driverProfile.userId)
+          .select("firstName lastName phone")
+          .lean()
+          .exec()
       : null;
 
     const actorIds = [
-      ...new Set(history.flatMap((entry) => (entry.actorId ? [entry.actorId.toString()] : []))),
+      ...new Set(
+        history.flatMap((entry) =>
+          entry.actorId ? [entry.actorId.toString()] : [],
+        ),
+      ),
     ];
     const actors = await this.userModel
       .find({ _id: { $in: actorIds.map((id) => new Types.ObjectId(id)) } })
       .select("firstName lastName")
       .lean()
       .exec();
-    const actorName = new Map(actors.map((actor) => [actor._id.toString(), nameOf(actor)]));
+    const actorName = new Map(
+      actors.map((actor) => [actor._id.toString(), nameOf(actor)]),
+    );
 
     return {
       ride: {
@@ -258,7 +312,11 @@ export class RidesAdminService {
         updatedAt: ride.get("updatedAt") as Date,
       },
       customer: customer
-        ? { id: customer._id.toString(), name: nameOf(customer), phone: customer.phone }
+        ? {
+            id: customer._id.toString(),
+            name: nameOf(customer),
+            phone: customer.phone,
+          }
         : null,
       driver:
         driverProfile && driverUser
@@ -278,7 +336,9 @@ export class RidesAdminService {
         toStatus: entry.toStatus,
         actorType: entry.actorType,
         actorId: entry.actorId?.toString(),
-        actorName: entry.actorId ? actorName.get(entry.actorId.toString()) : undefined,
+        actorName: entry.actorId
+          ? actorName.get(entry.actorId.toString())
+          : undefined,
         reason: entry.reason,
         metadata: entry.metadata,
         createdAt: entry.get("createdAt") as Date,
@@ -292,7 +352,12 @@ export class RidesAdminService {
    * Ops escape hatch for a stuck ride; same state rules as a customer
    * cancel. Admin cancellations never carry a fee.
    */
-  async cancel(rideId: string, adminUserId: string, note: string, reasonCode?: string): Promise<AdminRideDetail> {
+  async cancel(
+    rideId: string,
+    adminUserId: string,
+    note: string,
+    reasonCode?: string,
+  ): Promise<AdminRideDetail> {
     const ride = await this.rideModel.findById(rideId).exec();
     if (!ride) throw rideNotFound();
     if (!CUSTOMER_CANCELLABLE_STATUSES.includes(ride.status))
@@ -302,8 +367,14 @@ export class RidesAdminService {
         "RIDE_NOT_CANCELLABLE",
       );
 
-    const reason = await this.cancellations.resolveReason(RideActorType.ADMIN, reasonCode, note);
-    const reasonText = reason.note ? `${reason.label}: ${reason.note}` : reason.label;
+    const reason = await this.cancellations.resolveReason(
+      RideActorType.ADMIN,
+      reasonCode,
+      note,
+    );
+    const reasonText = reason.note
+      ? `${reason.label}: ${reason.note}`
+      : reason.label;
     const adminId = new Types.ObjectId(adminUserId);
     const cancelled = await this.transitions.apply({
       rideId: ride._id,
@@ -327,7 +398,11 @@ export class RidesAdminService {
       metadata: { reasonCode: reason.code },
     });
     if (!cancelled)
-      throw rideConflict("The ride changed while cancelling. Reload and retry.", ride.status, "RIDE_STATE_CONFLICT");
+      throw rideConflict(
+        "The ride changed while cancelling. Reload and retry.",
+        ride.status,
+        "RIDE_STATE_CONFLICT",
+      );
     await this.cancellations.record(cancelled, {
       cancelledBy: RideActorType.ADMIN,
       cancelledByUserId: adminId,
@@ -344,31 +419,57 @@ export class RidesAdminService {
 
   async stats(): Promise<AdminRideStats> {
     const since = startOfDayInTimeZone(new Date(), this.timeZone);
-    const [byStatus, completedToday, cancelledToday, noDriverToday, driversOnline, driversAvailable, driversMatchable] =
-      await Promise.all([
-        this.rideModel
-          .aggregate<{ _id: RideStatus; count: number }>([
-            { $match: { isActive: true } },
-            { $group: { _id: "$status", count: { $sum: 1 } } },
-          ])
-          .exec(),
-        this.rideModel.countDocuments({ status: RideStatus.COMPLETED, completedAt: { $gte: since } }).exec(),
-        this.rideModel.countDocuments({ status: RideStatus.CANCELLED, cancelledAt: { $gte: since } }).exec(),
-        this.rideModel
-          .countDocuments({ status: RideStatus.NO_DRIVER_AVAILABLE, expiredAt: { $gte: since } })
-          .exec(),
-        this.driverModel.countDocuments({ isOnline: true }).exec(),
-        this.driverModel.countDocuments({ isOnline: true, isAvailable: true }).exec(),
-        this.driverModel
-          .countDocuments({
-            isOnline: true,
-            isAvailable: true,
-            locationUpdatedAt: { $gte: new Date(Date.now() - this.locations.freshnessWindowMs) },
-          })
-          .exec(),
-      ]);
+    const [
+      byStatus,
+      completedToday,
+      cancelledToday,
+      noDriverToday,
+      driversOnline,
+      driversAvailable,
+      driversMatchable,
+    ] = await Promise.all([
+      this.rideModel
+        .aggregate<{ _id: RideStatus; count: number }>([
+          { $match: { isActive: true } },
+          { $group: { _id: "$status", count: { $sum: 1 } } },
+        ])
+        .exec(),
+      this.rideModel
+        .countDocuments({
+          status: RideStatus.COMPLETED,
+          completedAt: { $gte: since },
+        })
+        .exec(),
+      this.rideModel
+        .countDocuments({
+          status: RideStatus.CANCELLED,
+          cancelledAt: { $gte: since },
+        })
+        .exec(),
+      this.rideModel
+        .countDocuments({
+          status: RideStatus.NO_DRIVER_AVAILABLE,
+          expiredAt: { $gte: since },
+        })
+        .exec(),
+      this.driverModel.countDocuments({ isOnline: true }).exec(),
+      this.driverModel
+        .countDocuments({ isOnline: true, isAvailable: true })
+        .exec(),
+      this.driverModel
+        .countDocuments({
+          isOnline: true,
+          isAvailable: true,
+          locationUpdatedAt: {
+            $gte: new Date(Date.now() - this.locations.freshnessWindowMs),
+          },
+        })
+        .exec(),
+    ]);
     const count = (statuses: readonly RideStatus[]): number =>
-      byStatus.filter((entry) => statuses.includes(entry._id)).reduce((sum, entry) => sum + entry.count, 0);
+      byStatus
+        .filter((entry) => statuses.includes(entry._id))
+        .reduce((sum, entry) => sum + entry.count, 0);
 
     return {
       activeRides: byStatus.reduce((sum, entry) => sum + entry.count, 0),

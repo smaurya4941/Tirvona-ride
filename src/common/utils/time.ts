@@ -20,7 +20,14 @@ export function startOfDayInTimeZone(now: Date, timeZone: string): Date {
   const year = part("year");
   const month = part("month") - 1;
   const day = part("day");
-  const wallClockAsUtc = Date.UTC(year, month, day, part("hour"), part("minute"), part("second"));
+  const wallClockAsUtc = Date.UTC(
+    year,
+    month,
+    day,
+    part("hour"),
+    part("minute"),
+    part("second"),
+  );
   const offsetMs = wallClockAsUtc - Math.floor(now.getTime() / 1000) * 1000;
   return new Date(Date.UTC(year, month, day) - offsetMs);
 }
@@ -30,12 +37,21 @@ const DAY_MS = 86_400_000;
 // DST shift, before snapping back to that day's local midnight.
 const NOON_MS = 12 * 3_600_000;
 
-function localDate(now: Date, timeZone: string): { day: number; weekday: number } {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone, day: "numeric", weekday: "short" }).formatToParts(now);
+function localDate(
+  now: Date,
+  timeZone: string,
+): { day: number; weekday: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    day: "numeric",
+    weekday: "short",
+  }).formatToParts(now);
   const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   return {
     day: Number(parts.find((part) => part.type === "day")?.value),
-    weekday: weekdays.indexOf(parts.find((part) => part.type === "weekday")?.value ?? "Mon"),
+    weekday: weekdays.indexOf(
+      parts.find((part) => part.type === "weekday")?.value ?? "Mon",
+    ),
   };
 }
 
@@ -43,12 +59,18 @@ function localDate(now: Date, timeZone: string): { day: number; weekday: number 
 export function startOfWeekInTimeZone(now: Date, timeZone: string): Date {
   const today = startOfDayInTimeZone(now, timeZone);
   const { weekday } = localDate(now, timeZone);
-  return startOfDayInTimeZone(new Date(today.getTime() - weekday * DAY_MS + NOON_MS), timeZone);
+  return startOfDayInTimeZone(
+    new Date(today.getTime() - weekday * DAY_MS + NOON_MS),
+    timeZone,
+  );
 }
 
 /** Local midnight on the 1st of the current month in `timeZone`. */
 export function startOfMonthInTimeZone(now: Date, timeZone: string): Date {
   const today = startOfDayInTimeZone(now, timeZone);
   const { day } = localDate(now, timeZone);
-  return startOfDayInTimeZone(new Date(today.getTime() - (day - 1) * DAY_MS + NOON_MS), timeZone);
+  return startOfDayInTimeZone(
+    new Date(today.getTime() - (day - 1) * DAY_MS + NOON_MS),
+    timeZone,
+  );
 }

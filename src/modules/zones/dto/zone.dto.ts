@@ -54,7 +54,11 @@ export class CreateZoneDto {
   @IsEnum(ZoneStatus)
   status?: ZoneStatus;
 
-  @ApiProperty({ type: [ZonePointDto], description: "Boundary vertices in order around the edge (open or closed ring)" })
+  @ApiProperty({
+    type: [ZonePointDto],
+    description:
+      "Boundary vertices in order around the edge (open or closed ring)",
+  })
   @IsArray()
   @ArrayMinSize(MIN_ZONE_VERTICES)
   @ArrayMaxSize(MAX_ZONE_VERTICES + 1)
@@ -97,7 +101,9 @@ export class ZoneStatusDto {
   @IsEnum(ZoneStatus)
   status!: ZoneStatus;
 
-  @ApiPropertyOptional({ description: "Why (required by the panel when deactivating)" })
+  @ApiPropertyOptional({
+    description: "Why (required by the panel when deactivating)",
+  })
   @IsOptional()
   @IsString()
   @Length(3, 240)

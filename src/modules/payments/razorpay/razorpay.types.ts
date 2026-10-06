@@ -15,7 +15,8 @@ export interface RazorpayOrder {
   created_at: number;
 }
 
-export type RazorpayPaymentStatus = "created" | "authorized" | "captured" | "refunded" | "failed";
+export type RazorpayPaymentStatus =
+  "created" | "authorized" | "captured" | "refunded" | "failed";
 
 export interface RazorpayPayment {
   id: string;
@@ -30,7 +31,11 @@ export interface RazorpayPayment {
   refund_status?: "null" | "partial" | "full" | null;
   bank?: string | null;
   wallet?: string | null;
-  card?: { network?: string | null; type?: string | null; last4?: string | null } | null;
+  card?: {
+    network?: string | null;
+    type?: string | null;
+    last4?: string | null;
+  } | null;
   error_code?: string | null;
   error_description?: string | null;
   error_reason?: string | null;
@@ -50,7 +55,11 @@ export interface RazorpayRefund {
   speed_processed?: string | null;
   speed_requested?: string | null;
   /** Bank references once processed (ARN for cards, RRN for UPI). */
-  acquirer_data?: { arn?: string | null; rrn?: string | null; utr?: string | null } | null;
+  acquirer_data?: {
+    arn?: string | null;
+    rrn?: string | null;
+    utr?: string | null;
+  } | null;
   created_at: number;
 }
 

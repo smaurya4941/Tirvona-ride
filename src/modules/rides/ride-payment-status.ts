@@ -51,7 +51,11 @@ export function effectivePaymentStatus(ride: {
   fare?: { finalFare?: number };
 }): RidePaymentStatus {
   const stored = ride.paymentStatus ?? RidePaymentStatus.NOT_REQUIRED;
-  if (stored === RidePaymentStatus.NOT_REQUIRED && ride.status === "COMPLETED" && (ride.fare?.finalFare ?? 0) > 0)
+  if (
+    stored === RidePaymentStatus.NOT_REQUIRED &&
+    ride.status === "COMPLETED" &&
+    (ride.fare?.finalFare ?? 0) > 0
+  )
     return RidePaymentStatus.PENDING;
   return stored;
 }

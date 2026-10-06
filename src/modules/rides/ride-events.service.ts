@@ -10,7 +10,10 @@ import type { CircuitNoticeKind } from "../../infrastructure/events/domain-event
 import { RideEvent } from "../realtime/realtime.constants";
 import type { RideEventName } from "../realtime/realtime.constants";
 import { RealtimeService } from "../realtime/realtime.service";
-import type { RealtimeEnvelope, RideDelivery } from "../realtime/realtime.types";
+import type {
+  RealtimeEnvelope,
+  RideDelivery,
+} from "../realtime/realtime.types";
 import { inRideRoom, planRideEvents } from "./ride-events";
 import { RideStatus } from "./ride-state-machine";
 import { RideViewService } from "./ride-view.service";
@@ -41,7 +44,8 @@ export class RideEventsService {
 
   constructor(
     @InjectModel(Ride.name) private readonly rideModel: Model<Ride>,
-    @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
+    @InjectModel(DriverProfile.name)
+    private readonly driverModel: Model<DriverProfile>,
     private readonly views: RideViewService,
     private readonly realtime: RealtimeService,
     private readonly domainEvents: DomainEventsService,
@@ -67,13 +71,21 @@ export class RideEventsService {
   /** The start-of-trip OTP rotated; only the customer's view changes. */
   otpRefreshed(rideId: Types.ObjectId): void {
     this.enqueue(rideId, async () => {
-      const ride = await this.rideModel.findById(rideId).select("+otpCode").exec();
+      const ride = await this.rideModel
+        .findById(rideId)
+        .select("+otpCode")
+        .exec();
       if (!ride || ride.status !== RideStatus.DRIVER_ARRIVED) return;
       await this.realtime.deliver(ride._id.toString(), [
         {
           userId: ride.customerId.toString(),
           room: "join",
-          envelope: this.envelope(RideEvent.OTP_REFRESHED, ride, {}, await this.views.forCustomer(ride)),
+          envelope: this.envelope(
+            RideEvent.OTP_REFRESHED,
+            ride,
+            {},
+            await this.views.forCustomer(ride),
+          ),
         },
       ]);
     });
@@ -84,7 +96,11 @@ export class RideEventsService {
    * each get their own ride view; `room: "keep"` because a paid/unpaid
    * completed ride has no live room to join or leave.
    */
-  paymentUpdated(rideId: Types.ObjectId, data: Record<string, unknown>, committed?: RideDocument): void {
+  paymentUpdated(
+    rideId: Types.ObjectId,
+    data: Record<string, unknown>,
+    committed?: RideDocument,
+  ): void {
     if (committed)
       this.domainEvents.emit("ride.payment_updated", {
         ride: rideSnapshot(committed),
@@ -99,7 +115,12 @@ export class RideEventsService {
         {
           userId: ride.customerId.toString(),
           room: "keep",
-          envelope: this.envelope(RideEvent.PAYMENT_UPDATED, ride, data, await this.views.forCustomer(ride)),
+          envelope: this.envelope(
+            RideEvent.PAYMENT_UPDATED,
+            ride,
+            data,
+            await this.views.forCustomer(ride),
+          ),
         },
       ];
       if (ride.driverId && ride.driverUserId) {
@@ -108,7 +129,12 @@ export class RideEventsService {
           deliveries.push({
             userId: ride.driverUserId.toString(),
             room: "keep",
-            envelope: this.envelope(RideEvent.PAYMENT_UPDATED, ride, data, await this.views.forDriver(ride, driver)),
+            envelope: this.envelope(
+              RideEvent.PAYMENT_UPDATED,
+              ride,
+              data,
+              await this.views.forDriver(ride, driver),
+            ),
           });
       }
       await this.realtime.deliver(ride._id.toString(), deliveries);
@@ -125,9 +151,19 @@ export class RideEventsService {
     committed: RideDocument,
     event: CircuitEventName,
     data: Record<string, unknown> = {},
-    notice?: { kind: CircuitNoticeKind; stopName?: string; stopOrder?: number; nextStopName?: string; remainingMinutes?: number },
+    notice?: {
+      kind: CircuitNoticeKind;
+      stopName?: string;
+      stopOrder?: number;
+      nextStopName?: string;
+      remainingMinutes?: number;
+    },
   ): void {
-    if (notice) this.domainEvents.emit("circuit.notice", { ride: rideSnapshot(committed), ...notice });
+    if (notice)
+      this.domainEvents.emit("circuit.notice", {
+        ride: rideSnapshot(committed),
+        ...notice,
+      });
     const rideId = committed._id;
     this.enqueue(rideId, async () => {
       const ride = await this.rideModel.findById(rideId).exec();
@@ -136,7 +172,12 @@ export class RideEventsService {
         {
           userId: ride.customerId.toString(),
           room: "keep",
-          envelope: this.envelope(event, ride, data, await this.views.forCustomer(ride)),
+          envelope: this.envelope(
+            event,
+            ride,
+            data,
+            await this.views.forCustomer(ride),
+          ),
         },
       ];
       if (ride.driverId && ride.driverUserId) {
@@ -145,7 +186,12 @@ export class RideEventsService {
           deliveries.push({
             userId: ride.driverUserId.toString(),
             room: "keep",
-            envelope: this.envelope(event, ride, data, await this.views.forDriver(ride, driver)),
+            envelope: this.envelope(
+              event,
+              ride,
+              data,
+              await this.views.forDriver(ride, driver),
+            ),
           });
       }
       await this.realtime.deliver(ride._id.toString(), deliveries);
@@ -160,19 +206,27 @@ export class RideEventsService {
   private enqueue(rideId: Types.ObjectId, task: () => Promise<void>): void {
     if (!this.realtime.isAttached) return;
     const key = rideId.toString();
-    const next = (this.queues.get(key) ?? Promise.resolve()).then(task).catch((error: unknown) => {
-      this.logger.error(
-        `Realtime publish failed for ride ${key}`,
-        error instanceof Error ? error.stack : String(error),
-      );
-    });
+    const next = (this.queues.get(key) ?? Promise.resolve())
+      .then(task)
+      .catch((error: unknown) => {
+        this.logger.error(
+          `Realtime publish failed for ride ${key}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      });
     this.queues.set(key, next);
     void next.finally(() => {
       if (this.queues.get(key) === next) this.queues.delete(key);
     });
   }
 
-  private async publishTransition({ ride, from, to, reason, metadata }: CommittedTransition): Promise<void> {
+  private async publishTransition({
+    ride,
+    from,
+    to,
+    reason,
+    metadata,
+  }: CommittedTransition): Promise<void> {
     const plan = planRideEvents(from, to);
     const rideId = ride._id.toString();
     const data: Record<string, unknown> = {};
@@ -182,11 +236,17 @@ export class RideEventsService {
     const deliveries: RideDelivery[] = [];
 
     // Customer — their own view, including the OTP once the driver arrived.
-    const customerRide = to === RideStatus.DRIVER_ARRIVED ? await this.withOtp(ride) : ride;
+    const customerRide =
+      to === RideStatus.DRIVER_ARRIVED ? await this.withOtp(ride) : ride;
     deliveries.push({
       userId: ride.customerId.toString(),
       room: inRideRoom(to, "customer") ? "join" : "leave",
-      envelope: this.envelope(plan.customer, ride, data, await this.views.forCustomer(customerRide)),
+      envelope: this.envelope(
+        plan.customer,
+        ride,
+        data,
+        await this.views.forCustomer(customerRide),
+      ),
     });
 
     // Current driver — their own view (never the OTP).
@@ -196,13 +256,26 @@ export class RideEventsService {
         deliveries.push({
           userId: ride.driverUserId.toString(),
           room: inRideRoom(to, "driver") ? "join" : "leave",
-          envelope: this.envelope(plan.driver, ride, data, await this.views.forDriver(ride, driver)),
+          envelope: this.envelope(
+            plan.driver,
+            ride,
+            data,
+            await this.views.forDriver(ride, driver),
+          ),
         });
     }
 
     // Driver who just lost the offer (rejected / timed out / went offline).
-    if (plan.previousDriver && typeof metadata?.driverId === "string" && Types.ObjectId.isValid(metadata.driverId)) {
-      const previous = await this.driverModel.findById(metadata.driverId).select("userId").lean().exec();
+    if (
+      plan.previousDriver &&
+      typeof metadata?.driverId === "string" &&
+      Types.ObjectId.isValid(metadata.driverId)
+    ) {
+      const previous = await this.driverModel
+        .findById(metadata.driverId)
+        .select("userId")
+        .lean()
+        .exec();
       if (previous)
         deliveries.push({
           userId: previous.userId.toString(),

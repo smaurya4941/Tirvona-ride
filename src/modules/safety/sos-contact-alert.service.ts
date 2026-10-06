@@ -6,7 +6,10 @@ import { maskPhone } from "../../common/phone/phone-number";
 import { Ride } from "../rides/schemas/ride.schema";
 import type { RideDocument } from "../rides/schemas/ride.schema";
 import { User } from "../users/schemas/user.schema";
-import { WhatsAppDeliveryError, WhatsAppGateway } from "../whatsapp/whatsapp.gateway";
+import {
+  WhatsAppDeliveryError,
+  WhatsAppGateway,
+} from "../whatsapp/whatsapp.gateway";
 import type { SosAlertMessage } from "../whatsapp/whatsapp.gateway";
 import { SosContactAlert, SosEvent } from "./schemas/sos-event.schema";
 import type { SosEventDocument, SosLocation } from "./schemas/sos-event.schema";
@@ -29,11 +32,14 @@ const MAX_ATTEMPTS = 3;
 const FAILURE_TEXT: Record<WhatsAppDeliveryError["reason"], string> = {
   RECIPIENT_UNAVAILABLE: "Number is not on WhatsApp or cannot receive messages",
   RATE_LIMITED: "WhatsApp is limiting messages right now",
-  MISCONFIGURED: "WhatsApp alert is not set up correctly (template or credentials)",
+  MISCONFIGURED:
+    "WhatsApp alert is not set up correctly (template or credentials)",
   UNAVAILABLE: "WhatsApp could not be reached",
 };
 
-const fullName = (user?: { firstName?: string; lastName?: string } | null): string =>
+const fullName = (
+  user?: { firstName?: string; lastName?: string } | null,
+): string =>
   user ? [user.firstName, user.lastName].filter(Boolean).join(" ") : "";
 
 /** A contact and which message they are due. */
@@ -42,7 +48,8 @@ interface Target {
   kind: "ALERT" | "UPDATE";
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * Tells a user's emergency contacts, on WhatsApp, that they pressed SOS: a map
@@ -78,8 +85,11 @@ export class SosContactAlertService {
     config: ConfigService,
   ) {
     this.enabled = config.get<boolean>("sosContactAlertsEnabled") ?? true;
-    this.updatesEnabled = Boolean(config.get<string>("whatsappSosUpdateTemplateName")) || this.whatsapp.provider !== "meta";
-    this.updateMinMs = (config.get<number>("sosContactUpdateMinSeconds") ?? 120) * 1000;
+    this.updatesEnabled =
+      Boolean(config.get<string>("whatsappSosUpdateTemplateName")) ||
+      this.whatsapp.provider !== "meta";
+    this.updateMinMs =
+      (config.get<number>("sosContactUpdateMinSeconds") ?? 120) * 1000;
     this.updateMax = config.get<number>("sosContactUpdateMax") ?? 8;
     this.retryDelayMs = config.get<number>("sosContactRetryDelayMs") ?? 1500;
     this.timeZone = config.get<string>("appTimeZone") ?? "Asia/Kolkata";
@@ -97,7 +107,9 @@ export class SosContactAlertService {
     const round = previous
       .then(() => this.run(sosId, options.force === true))
       .catch((error: unknown) =>
-        this.logger.error(`SOS contact alerts for ${key} failed: ${error instanceof Error ? error.stack : String(error)}`),
+        this.logger.error(
+          `SOS contact alerts for ${key} failed: ${error instanceof Error ? error.stack : String(error)}`,
+        ),
       )
       .finally(() => {
         this.pending.delete(round);
@@ -113,9 +125,13 @@ export class SosContactAlertService {
   }
 
   /** Per contact: reached, not reached, or not tried — for the person who pressed SOS. */
-  static statusFor(sos: Pick<SosEventDocument, "emergencyContacts" | "contactAlerts">): SosContactStatus[] {
+  static statusFor(
+    sos: Pick<SosEventDocument, "emergencyContacts" | "contactAlerts">,
+  ): SosContactStatus[] {
     return sos.emergencyContacts.map((contact) => {
-      const mine = sos.contactAlerts.filter((entry) => entry.phone === contact.phone);
+      const mine = sos.contactAlerts.filter(
+        (entry) => entry.phone === contact.phone,
+      );
       const sent = mine.filter((entry) => entry.status === "SENT");
       const last = mine.at(-1);
       return {
@@ -129,20 +145,30 @@ export class SosContactAlertService {
   // ── One round ─────────────────────────────────────────────────────────
 
   private async run(sosId: Types.ObjectId, force: boolean): Promise<void> {
-    const sos = await this.sosModel.findById(sosId).select("+trackingToken").exec();
+    const sos = await this.sosModel
+      .findById(sosId)
+      .select("+trackingToken")
+      .exec();
     if (!sos || !sos.isOpen || sos.emergencyContacts.length === 0) return;
 
     const now = Date.now();
     const targets = sos.emergencyContacts.flatMap((contact): Target[] => {
-      const mine = sos.contactAlerts.filter((entry) => entry.phone === contact.phone);
-      const alerted = mine.some((entry) => entry.kind === "ALERT" && entry.status === "SENT");
+      const mine = sos.contactAlerts.filter(
+        (entry) => entry.phone === contact.phone,
+      );
+      const alerted = mine.some(
+        (entry) => entry.kind === "ALERT" && entry.status === "SENT",
+      );
       const lastAt = mine.at(-1)?.at.getTime();
       // Anything already tried is rate limited, whatever its outcome.
-      if (!force && lastAt !== undefined && now - lastAt < this.updateMinMs) return [];
+      if (!force && lastAt !== undefined && now - lastAt < this.updateMinMs)
+        return [];
       if (!alerted) return [{ contact, kind: "ALERT" }];
       // A resend by the safety team is only for people the alert has not reached.
       if (force) return [];
-      const updates = mine.filter((entry) => entry.kind === "UPDATE" && entry.status === "SENT").length;
+      const updates = mine.filter(
+        (entry) => entry.kind === "UPDATE" && entry.status === "SENT",
+      ).length;
       if (!this.updatesEnabled || updates >= this.updateMax) return [];
       return [{ contact, kind: "UPDATE" }];
     });
@@ -151,7 +177,11 @@ export class SosContactAlertService {
     const ride = await this.rideModel.findById(sos.rideId).exec();
     if (!ride) return;
     const [raiser, link] = await Promise.all([
-      this.userModel.findById(sos.userId).select("firstName lastName phone").lean().exec(),
+      this.userModel
+        .findById(sos.userId)
+        .select("firstName lastName phone")
+        .lean()
+        .exec(),
       this.trackingLink(sos, ride),
     ]);
     const fix = sos.locationUpdates.at(-1) ?? sos.location;
@@ -170,7 +200,10 @@ export class SosContactAlertService {
           location: {
             latitude: fix.latitude,
             longitude: fix.longitude,
-            name: fix.source === SosLocationSource.DEVICE ? `${first}'s location` : `${first}'s last known location`,
+            name:
+              fix.source === SosLocationSource.DEVICE
+                ? `${first}'s location`
+                : `${first}'s last known location`,
             address: this.addressText(fix),
           },
           trackingToken: link.token,
@@ -183,23 +216,39 @@ export class SosContactAlertService {
     const updated = await this.sosModel
       .findOneAndUpdate(
         { _id: sos._id },
-        { $push: { contactAlerts: { $each: entries, $slice: -MAX_RECORDED_MESSAGES } } },
+        {
+          $push: {
+            contactAlerts: { $each: entries, $slice: -MAX_RECORDED_MESSAGES },
+          },
+        },
         { returnDocument: "after" },
       )
       .exec();
     if (!updated) return;
-    const reached = updated.contactAlerts.some((entry) => entry.status === "SENT");
+    const reached = updated.contactAlerts.some(
+      (entry) => entry.status === "SENT",
+    );
     const next = reached ? "SENT" : "FAILED";
     if (updated.contactsNotification !== next)
-      await this.sosModel.updateOne({ _id: sos._id }, { $set: { contactsNotification: next } }).exec();
+      await this.sosModel
+        .updateOne({ _id: sos._id }, { $set: { contactsNotification: next } })
+        .exec();
     this.logger.warn(
       `SOS ${sos.sosCode}: WhatsApp to emergency contacts: ` +
-        entries.map((entry) => `${maskPhone(entry.phone)} ${entry.kind} ${entry.status}`).join(", "),
+        entries
+          .map(
+            (entry) =>
+              `${maskPhone(entry.phone)} ${entry.kind} ${entry.status}`,
+          )
+          .join(", "),
     );
   }
 
   /** One send with a couple of quick retries for transient failures. Never throws. */
-  private async send(name: string, message: SosAlertMessage): Promise<SosContactAlert> {
+  private async send(
+    name: string,
+    message: SosAlertMessage,
+  ): Promise<SosContactAlert> {
     let failure = FAILURE_TEXT.UNAVAILABLE;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       try {
@@ -214,36 +263,69 @@ export class SosContactAlertService {
           at: new Date(),
         };
       } catch (error) {
-        const reason = error instanceof WhatsAppDeliveryError ? error.reason : "UNAVAILABLE";
+        const reason =
+          error instanceof WhatsAppDeliveryError ? error.reason : "UNAVAILABLE";
         failure = FAILURE_TEXT[reason];
-        if (!(error instanceof WhatsAppDeliveryError)) this.logger.error(`Unexpected SOS WhatsApp error: ${String(error)}`);
+        if (!(error instanceof WhatsAppDeliveryError))
+          this.logger.error(`Unexpected SOS WhatsApp error: ${String(error)}`);
         // A wrong number or a broken setup will not get better in a second.
-        if (reason === "RECIPIENT_UNAVAILABLE" || reason === "MISCONFIGURED" || attempt === MAX_ATTEMPTS) break;
+        if (
+          reason === "RECIPIENT_UNAVAILABLE" ||
+          reason === "MISCONFIGURED" ||
+          attempt === MAX_ATTEMPTS
+        )
+          break;
         await sleep(this.retryDelayMs * attempt);
       }
     }
-    return { phone: message.to, name, kind: message.kind, status: "FAILED", failure, attempts: MAX_ATTEMPTS, at: new Date() };
+    return {
+      phone: message.to,
+      name,
+      kind: message.kind,
+      status: "FAILED",
+      failure,
+      attempts: MAX_ATTEMPTS,
+      at: new Date(),
+    };
   }
 
   /** The incident's live link, created on first use and kept for follow-ups. */
-  private async trackingLink(sos: SosEventDocument, ride: RideDocument): Promise<{ token: string; url: string }> {
-    if (sos.trackingToken) return { token: sos.trackingToken, url: this.share.linkFor(sos.trackingToken) };
+  private async trackingLink(
+    sos: SosEventDocument,
+    ride: RideDocument,
+  ): Promise<{ token: string; url: string }> {
+    if (sos.trackingToken)
+      return {
+        token: sos.trackingToken,
+        url: this.share.linkFor(sos.trackingToken),
+      };
     const created = await this.share.createForSos(ride, sos._id);
-    await this.sosModel.updateOne({ _id: sos._id, trackingToken: { $exists: false } }, { $set: { trackingToken: created.token } }).exec();
+    await this.sosModel
+      .updateOne(
+        { _id: sos._id, trackingToken: { $exists: false } },
+        { $set: { trackingToken: created.token } },
+      )
+      .exec();
     return { token: created.token, url: created.url };
   }
 
   private vehicleText(ride: RideDocument): string {
     if (!ride.vehicle) return "";
-    const details = [ride.vehicle.color, ride.vehicle.make, ride.vehicle.model].filter(Boolean).join(" ");
-    return [ride.vehicle.registrationNumber, details].filter(Boolean).join(" · ");
+    const details = [ride.vehicle.color, ride.vehicle.make, ride.vehicle.model]
+      .filter(Boolean)
+      .join(" ");
+    return [ride.vehicle.registrationNumber, details]
+      .filter(Boolean)
+      .join(" · ");
   }
 
   private addressText(location: SosLocation): string {
     if (location.address) return location.address;
-    const time = new Intl.DateTimeFormat("en-IN", { timeZone: this.timeZone, hour: "numeric", minute: "2-digit" }).format(
-      location.capturedAt,
-    );
+    const time = new Intl.DateTimeFormat("en-IN", {
+      timeZone: this.timeZone,
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(location.capturedAt);
     return `Position at ${time}`;
   }
 }

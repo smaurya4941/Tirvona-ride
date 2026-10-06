@@ -1,15 +1,28 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
-import { DriverProfile, DriverProfileSchema } from "../drivers/schemas/driver-profile.schema";
+import {
+  DriverProfile,
+  DriverProfileSchema,
+} from "../drivers/schemas/driver-profile.schema";
 import { LocationsModule } from "../locations/locations.module";
 import { NotificationsModule } from "../notifications/notifications.module";
 import { Ride, RideSchema } from "../rides/schemas/ride.schema";
 import { UsersModule } from "../users/users.module";
 import { WhatsAppModule } from "../whatsapp/whatsapp.module";
-import { EmergencyContactsController, RideSafetyController, SharedRidesController } from "./safety.controller";
+import {
+  EmergencyContactsController,
+  RideSafetyController,
+  SharedRidesController,
+} from "./safety.controller";
 import { EmergencyContactsService } from "./emergency-contacts.service";
-import { EmergencyContact, EmergencyContactSchema } from "./schemas/emergency-contact.schema";
-import { RideShareToken, RideShareTokenSchema } from "./schemas/ride-share-token.schema";
+import {
+  EmergencyContact,
+  EmergencyContactSchema,
+} from "./schemas/emergency-contact.schema";
+import {
+  RideShareToken,
+  RideShareTokenSchema,
+} from "./schemas/ride-share-token.schema";
 import { SosEvent, SosEventSchema } from "./schemas/sos-event.schema";
 import { ShareRideService } from "./share-ride.service";
 import { SosContactAlertService } from "./sos-contact-alert.service";
@@ -32,8 +45,17 @@ import { SosService } from "./sos.service";
     NotificationsModule,
     WhatsAppModule,
   ],
-  controllers: [EmergencyContactsController, RideSafetyController, SharedRidesController],
-  providers: [EmergencyContactsService, SosService, ShareRideService, SosContactAlertService],
+  controllers: [
+    EmergencyContactsController,
+    RideSafetyController,
+    SharedRidesController,
+  ],
+  providers: [
+    EmergencyContactsService,
+    SosService,
+    ShareRideService,
+    SosContactAlertService,
+  ],
   exports: [SosService, EmergencyContactsService, SosContactAlertService],
 })
 export class SafetyModule {}

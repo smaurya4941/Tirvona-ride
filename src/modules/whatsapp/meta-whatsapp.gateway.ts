@@ -1,6 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { maskPhone, toWhatsAppRecipient } from "../../common/phone/phone-number";
+import {
+  maskPhone,
+  toWhatsAppRecipient,
+} from "../../common/phone/phone-number";
 import { WhatsAppDeliveryError, WhatsAppGateway } from "./whatsapp.gateway";
 import type {
   AuthenticationCodeMessage,
@@ -91,24 +94,47 @@ export class MetaWhatsAppGateway extends WhatsAppGateway {
     this.endpoint = `${baseUrl}/${version}/${encodeURIComponent(phoneNumberId)}/messages`;
     this.accessToken = config.getOrThrow<string>("whatsappAccessToken");
     this.templateName = config.getOrThrow<string>("whatsappOtpTemplateName");
-    this.templateLanguage = config.getOrThrow<string>("whatsappOtpTemplateLanguage");
-    this.codeButton = config.get<boolean>("whatsappOtpTemplateCodeButton") ?? true;
+    this.templateLanguage = config.getOrThrow<string>(
+      "whatsappOtpTemplateLanguage",
+    );
+    this.codeButton =
+      config.get<boolean>("whatsappOtpTemplateCodeButton") ?? true;
     // The SOS templates are optional for the OTP flow, so they have defaults
     // instead of hard requirements.
-    this.sosTemplateName = config.get<string>("whatsappSosTemplateName") ?? "tirvona_sos_alert";
-    this.sosUpdateTemplateName = config.get<string>("whatsappSosUpdateTemplateName") ?? "";
-    this.sosTemplateLanguage = config.get<string>("whatsappSosTemplateLanguage") ?? "en";
+    this.sosTemplateName =
+      config.get<string>("whatsappSosTemplateName") ?? "tirvona_sos_alert";
+    this.sosUpdateTemplateName =
+      config.get<string>("whatsappSosUpdateTemplateName") ?? "";
+    this.sosTemplateLanguage =
+      config.get<string>("whatsappSosTemplateLanguage") ?? "en";
     this.timeoutMs = config.getOrThrow<number>("whatsappTimeoutMs");
   }
 
-  async sendAuthenticationCode(message: AuthenticationCodeMessage): Promise<WhatsAppSendResult> {
-    return this.submit(this.templatePayload(message), maskPhone(message.to), "OTP");
+  async sendAuthenticationCode(
+    message: AuthenticationCodeMessage,
+  ): Promise<WhatsAppSendResult> {
+    return this.submit(
+      this.templatePayload(message),
+      maskPhone(message.to),
+      "OTP",
+    );
   }
 
   async sendSosAlert(message: SosAlertMessage): Promise<WhatsAppSendResult> {
-    const name = message.kind === "ALERT" ? this.sosTemplateName : this.sosUpdateTemplateName;
-    if (!name) throw new WhatsAppDeliveryError("MISCONFIGURED", `No WhatsApp template is configured for SOS ${message.kind}`);
-    return this.submit(this.sosPayload(message, name), maskPhone(message.to), `SOS ${message.kind}`);
+    const name =
+      message.kind === "ALERT"
+        ? this.sosTemplateName
+        : this.sosUpdateTemplateName;
+    if (!name)
+      throw new WhatsAppDeliveryError(
+        "MISCONFIGURED",
+        `No WhatsApp template is configured for SOS ${message.kind}`,
+      );
+    return this.submit(
+      this.sosPayload(message, name),
+      maskPhone(message.to),
+      `SOS ${message.kind}`,
+    );
   }
 
   /**
@@ -116,7 +142,11 @@ export class MetaWhatsAppGateway extends WhatsAppGateway {
    * 5xx answers. Retried sends are safe: an SOS or code delivered twice is
    * harmless, one lost is not. `label` only tags the log lines.
    */
-  private async submit(payload: Record<string, unknown>, recipient: string, label: string): Promise<WhatsAppSendResult> {
+  private async submit(
+    payload: Record<string, unknown>,
+    recipient: string,
+    label: string,
+  ): Promise<WhatsAppSendResult> {
     const body = JSON.stringify(payload);
     let lastError: WhatsAppDeliveryError | undefined;
 
@@ -134,19 +164,30 @@ export class MetaWhatsAppGateway extends WhatsAppGateway {
         });
       } catch (error) {
         const reason = error instanceof Error ? error.name : "unknown";
-        this.logger.warn(`WhatsApp API unreachable (attempt ${attempt}) for ${recipient}: ${reason}`);
-        lastError = new WhatsAppDeliveryError("UNAVAILABLE", `WhatsApp API unreachable: ${reason}`);
+        this.logger.warn(
+          `WhatsApp API unreachable (attempt ${attempt}) for ${recipient}: ${reason}`,
+        );
+        lastError = new WhatsAppDeliveryError(
+          "UNAVAILABLE",
+          `WhatsApp API unreachable: ${reason}`,
+        );
         continue;
       }
 
       if (response.ok) {
-        const parsed = (await response.json().catch(() => ({}))) as MetaSendBody;
+        const parsed = (await response
+          .json()
+          .catch(() => ({}))) as MetaSendBody;
         const messageId = parsed.messages?.[0]?.id ?? "";
-        this.logger.log(`WhatsApp ${label} accepted for ${recipient} (${messageId || "no message id"})`);
+        this.logger.log(
+          `WhatsApp ${label} accepted for ${recipient} (${messageId || "no message id"})`,
+        );
         return { messageId };
       }
 
-      const failure = (await response.json().catch(() => ({}))) as MetaErrorBody;
+      const failure = (await response
+        .json()
+        .catch(() => ({}))) as MetaErrorBody;
       const reason = this.classify(response.status, failure);
       const error = failure.error ?? {};
       // Operator-facing detail only: code, subcode and trace id — never the
@@ -154,13 +195,22 @@ export class MetaWhatsAppGateway extends WhatsAppGateway {
       const detail =
         `HTTP ${response.status} code=${error.code ?? "?"} subcode=${error.error_subcode ?? "-"} ` +
         `trace=${error.fbtrace_id ?? "-"}: ${(error.error_data?.details ?? error.message ?? "request failed").slice(0, 200)}`;
-      const log = reason === "MISCONFIGURED" ? this.logger.error.bind(this.logger) : this.logger.warn.bind(this.logger);
+      const log =
+        reason === "MISCONFIGURED"
+          ? this.logger.error.bind(this.logger)
+          : this.logger.warn.bind(this.logger);
       log(`WhatsApp ${label} rejected for ${recipient} [${reason}] ${detail}`);
-      lastError = new WhatsAppDeliveryError(reason, `WhatsApp API rejected the message: ${reason}`);
+      lastError = new WhatsAppDeliveryError(
+        reason,
+        `WhatsApp API rejected the message: ${reason}`,
+      );
       if (reason !== "UNAVAILABLE") break;
     }
 
-    throw lastError ?? new WhatsAppDeliveryError("UNAVAILABLE", "WhatsApp API request failed");
+    throw (
+      lastError ??
+      new WhatsAppDeliveryError("UNAVAILABLE", "WhatsApp API request failed")
+    );
   }
 
   /**
@@ -169,8 +219,14 @@ export class MetaWhatsAppGateway extends WhatsAppGateway {
    * may not be empty and may not contain line breaks, tabs or runs of four
    * spaces (Meta error 132018), so every value is flattened first.
    */
-  private sosPayload(message: SosAlertMessage, templateName: string): Record<string, unknown> {
-    const text = (value: string, fallback: string): { type: "text"; text: string } => ({
+  private sosPayload(
+    message: SosAlertMessage,
+    templateName: string,
+  ): Record<string, unknown> {
+    const text = (
+      value: string,
+      fallback: string,
+    ): { type: "text"; text: string } => ({
       type: "text",
       text: value.replace(/\s+/g, " ").trim().slice(0, 120) || fallback,
     });
@@ -183,7 +239,10 @@ export class MetaWhatsAppGateway extends WhatsAppGateway {
             text(message.vehicle, "not assigned yet"),
             text(message.reference, "-"),
           ]
-        : [text(message.personName, "A Tirvona rider"), text(message.reference, "-")];
+        : [
+            text(message.personName, "A Tirvona rider"),
+            text(message.reference, "-"),
+          ];
     return {
       messaging_product: "whatsapp",
       recipient_type: "individual",
@@ -201,8 +260,14 @@ export class MetaWhatsAppGateway extends WhatsAppGateway {
                 location: {
                   latitude: String(message.location.latitude),
                   longitude: String(message.location.longitude),
-                  name: message.location.name.replace(/\s+/g, " ").trim().slice(0, 100),
-                  address: message.location.address.replace(/\s+/g, " ").trim().slice(0, 200),
+                  name: message.location.name
+                    .replace(/\s+/g, " ")
+                    .trim()
+                    .slice(0, 100),
+                  address: message.location.address
+                    .replace(/\s+/g, " ")
+                    .trim()
+                    .slice(0, 200),
                 },
               },
             ],
@@ -219,7 +284,9 @@ export class MetaWhatsAppGateway extends WhatsAppGateway {
     };
   }
 
-  private templatePayload(message: AuthenticationCodeMessage): Record<string, unknown> {
+  private templatePayload(
+    message: AuthenticationCodeMessage,
+  ): Record<string, unknown> {
     const components: Array<Record<string, unknown>> = [
       { type: "body", parameters: [{ type: "text", text: message.code }] },
     ];

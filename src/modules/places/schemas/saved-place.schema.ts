@@ -10,7 +10,10 @@ export enum SavedPlaceKind {
 }
 
 /** The one-per-rider shortcuts (PUT/DELETE /places/saved/:kind). */
-export const FIXED_SAVED_PLACE_KINDS = [SavedPlaceKind.HOME, SavedPlaceKind.WORK] as const;
+export const FIXED_SAVED_PLACE_KINDS = [
+  SavedPlaceKind.HOME,
+  SavedPlaceKind.WORK,
+] as const;
 export type FixedSavedPlaceKind = (typeof FIXED_SAVED_PLACE_KINDS)[number];
 
 /** The pre-"other" unique (userId, kind) index, dropped on startup (it allowed one place per kind). */
@@ -66,7 +69,13 @@ export class SavedPlace {
 export type SavedPlaceDocument = HydratedDocument<SavedPlace>;
 export const SavedPlaceSchema = SchemaFactory.createForClass(SavedPlace);
 
-SavedPlaceSchema.index({ userId: 1, slot: 1 }, { unique: true, partialFilterExpression: { slot: { $exists: true } } });
-SavedPlaceSchema.index({ userId: 1, labelKey: 1 }, { unique: true, partialFilterExpression: { labelKey: { $exists: true } } });
+SavedPlaceSchema.index(
+  { userId: 1, slot: 1 },
+  { unique: true, partialFilterExpression: { slot: { $exists: true } } },
+);
+SavedPlaceSchema.index(
+  { userId: 1, labelKey: 1 },
+  { unique: true, partialFilterExpression: { labelKey: { $exists: true } } },
+);
 // The rider's list, oldest first.
 SavedPlaceSchema.index({ userId: 1, createdAt: 1 });

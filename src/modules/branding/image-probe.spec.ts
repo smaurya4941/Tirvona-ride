@@ -13,7 +13,22 @@ function pngHeader(width: number, height: number): Buffer {
 }
 
 function jpegHeader(width: number, height: number): Buffer {
-  const app0 = Buffer.from([0xff, 0xe0, 0x00, 0x10, ...Buffer.from("JFIF\0"), 1, 1, 0, 0, 1, 0, 1, 0, 0]);
+  const app0 = Buffer.from([
+    0xff,
+    0xe0,
+    0x00,
+    0x10,
+    ...Buffer.from("JFIF\0"),
+    1,
+    1,
+    0,
+    0,
+    1,
+    0,
+    1,
+    0,
+    0,
+  ]);
   const sof = Buffer.alloc(19);
   sof.writeUInt16BE(0xffc0, 0);
   sof.writeUInt16BE(17, 2);
@@ -35,19 +50,35 @@ function webpVp8xHeader(width: number, height: number): Buffer {
 
 describe("probeImage", () => {
   it("reads PNG dimensions", () => {
-    expect(probeImage(pngHeader(1349, 911))).toEqual({ format: "png", contentType: "image/png", width: 1349, height: 911 });
+    expect(probeImage(pngHeader(1349, 911))).toEqual({
+      format: "png",
+      contentType: "image/png",
+      width: 1349,
+      height: 911,
+    });
   });
 
   it("reads JPEG dimensions from the start-of-frame segment", () => {
-    expect(probeImage(jpegHeader(1080, 2340))).toMatchObject({ format: "jpeg", width: 1080, height: 2340 });
+    expect(probeImage(jpegHeader(1080, 2340))).toMatchObject({
+      format: "jpeg",
+      width: 1080,
+      height: 2340,
+    });
   });
 
   it("reads extended WEBP dimensions", () => {
-    expect(probeImage(webpVp8xHeader(854, 1842))).toMatchObject({ format: "webp", contentType: "image/webp", width: 854, height: 1842 });
+    expect(probeImage(webpVp8xHeader(854, 1842))).toMatchObject({
+      format: "webp",
+      contentType: "image/webp",
+      width: 854,
+      height: 1842,
+    });
   });
 
   it("rejects anything else, whatever it claims to be", () => {
-    expect(probeImage(Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>"))).toBeNull();
+    expect(
+      probeImage(Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>")),
+    ).toBeNull();
     expect(probeImage(Buffer.from("%PDF-1.7 ..."))).toBeNull();
     expect(probeImage(Buffer.alloc(0))).toBeNull();
     expect(probeImage(pngHeader(0, 10))).toBeNull();
@@ -56,16 +87,60 @@ describe("probeImage", () => {
 
 describe("brandAssetProblem", () => {
   it("accepts a landscape logo and a portrait splash", () => {
-    expect(brandAssetProblem(BrandAssetKind.LOGO, 200_000, probeImage(pngHeader(1349, 911)))).toBeNull();
-    expect(brandAssetProblem(BrandAssetKind.SPLASH, 1_500_000, probeImage(pngHeader(1080, 2340)))).toBeNull();
+    expect(
+      brandAssetProblem(
+        BrandAssetKind.LOGO,
+        200_000,
+        probeImage(pngHeader(1349, 911)),
+      ),
+    ).toBeNull();
+    expect(
+      brandAssetProblem(
+        BrandAssetKind.SPLASH,
+        1_500_000,
+        probeImage(pngHeader(1080, 2340)),
+      ),
+    ).toBeNull();
   });
 
   it("explains what is wrong", () => {
-    expect(brandAssetProblem(BrandAssetKind.LOGO, 10, null)).toMatch(/PNG, JPEG or WEBP/);
-    expect(brandAssetProblem(BrandAssetKind.LOGO, 2 * 1024 * 1024, probeImage(pngHeader(1000, 600)))).toMatch(/at most 1 MB/);
-    expect(brandAssetProblem(BrandAssetKind.LOGO, 10, probeImage(pngHeader(200, 100)))).toMatch(/at least 400/);
-    expect(brandAssetProblem(BrandAssetKind.LOGO, 10, probeImage(pngHeader(400, 900)))).toMatch(/landscape or square/);
-    expect(brandAssetProblem(BrandAssetKind.SPLASH, 10, probeImage(pngHeader(1920, 1080)))).toMatch(/at least 720 × 1280/);
-    expect(brandAssetProblem(BrandAssetKind.SPLASH, 10, probeImage(pngHeader(1280, 1400)))).toMatch(/portrait/);
+    expect(brandAssetProblem(BrandAssetKind.LOGO, 10, null)).toMatch(
+      /PNG, JPEG or WEBP/,
+    );
+    expect(
+      brandAssetProblem(
+        BrandAssetKind.LOGO,
+        2 * 1024 * 1024,
+        probeImage(pngHeader(1000, 600)),
+      ),
+    ).toMatch(/at most 1 MB/);
+    expect(
+      brandAssetProblem(
+        BrandAssetKind.LOGO,
+        10,
+        probeImage(pngHeader(200, 100)),
+      ),
+    ).toMatch(/at least 400/);
+    expect(
+      brandAssetProblem(
+        BrandAssetKind.LOGO,
+        10,
+        probeImage(pngHeader(400, 900)),
+      ),
+    ).toMatch(/landscape or square/);
+    expect(
+      brandAssetProblem(
+        BrandAssetKind.SPLASH,
+        10,
+        probeImage(pngHeader(1920, 1080)),
+      ),
+    ).toMatch(/at least 720 × 1280/);
+    expect(
+      brandAssetProblem(
+        BrandAssetKind.SPLASH,
+        10,
+        probeImage(pngHeader(1280, 1400)),
+      ),
+    ).toMatch(/portrait/);
   });
 });

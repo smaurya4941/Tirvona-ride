@@ -20,15 +20,27 @@ export const OPEN_SOS_STATUSES: readonly SosStatus[] = [
  * that settles everything can go TRIGGERED → RESOLVED) but never backward,
  * and a closed incident stays closed — history is retained as-is.
  */
-export const SOS_TRANSITIONS: Readonly<Record<SosStatus, readonly SosStatus[]>> = {
-  [SosStatus.TRIGGERED]: [SosStatus.ACKNOWLEDGED, SosStatus.IN_PROGRESS, SosStatus.RESOLVED, SosStatus.CANCELLED],
-  [SosStatus.ACKNOWLEDGED]: [SosStatus.IN_PROGRESS, SosStatus.RESOLVED, SosStatus.CANCELLED],
+export const SOS_TRANSITIONS: Readonly<
+  Record<SosStatus, readonly SosStatus[]>
+> = {
+  [SosStatus.TRIGGERED]: [
+    SosStatus.ACKNOWLEDGED,
+    SosStatus.IN_PROGRESS,
+    SosStatus.RESOLVED,
+    SosStatus.CANCELLED,
+  ],
+  [SosStatus.ACKNOWLEDGED]: [
+    SosStatus.IN_PROGRESS,
+    SosStatus.RESOLVED,
+    SosStatus.CANCELLED,
+  ],
   [SosStatus.IN_PROGRESS]: [SosStatus.RESOLVED, SosStatus.CANCELLED],
   [SosStatus.RESOLVED]: [],
   [SosStatus.CANCELLED]: [],
 };
 
-export const canTransitionSos = (from: SosStatus, to: SosStatus): boolean => SOS_TRANSITIONS[from].includes(to);
+export const canTransitionSos = (from: SosStatus, to: SosStatus): boolean =>
+  SOS_TRANSITIONS[from].includes(to);
 
 export enum SosLocationSource {
   /** GPS fix sent by the phone that raised the alert. */
@@ -63,7 +75,10 @@ export function sosAllowed(
     case RideStatus.COMPLETED:
     case RideStatus.CANCELLED: {
       const endedAt = ride.completedAt ?? ride.cancelledAt;
-      return Boolean(endedAt) && now.getTime() - endedAt!.getTime() <= graceMinutes * 60_000;
+      return (
+        Boolean(endedAt) &&
+        now.getTime() - endedAt!.getTime() <= graceMinutes * 60_000
+      );
     }
     default:
       return false;

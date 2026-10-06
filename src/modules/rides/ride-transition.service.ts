@@ -30,8 +30,14 @@ export interface TransitionCommand {
   metadata?: Record<string, unknown>;
 }
 
-const toObjectId = (id?: Types.ObjectId | string): Types.ObjectId | undefined =>
-  id === undefined ? undefined : typeof id === "string" ? new Types.ObjectId(id) : id;
+const toObjectId = (
+  id?: Types.ObjectId | string,
+): Types.ObjectId | undefined =>
+  id === undefined
+    ? undefined
+    : typeof id === "string"
+      ? new Types.ObjectId(id)
+      : id;
 
 /**
  * The single place a ride's status is written.
@@ -61,10 +67,16 @@ export class RideTransitionService {
     assertTransition(command.from, command.to);
 
     const update: Record<string, unknown> = {
-      $set: { ...command.set, status: command.to, isActive: !isTerminal(command.to) },
+      $set: {
+        ...command.set,
+        status: command.to,
+        isActive: !isTerminal(command.to),
+      },
     };
     if (command.unset?.length)
-      update.$unset = Object.fromEntries(command.unset.map((path) => [path, 1]));
+      update.$unset = Object.fromEntries(
+        command.unset.map((path) => [path, 1]),
+      );
     if (command.addToSet) update.$addToSet = command.addToSet;
     update.$inc = { ...command.inc, stateVersion: 1 };
 
@@ -127,6 +139,9 @@ export class RideTransitionService {
   }
 
   async history(rideId: Types.ObjectId): Promise<RideStatusHistoryDocument[]> {
-    return this.historyModel.find({ rideId }).sort({ createdAt: 1, _id: 1 }).exec();
+    return this.historyModel
+      .find({ rideId })
+      .sort({ createdAt: 1, _id: 1 })
+      .exec();
   }
 }

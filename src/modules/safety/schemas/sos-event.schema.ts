@@ -41,7 +41,8 @@ export class SosContactSnapshot {
   @Prop({ default: false })
   isPrimary!: boolean;
 }
-const SosContactSnapshotSchema = SchemaFactory.createForClass(SosContactSnapshot);
+const SosContactSnapshotSchema =
+  SchemaFactory.createForClass(SosContactSnapshot);
 
 /** One WhatsApp message to an emergency contact: what was sent and whether Meta accepted it. */
 @Schema({ _id: false })
@@ -157,7 +158,11 @@ export class SosEvent {
    * failed, NOT_SENT when there was nobody to message (or messaging is off).
    * Per-contact detail is in `contactAlerts`.
    */
-  @Prop({ required: true, default: "NOT_SENT", enum: ["NOT_SENT", "SENT", "FAILED"] })
+  @Prop({
+    required: true,
+    default: "NOT_SENT",
+    enum: ["NOT_SENT", "SENT", "FAILED"],
+  })
   contactsNotification!: "NOT_SENT" | "SENT" | "FAILED";
 
   /** Every WhatsApp message sent to the contacts for this incident (newest last, capped). */
@@ -212,5 +217,9 @@ SosEventSchema.index({ createdAt: -1 });
 // Repeated presses while an alert is open update it instead of opening another.
 SosEventSchema.index(
   { rideId: 1, userId: 1 },
-  { unique: true, partialFilterExpression: { isOpen: true }, name: "uniq_open_sos_per_ride_user" },
+  {
+    unique: true,
+    partialFilterExpression: { isOpen: true },
+    name: "uniq_open_sos_per_ride_user",
+  },
 );

@@ -5,7 +5,11 @@ import {
   SubscribeMessage,
   WebSocketGateway,
 } from "@nestjs/websockets";
-import type { OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit } from "@nestjs/websockets";
+import type {
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+  OnGatewayInit,
+} from "@nestjs/websockets";
 import type { Namespace, Socket } from "socket.io";
 import { UserRole } from "../../common/types/user-role.enum";
 import { DriverLocationFixDto } from "../locations/dto/driver-location-fix.dto";
@@ -22,7 +26,12 @@ import { RealtimeService } from "./realtime.service";
 import type { Ack, SocketIdentity } from "./realtime.types";
 import { RideRoomAccessService } from "./ride-room-access.service";
 import { SocketAuthError, SocketAuthService } from "./socket-auth.service";
-import { RideRoomDto, WindowRateLimiter, failure, validatePayload } from "./ws-payload";
+import {
+  RideRoomDto,
+  WindowRateLimiter,
+  failure,
+  validatePayload,
+} from "./ws-payload";
 
 type AppSocket = Socket & { data: SocketIdentity };
 
@@ -39,7 +48,12 @@ const MAX_TIMER_MS = 2_147_483_647;
  * and `ride:{rideId}` (the ride's customer + its accepted driver).
  */
 @WebSocketGateway({ namespace: REALTIME_NAMESPACE })
-export class RealtimeGateway implements OnGatewayInit<Namespace>, OnGatewayConnection<AppSocket>, OnGatewayDisconnect<AppSocket> {
+export class RealtimeGateway
+  implements
+    OnGatewayInit<Namespace>,
+    OnGatewayConnection<AppSocket>,
+    OnGatewayDisconnect<AppSocket>
+{
   private readonly logger = new Logger(RealtimeGateway.name);
   private readonly expiryTimers = new Map<string, NodeJS.Timeout>();
   /** Room joins are cheap but hit MongoDB; 30 per minute per socket is plenty. */
@@ -62,12 +76,22 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnGatewayConne
         })
         .catch((error: unknown) => {
           if (error instanceof SocketAuthError) return next(error);
-          this.logger.error("Socket authentication failed", error instanceof Error ? error.stack : String(error));
-          next(new SocketAuthError(RealtimeErrorCode.INTERNAL_ERROR, "Could not authenticate"));
+          this.logger.error(
+            "Socket authentication failed",
+            error instanceof Error ? error.stack : String(error),
+          );
+          next(
+            new SocketAuthError(
+              RealtimeErrorCode.INTERNAL_ERROR,
+              "Could not authenticate",
+            ),
+          );
         });
     });
     this.realtime.attach(namespace);
-    this.logger.log(`Realtime gateway ready on namespace ${REALTIME_NAMESPACE}`);
+    this.logger.log(
+      `Realtime gateway ready on namespace ${REALTIME_NAMESPACE}`,
+    );
   }
 
   async handleConnection(socket: AppSocket): Promise<void> {
@@ -90,9 +114,14 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnGatewayConne
         recovered: socket.recovered,
         serverTime: new Date().toISOString(),
       });
-      this.logger.debug(`Connected ${identity.role} ${identity.userId} (${socket.id}), rides [${rideIds.join(",")}]`);
+      this.logger.debug(
+        `Connected ${identity.role} ${identity.userId} (${socket.id}), rides [${rideIds.join(",")}]`,
+      );
     } catch (error) {
-      this.logger.error("Socket connection setup failed", error instanceof Error ? error.stack : String(error));
+      this.logger.error(
+        "Socket connection setup failed",
+        error instanceof Error ? error.stack : String(error),
+      );
       socket.disconnect(true);
     }
   }
@@ -105,13 +134,18 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnGatewayConne
     // Deliberately no availability change: a dropped connection is usually a
     // network blip. A driver who never comes back simply goes stale for
     // matching after DRIVER_LOCATION_STALE_SECONDS.
-    this.logger.debug(`Disconnected ${socket.data?.userId ?? "anonymous"} (${socket.id})`);
+    this.logger.debug(
+      `Disconnected ${socket.data?.userId ?? "anonymous"} (${socket.id})`,
+    );
   }
 
   // ── Client messages (all acknowledged) ──────────────────────────────
 
   @SubscribeMessage(ClientMessage.JOIN_RIDE)
-  async joinRide(@ConnectedSocket() socket: AppSocket, @MessageBody() body: unknown): Promise<Ack> {
+  async joinRide(
+    @ConnectedSocket() socket: AppSocket,
+    @MessageBody() body: unknown,
+  ): Promise<Ack> {
     if (!this.joinLimiter.allow(socket.id))
       return failure(RealtimeErrorCode.RATE_LIMITED, "Too many join requests");
     const payload = await validatePayload(RideRoomDto, body);
@@ -121,14 +155,26 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnGatewayConne
     if (!access.allowed)
       return access.reason === "RIDE_NOT_FOUND"
         ? failure(RealtimeErrorCode.RIDE_NOT_FOUND, "Ride not found")
-        : failure(RealtimeErrorCode.RIDE_NOT_ACTIVE, "This ride is no longer live", { status: access.status });
+        : failure(
+            RealtimeErrorCode.RIDE_NOT_ACTIVE,
+            "This ride is no longer live",
+            { status: access.status },
+          );
 
     await socket.join(rideRoom(access.rideId));
-    return { ok: true, rideId: access.rideId, status: access.status, stateVersion: access.stateVersion };
+    return {
+      ok: true,
+      rideId: access.rideId,
+      status: access.status,
+      stateVersion: access.stateVersion,
+    };
   }
 
   @SubscribeMessage(ClientMessage.LEAVE_RIDE)
-  async leaveRide(@ConnectedSocket() socket: AppSocket, @MessageBody() body: unknown): Promise<Ack> {
+  async leaveRide(
+    @ConnectedSocket() socket: AppSocket,
+    @MessageBody() body: unknown,
+  ): Promise<Ack> {
     const payload = await validatePayload(RideRoomDto, body);
     if (!payload.ok) return payload.ack;
     await socket.leave(rideRoom(payload.value.rideId));
@@ -136,10 +182,16 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnGatewayConne
   }
 
   @SubscribeMessage(ClientMessage.DRIVER_LOCATION)
-  async driverLocation(@ConnectedSocket() socket: AppSocket, @MessageBody() body: unknown): Promise<Ack> {
+  async driverLocation(
+    @ConnectedSocket() socket: AppSocket,
+    @MessageBody() body: unknown,
+  ): Promise<Ack> {
     const identity = socket.data;
     if (identity.role !== UserRole.DRIVER || !identity.driverId)
-      return failure(RealtimeErrorCode.AUTH_FORBIDDEN, "Only drivers can share a location");
+      return failure(
+        RealtimeErrorCode.AUTH_FORBIDDEN,
+        "Only drivers can share a location",
+      );
 
     const payload = await validatePayload(DriverLocationFixDto, body);
     if (!payload.ok) return payload.ack;
@@ -149,7 +201,11 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnGatewayConne
         enforceRateLimit: true,
         exceptSocketId: socket.id,
       });
-      if (!result.accepted) return failure(result.reason, LOCATION_REJECTION_MESSAGES[result.reason]);
+      if (!result.accepted)
+        return failure(
+          result.reason,
+          LOCATION_REJECTION_MESSAGES[result.reason],
+        );
       return {
         ok: true,
         persisted: result.persisted,
@@ -157,8 +213,14 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnGatewayConne
         rideStatus: result.relay?.status ?? null,
       };
     } catch (error) {
-      this.logger.error("Driver location failed", error instanceof Error ? error.stack : String(error));
-      return failure(RealtimeErrorCode.INTERNAL_ERROR, "Location could not be processed");
+      this.logger.error(
+        "Driver location failed",
+        error instanceof Error ? error.stack : String(error),
+      );
+      return failure(
+        RealtimeErrorCode.INTERNAL_ERROR,
+        "Location could not be processed",
+      );
     }
   }
 
@@ -176,8 +238,11 @@ export class RealtimeGateway implements OnGatewayInit<Namespace>, OnGatewayConne
     const timer = setTimeout(
       () => {
         this.expiryTimers.delete(socket.id);
-        if (socket.data.tokenExpiresAt > Date.now()) return this.armExpiry(socket);
-        socket.emit(SessionEvent.EXPIRED, { reason: RealtimeErrorCode.AUTH_TOKEN_EXPIRED });
+        if (socket.data.tokenExpiresAt > Date.now())
+          return this.armExpiry(socket);
+        socket.emit(SessionEvent.EXPIRED, {
+          reason: RealtimeErrorCode.AUTH_TOKEN_EXPIRED,
+        });
         socket.disconnect(true);
       },
       Math.min(Math.max(remaining, 0), MAX_TIMER_MS),

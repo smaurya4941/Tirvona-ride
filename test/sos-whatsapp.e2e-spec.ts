@@ -10,7 +10,10 @@ import type { Connection } from "mongoose";
 import { Types } from "mongoose";
 import request from "supertest";
 import type { App } from "supertest/types";
-import { WhatsAppDeliveryError, WhatsAppGateway } from "../src/modules/whatsapp/whatsapp.gateway";
+import {
+  WhatsAppDeliveryError,
+  WhatsAppGateway,
+} from "../src/modules/whatsapp/whatsapp.gateway";
 import type {
   AuthenticationCodeMessage,
   SosAlertMessage,
@@ -29,10 +32,15 @@ class FakeWhatsApp extends WhatsAppGateway {
   readonly provider = "fake";
   readonly sos: SosAlertMessage[] = [];
   /** Per number: fail this many times (then succeed) or forever with a reason. */
-  readonly failures = new Map<string, { times: number; reason: WhatsAppFailureReason }>();
+  readonly failures = new Map<
+    string,
+    { times: number; reason: WhatsAppFailureReason }
+  >();
   readonly attempts = new Map<string, number>();
 
-  async sendAuthenticationCode(_message: AuthenticationCodeMessage): Promise<WhatsAppSendResult> {
+  async sendAuthenticationCode(
+    _message: AuthenticationCodeMessage,
+  ): Promise<WhatsAppSendResult> {
     return { messageId: "wamid.otp" };
   }
 
@@ -80,12 +88,23 @@ describe("SOS → WhatsApp emergency contacts (e2e)", () => {
   const as = (who: Who) => ({ Authorization: `Bearer ${tokens[who]}` });
   const press = (who: Who = "customer", body: Record<string, unknown> = {}) =>
     api().post(`/api/v1/rides/${rideId}/sos`).set(as(who)).send(body);
-  const sosDoc = (id: string) => db.collection("sos_events").findOne({ _id: new Types.ObjectId(id) });
-  const addContact = (name: string, phone: string, extra: Record<string, unknown> = {}) =>
-    api().post("/api/v1/users/me/emergency-contacts").set(as("customer")).send({ name, phone, ...extra }).expect(201);
+  const sosDoc = (id: string) =>
+    db.collection("sos_events").findOne({ _id: new Types.ObjectId(id) });
+  const addContact = (
+    name: string,
+    phone: string,
+    extra: Record<string, unknown> = {},
+  ) =>
+    api()
+      .post("/api/v1/users/me/emergency-contacts")
+      .set(as("customer"))
+      .send({ name, phone, ...extra })
+      .expect(201);
 
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create({ instance: { launchTimeout: 60_000 } });
+    mongo = await MongoMemoryServer.create({
+      instance: { launchTimeout: 60_000 },
+    });
     workDir = await mkdtemp(join(tmpdir(), "tirvona-ride-sos-wa-"));
     process.chdir(workDir);
     Object.assign(process.env, {
@@ -123,12 +142,18 @@ describe("SOS → WhatsApp emergency contacts (e2e)", () => {
 
     const { UsersService } = await import("../src/modules/users/users.service");
     const { UserRole } = await import("../src/common/types/user-role.enum");
-    const { SosContactAlertService } = await import("../src/modules/safety/sos-contact-alert.service");
+    const { SosContactAlertService } =
+      await import("../src/modules/safety/sos-contact-alert.service");
     const users = app.get(UsersService, { strict: false });
     const alerts = app.get(SosContactAlertService, { strict: false });
     drain = () => alerts.drain();
 
-    const roles = { admin: UserRole.ADMIN, customer: UserRole.CUSTOMER, driver: UserRole.DRIVER, stranger: UserRole.CUSTOMER };
+    const roles = {
+      admin: UserRole.ADMIN,
+      customer: UserRole.CUSTOMER,
+      driver: UserRole.DRIVER,
+      stranger: UserRole.CUSTOMER,
+    };
     for (const who of Object.keys(PHONES) as Who[]) {
       const user = await users.create({
         phone: PHONES[who],
@@ -140,7 +165,10 @@ describe("SOS → WhatsApp emergency contacts (e2e)", () => {
       userIds[who] = user._id.toString();
     }
     for (const who of Object.keys(PHONES) as Who[]) {
-      const response = await api().post("/api/v1/auth/login").send({ phone: PHONES[who], password: PASSWORD }).expect(200);
+      const response = await api()
+        .post("/api/v1/auth/login")
+        .send({ phone: PHONES[who], password: PASSWORD })
+        .expect(200);
       tokens[who] = response.body.data.accessToken as string;
     }
 
@@ -163,9 +191,23 @@ describe("SOS → WhatsApp emergency contacts (e2e)", () => {
       rideType: "CAB",
       status: "RIDE_STARTED",
       isActive: true,
-      pickup: { address: "Sector 62, Noida", latitude: 28.6208, longitude: 77.3639 },
-      destination: { address: "Noida Electronic City", latitude: 28.6273, longitude: 77.3721 },
-      vehicle: { vehicleType: "CAB", registrationNumber: "UP16AB1234", make: "Maruti", model: "Dzire", color: "White" },
+      pickup: {
+        address: "Sector 62, Noida",
+        latitude: 28.6208,
+        longitude: 77.3639,
+      },
+      destination: {
+        address: "Noida Electronic City",
+        latitude: 28.6273,
+        longitude: 77.3721,
+      },
+      vehicle: {
+        vehicleType: "CAB",
+        registrationNumber: "UP16AB1234",
+        make: "Maruti",
+        model: "Dzire",
+        color: "White",
+      },
       requestedAt: new Date(),
       startedAt: new Date(),
     });
@@ -181,14 +223,24 @@ describe("SOS → WhatsApp emergency contacts (e2e)", () => {
 
   describe("without emergency contacts", () => {
     it("still raises the SOS and sends nothing", async () => {
-      const result = (await press("customer", { latitude: 28.62, longitude: 77.365 }).expect(201)).body.data;
+      const result = (
+        await press("customer", { latitude: 28.62, longitude: 77.365 }).expect(
+          201,
+        )
+      ).body.data;
       expect(result.created).toBe(true);
       expect(result.sos.contacts).toEqual([]);
       await drain();
       expect(whatsapp.sos).toHaveLength(0);
-      expect((await sosDoc(result.sos.id))?.contactsNotification).toBe("NOT_SENT");
+      expect((await sosDoc(result.sos.id))?.contactsNotification).toBe(
+        "NOT_SENT",
+      );
       // Close it so the next incident starts clean.
-      await api().patch(`/api/v1/admin/sos/${result.sos.id}`).set(as("admin")).send({ status: "CANCELLED", note: "test" }).expect(200);
+      await api()
+        .patch(`/api/v1/admin/sos/${result.sos.id}`)
+        .set(as("admin"))
+        .send({ status: "CANCELLED", note: "test" })
+        .expect(200);
     });
   });
 
@@ -196,10 +248,19 @@ describe("SOS → WhatsApp emergency contacts (e2e)", () => {
     let sosId: string;
 
     it("messages every emergency contact with the location pin and a live link", async () => {
-      await addContact("Kushal Pandey", CONTACT_A, { relationship: "Friend", isPrimary: true });
+      await addContact("Kushal Pandey", CONTACT_A, {
+        relationship: "Friend",
+        isPrimary: true,
+      });
       await addContact("Meera Verma", CONTACT_B, { relationship: "Sister" });
 
-      const result = (await press("customer", { latitude: 28.6215, longitude: 77.3652, address: "Sushil Marg, Sector 62" }).expect(201)).body.data;
+      const result = (
+        await press("customer", {
+          latitude: 28.6215,
+          longitude: 77.3652,
+          address: "Sushil Marg, Sector 62",
+        }).expect(201)
+      ).body.data;
       sosId = result.sos.id;
       // The press itself does not wait for WhatsApp.
       await drain();
@@ -214,16 +275,27 @@ describe("SOS → WhatsApp emergency contacts (e2e)", () => {
         rideCode: "TRSOSWA001",
         vehicle: "UP16AB1234 · White Maruti Dzire",
         reference: result.sos.sosCode,
-        location: { latitude: 28.6215, longitude: 77.3652, name: "Asha's location", address: "Sushil Marg, Sector 62" },
+        location: {
+          latitude: 28.6215,
+          longitude: 77.3652,
+          name: "Asha's location",
+          address: "Sushil Marg, Sector 62",
+        },
       });
-      expect(message.trackingUrl).toBe(`https://track.tirvona.test/s/${message.trackingToken}`);
+      expect(message.trackingUrl).toBe(
+        `https://track.tirvona.test/s/${message.trackingToken}`,
+      );
       // Both contacts get the same incident link.
-      expect(whatsapp.to(CONTACT_B)[0].trackingToken).toBe(message.trackingToken);
+      expect(whatsapp.to(CONTACT_B)[0].trackingToken).toBe(
+        message.trackingToken,
+      );
     });
 
     it("the link in the message is a working live view of the ride", async () => {
       const token = whatsapp.to(CONTACT_A)[0].trackingToken;
-      const view = (await api().get(`/api/v1/shared-rides/${token}`).expect(200)).body.data;
+      const view = (
+        await api().get(`/api/v1/shared-rides/${token}`).expect(200)
+      ).body.data;
       expect(view).toMatchObject({ isLive: true, status: "RIDE_IN_PROGRESS" });
       expect(view.pickup.address).toBe("Sector 62, Noida");
     });
@@ -232,10 +304,24 @@ describe("SOS → WhatsApp emergency contacts (e2e)", () => {
       const doc = await sosDoc(sosId);
       expect(doc?.contactsNotification).toBe("SENT");
       expect(doc?.contactAlerts).toHaveLength(2);
-      expect(doc?.contactAlerts[0]).toMatchObject({ kind: "ALERT", status: "SENT", attempts: 1 });
+      expect(doc?.contactAlerts[0]).toMatchObject({
+        kind: "ALERT",
+        status: "SENT",
+        attempts: 1,
+      });
 
-      const mine = (await api().get(`/api/v1/rides/${rideId}/sos`).set(as("customer")).expect(200)).body.data;
-      expect(mine[0].contacts.map((c: { name: string; status: string }) => [c.name, c.status])).toEqual([
+      const mine = (
+        await api()
+          .get(`/api/v1/rides/${rideId}/sos`)
+          .set(as("customer"))
+          .expect(200)
+      ).body.data;
+      expect(
+        mine[0].contacts.map((c: { name: string; status: string }) => [
+          c.name,
+          c.status,
+        ]),
+      ).toEqual([
         ["Kushal Pandey", "SENT"],
         ["Meera Verma", "SENT"],
       ]);
@@ -244,18 +330,32 @@ describe("SOS → WhatsApp emergency contacts (e2e)", () => {
     });
 
     it("never leaks the link or token through the admin API either, but shows who was reached", async () => {
-      const detail = (await api().get(`/api/v1/admin/sos/${sosId}`).set(as("admin")).expect(200)).body.data;
+      const detail = (
+        await api()
+          .get(`/api/v1/admin/sos/${sosId}`)
+          .set(as("admin"))
+          .expect(200)
+      ).body.data;
       expect(detail.contactsNotification).toBe("SENT");
       expect(detail.trackingActive).toBe(true);
-      expect(detail.contactAlerts.map((a: { name: string; status: string }) => [a.name, a.status])).toEqual([
+      expect(
+        detail.contactAlerts.map((a: { name: string; status: string }) => [
+          a.name,
+          a.status,
+        ]),
+      ).toEqual([
         ["Kushal Pandey", "SENT"],
         ["Meera Verma", "SENT"],
       ]);
-      expect(JSON.stringify(detail)).not.toContain(whatsapp.to(CONTACT_A)[0].trackingToken);
+      expect(JSON.stringify(detail)).not.toContain(
+        whatsapp.to(CONTACT_A)[0].trackingToken,
+      );
     });
 
     it("pressing again soon does not message anyone twice", async () => {
-      await press("customer", { latitude: 28.622, longitude: 77.366 }).expect(201);
+      await press("customer", { latitude: 28.622, longitude: 77.366 }).expect(
+        201,
+      );
       await drain();
       expect(whatsapp.to(CONTACT_A)).toHaveLength(1);
       expect(whatsapp.to(CONTACT_B)).toHaveLength(1);
@@ -264,28 +364,55 @@ describe("SOS → WhatsApp emergency contacts (e2e)", () => {
 
   describe("location updates", () => {
     it("are sent as updates with the newest position, rate limited and capped", async () => {
-      const sosId = (await api().get(`/api/v1/rides/${rideId}/sos`).set(as("customer")).expect(200)).body.data[0].id as string;
+      const sosId = (
+        await api()
+          .get(`/api/v1/rides/${rideId}/sos`)
+          .set(as("customer"))
+          .expect(200)
+      ).body.data[0].id as string;
       const setAge = (minutes: number) =>
         db
           .collection("sos_events")
-          .updateOne({ _id: new Types.ObjectId(sosId) }, { $set: { "contactAlerts.$[].at": new Date(Date.now() - minutes * 60_000) } });
+          .updateOne(
+            { _id: new Types.ObjectId(sosId) },
+            {
+              $set: {
+                "contactAlerts.$[].at": new Date(Date.now() - minutes * 60_000),
+              },
+            },
+          );
 
       await setAge(10);
-      await press("customer", { latitude: 28.6231, longitude: 77.3671 }).expect(201);
+      await press("customer", { latitude: 28.6231, longitude: 77.3671 }).expect(
+        201,
+      );
       await drain();
-      const updates = whatsapp.to(CONTACT_A).filter((message) => message.kind === "UPDATE");
+      const updates = whatsapp
+        .to(CONTACT_A)
+        .filter((message) => message.kind === "UPDATE");
       expect(updates).toHaveLength(1);
-      expect(updates[0].location).toMatchObject({ latitude: 28.6231, longitude: 77.3671 });
-      expect(updates[0].trackingToken).toBe(whatsapp.to(CONTACT_A)[0].trackingToken);
+      expect(updates[0].location).toMatchObject({
+        latitude: 28.6231,
+        longitude: 77.3671,
+      });
+      expect(updates[0].trackingToken).toBe(
+        whatsapp.to(CONTACT_A)[0].trackingToken,
+      );
 
       // Cap of 2 updates per contact (SOS_CONTACT_UPDATE_MAX).
       await setAge(10);
-      await press("customer", { latitude: 28.6241, longitude: 77.3681 }).expect(201);
+      await press("customer", { latitude: 28.6241, longitude: 77.3681 }).expect(
+        201,
+      );
       await drain();
       await setAge(10);
-      await press("customer", { latitude: 28.6251, longitude: 77.3691 }).expect(201);
+      await press("customer", { latitude: 28.6251, longitude: 77.3691 }).expect(
+        201,
+      );
       await drain();
-      expect(whatsapp.to(CONTACT_A).filter((message) => message.kind === "UPDATE")).toHaveLength(2);
+      expect(
+        whatsapp.to(CONTACT_A).filter((message) => message.kind === "UPDATE"),
+      ).toHaveLength(2);
     });
   });
 
@@ -294,17 +421,33 @@ describe("SOS → WhatsApp emergency contacts (e2e)", () => {
 
     beforeAll(async () => {
       // A fresh incident with two different problems: one contact is flaky, one is not on WhatsApp.
-      const open = (await api().get(`/api/v1/rides/${rideId}/sos`).set(as("customer")).expect(200)).body.data[0];
-      await api().patch(`/api/v1/admin/sos/${open.id}`).set(as("admin")).send({ status: "RESOLVED", note: "done" }).expect(200);
+      const open = (
+        await api()
+          .get(`/api/v1/rides/${rideId}/sos`)
+          .set(as("customer"))
+          .expect(200)
+      ).body.data[0];
+      await api()
+        .patch(`/api/v1/admin/sos/${open.id}`)
+        .set(as("admin"))
+        .send({ status: "RESOLVED", note: "done" })
+        .expect(200);
       await addContact("Rohit", CONTACT_C);
       whatsapp.failures.set(CONTACT_B, { times: 2, reason: "UNAVAILABLE" });
-      whatsapp.failures.set(CONTACT_C, { times: 99, reason: "RECIPIENT_UNAVAILABLE" });
+      whatsapp.failures.set(CONTACT_C, {
+        times: 99,
+        reason: "RECIPIENT_UNAVAILABLE",
+      });
       whatsapp.sos.length = 0;
       whatsapp.attempts.clear();
     });
 
     it("retries a transient failure, gives up at once on a number that is not on WhatsApp, and still raises the SOS", async () => {
-      const result = (await press("customer", { latitude: 28.63, longitude: 77.37 }).expect(201)).body.data;
+      const result = (
+        await press("customer", { latitude: 28.63, longitude: 77.37 }).expect(
+          201,
+        )
+      ).body.data;
       sosId = result.sos.id;
       await drain();
 
@@ -315,70 +458,163 @@ describe("SOS → WhatsApp emergency contacts (e2e)", () => {
 
       const doc = await sosDoc(sosId);
       expect(doc?.contactsNotification).toBe("SENT");
-      const byPhone = Object.fromEntries(((doc?.contactAlerts ?? []) as Array<{ phone: string }>).map((entry) => [entry.phone, entry]));
+      const byPhone = Object.fromEntries(
+        ((doc?.contactAlerts ?? []) as Array<{ phone: string }>).map(
+          (entry) => [entry.phone, entry],
+        ),
+      );
       expect(byPhone[CONTACT_B]).toMatchObject({ status: "SENT", attempts: 3 });
-      expect(byPhone[CONTACT_C]).toMatchObject({ status: "FAILED", failure: expect.stringContaining("not on WhatsApp") });
+      expect(byPhone[CONTACT_C]).toMatchObject({
+        status: "FAILED",
+        failure: expect.stringContaining("not on WhatsApp"),
+      });
 
-      const mine = (await api().get(`/api/v1/rides/${rideId}/sos`).set(as("customer")).expect(200)).body.data;
-      expect(mine[0].contacts.map((c: { name: string; status: string }) => c.status)).toEqual(["SENT", "SENT", "FAILED"]);
+      const mine = (
+        await api()
+          .get(`/api/v1/rides/${rideId}/sos`)
+          .set(as("customer"))
+          .expect(200)
+      ).body.data;
+      expect(
+        mine[0].contacts.map((c: { name: string; status: string }) => c.status),
+      ).toEqual(["SENT", "SENT", "FAILED"]);
     });
 
     it("the safety team can try the failed contact again", async () => {
       whatsapp.failures.delete(CONTACT_C);
-      const detail = (await api().post(`/api/v1/admin/sos/${sosId}/notify-contacts`).set(as("admin")).expect(200)).body.data;
-      expect(whatsapp.to(CONTACT_C).filter((message) => message.kind === "ALERT")).toHaveLength(1);
-      expect(detail.contactAlerts.filter((a: { name: string; status: string }) => a.name === "Rohit").map((a: { status: string }) => a.status)).toEqual([
-        "FAILED",
-        "SENT",
-      ]);
+      const detail = (
+        await api()
+          .post(`/api/v1/admin/sos/${sosId}/notify-contacts`)
+          .set(as("admin"))
+          .expect(200)
+      ).body.data;
+      expect(
+        whatsapp.to(CONTACT_C).filter((message) => message.kind === "ALERT"),
+      ).toHaveLength(1);
+      expect(
+        detail.contactAlerts
+          .filter((a: { name: string; status: string }) => a.name === "Rohit")
+          .map((a: { status: string }) => a.status),
+      ).toEqual(["FAILED", "SENT"]);
       // Nobody who already has the alert is messaged again by a resend.
-      expect(whatsapp.to(CONTACT_A).filter((message) => message.kind === "ALERT")).toHaveLength(1);
+      expect(
+        whatsapp.to(CONTACT_A).filter((message) => message.kind === "ALERT"),
+      ).toHaveLength(1);
     });
 
     it("is FAILED on the incident when no contact could be reached", async () => {
-      const open = (await api().get(`/api/v1/rides/${rideId}/sos`).set(as("customer")).expect(200)).body.data[0];
-      await api().patch(`/api/v1/admin/sos/${open.id}`).set(as("admin")).send({ status: "RESOLVED", note: "done" }).expect(200);
-      for (const phone of [CONTACT_A, CONTACT_B, CONTACT_C]) whatsapp.failures.set(phone, { times: 99, reason: "MISCONFIGURED" });
-      const result = (await press("customer", { latitude: 28.64, longitude: 77.38 }).expect(201)).body.data;
+      const open = (
+        await api()
+          .get(`/api/v1/rides/${rideId}/sos`)
+          .set(as("customer"))
+          .expect(200)
+      ).body.data[0];
+      await api()
+        .patch(`/api/v1/admin/sos/${open.id}`)
+        .set(as("admin"))
+        .send({ status: "RESOLVED", note: "done" })
+        .expect(200);
+      for (const phone of [CONTACT_A, CONTACT_B, CONTACT_C])
+        whatsapp.failures.set(phone, { times: 99, reason: "MISCONFIGURED" });
+      const result = (
+        await press("customer", { latitude: 28.64, longitude: 77.38 }).expect(
+          201,
+        )
+      ).body.data;
       await drain();
       expect(result.created).toBe(true);
-      expect((await sosDoc(result.sos.id))?.contactsNotification).toBe("FAILED");
+      expect((await sosDoc(result.sos.id))?.contactsNotification).toBe(
+        "FAILED",
+      );
       // A broken setup is not retried within the request.
       expect(whatsapp.attempts.get(CONTACT_A)).toBeGreaterThanOrEqual(1);
-      for (const phone of [CONTACT_A, CONTACT_B, CONTACT_C]) whatsapp.failures.delete(phone);
+      for (const phone of [CONTACT_A, CONTACT_B, CONTACT_C])
+        whatsapp.failures.delete(phone);
     });
   });
 
   describe("the live link", () => {
     it("is not ended by the rider stopping their own sharing", async () => {
-      const open = (await api().get(`/api/v1/rides/${rideId}/sos`).set(as("customer")).expect(200)).body.data[0];
+      const open = (
+        await api()
+          .get(`/api/v1/rides/${rideId}/sos`)
+          .set(as("customer"))
+          .expect(200)
+      ).body.data[0];
       const doc = await sosDoc(open.id);
-      const token = (await db.collection("sos_events").findOne({ _id: new Types.ObjectId(open.id) }, { projection: { trackingToken: 1 } }))?.trackingToken as string;
+      const token = (
+        await db
+          .collection("sos_events")
+          .findOne(
+            { _id: new Types.ObjectId(open.id) },
+            { projection: { trackingToken: 1 } },
+          )
+      )?.trackingToken as string;
       expect(doc?.isOpen).toBe(true);
       expect(token).toBeTruthy();
 
       // The rider makes a link and then stops sharing: the incident's link must survive.
-      await api().post(`/api/v1/rides/${rideId}/share`).set(as("customer")).expect(201);
-      await api().delete(`/api/v1/rides/${rideId}/share`).set(as("customer")).expect(200);
+      await api()
+        .post(`/api/v1/rides/${rideId}/share`)
+        .set(as("customer"))
+        .expect(201);
+      await api()
+        .delete(`/api/v1/rides/${rideId}/share`)
+        .set(as("customer"))
+        .expect(200);
       await api().get(`/api/v1/shared-rides/${token}`).expect(200);
     });
 
     it("stops working when the safety team resolves the incident", async () => {
-      const open = (await api().get(`/api/v1/rides/${rideId}/sos`).set(as("customer")).expect(200)).body.data[0];
-      const token = (await db.collection("sos_events").findOne({ _id: new Types.ObjectId(open.id) }, { projection: { trackingToken: 1 } }))?.trackingToken as string;
-      await api().patch(`/api/v1/admin/sos/${open.id}`).set(as("admin")).send({ status: "RESOLVED", note: "Rider safe" }).expect(200);
+      const open = (
+        await api()
+          .get(`/api/v1/rides/${rideId}/sos`)
+          .set(as("customer"))
+          .expect(200)
+      ).body.data[0];
+      const token = (
+        await db
+          .collection("sos_events")
+          .findOne(
+            { _id: new Types.ObjectId(open.id) },
+            { projection: { trackingToken: 1 } },
+          )
+      )?.trackingToken as string;
+      await api()
+        .patch(`/api/v1/admin/sos/${open.id}`)
+        .set(as("admin"))
+        .send({ status: "RESOLVED", note: "Rider safe" })
+        .expect(200);
       await api().get(`/api/v1/shared-rides/${token}`).expect(404);
-      const detail = (await api().get(`/api/v1/admin/sos/${open.id}`).set(as("admin")).expect(200)).body.data;
+      const detail = (
+        await api()
+          .get(`/api/v1/admin/sos/${open.id}`)
+          .set(as("admin"))
+          .expect(200)
+      ).body.data;
       expect(detail.trackingActive).toBe(false);
     });
   });
 
   describe("access", () => {
     it("only the safety team can resend, and a closed incident cannot be", async () => {
-      const closed = (await api().get(`/api/v1/rides/${rideId}/sos`).set(as("customer")).expect(200)).body.data[0];
-      await api().post(`/api/v1/admin/sos/${closed.id}/notify-contacts`).set(as("customer")).expect(403);
-      await api().post(`/api/v1/admin/sos/${closed.id}/notify-contacts`).set(as("admin")).expect(409);
-      await api().post(`/api/v1/admin/sos/${closed.id}/notify-contacts`).expect(401);
+      const closed = (
+        await api()
+          .get(`/api/v1/rides/${rideId}/sos`)
+          .set(as("customer"))
+          .expect(200)
+      ).body.data[0];
+      await api()
+        .post(`/api/v1/admin/sos/${closed.id}/notify-contacts`)
+        .set(as("customer"))
+        .expect(403);
+      await api()
+        .post(`/api/v1/admin/sos/${closed.id}/notify-contacts`)
+        .set(as("admin"))
+        .expect(409);
+      await api()
+        .post(`/api/v1/admin/sos/${closed.id}/notify-contacts`)
+        .expect(401);
     });
 
     it("a stranger cannot trigger or read SOS on someone else's ride", async () => {

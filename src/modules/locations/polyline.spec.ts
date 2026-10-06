@@ -32,7 +32,12 @@ describe("polyline", () => {
       { from: a, to: b, polyline: road },
       { from: b, to: c },
     ]);
-    expect(decodePolyline(joined!)).toEqual([a, { latitude: 27.55, longitude: 77.62 }, b, c]);
+    expect(decodePolyline(joined!)).toEqual([
+      a,
+      { latitude: 27.55, longitude: 77.62 },
+      b,
+      c,
+    ]);
     expect(joinLegs([{ from: a, to: b }])).toBeUndefined();
   });
 });

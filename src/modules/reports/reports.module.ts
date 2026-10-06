@@ -1,10 +1,24 @@
 import { Module } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
-import { Cancellation, CancellationSchema } from "../cancellations/schemas/cancellation.schemas";
-import { DriverProfile, DriverProfileSchema } from "../drivers/schemas/driver-profile.schema";
-import { DriverEarning, DriverEarningSchema } from "../earnings/schemas/driver-earning.schema";
+import {
+  Cancellation,
+  CancellationSchema,
+} from "../cancellations/schemas/cancellation.schemas";
+import {
+  DriverProfile,
+  DriverProfileSchema,
+} from "../drivers/schemas/driver-profile.schema";
+import {
+  DriverEarning,
+  DriverEarningSchema,
+} from "../earnings/schemas/driver-earning.schema";
 import { Payment, PaymentSchema } from "../payments/schemas/payment.schema";
-import { PromoCode, PromoCodeSchema, PromoRedemption, PromoRedemptionSchema } from "../promotions/schemas/promo-code.schema";
+import {
+  PromoCode,
+  PromoCodeSchema,
+  PromoRedemption,
+  PromoRedemptionSchema,
+} from "../promotions/schemas/promo-code.schema";
 import { Ride, RideSchema } from "../rides/schemas/ride.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
 import { ReportsController } from "./reports.controller";

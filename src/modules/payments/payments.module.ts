@@ -14,9 +14,18 @@ import { RazorpayHttpGateway } from "./razorpay/razorpay-http.gateway";
 import { RazorpayGateway } from "./razorpay/razorpay.gateway";
 import { RefundsService } from "./refunds.service";
 import { Payment, PaymentSchema } from "./schemas/payment.schema";
-import { PaymentReconciliationRun, PaymentReconciliationRunSchema } from "./schemas/payment-reconciliation-run.schema";
-import { PaymentRefund, PaymentRefundSchema } from "./schemas/payment-refund.schema";
-import { PaymentWebhookEvent, PaymentWebhookEventSchema } from "./schemas/payment-webhook-event.schema";
+import {
+  PaymentReconciliationRun,
+  PaymentReconciliationRunSchema,
+} from "./schemas/payment-reconciliation-run.schema";
+import {
+  PaymentRefund,
+  PaymentRefundSchema,
+} from "./schemas/payment-refund.schema";
+import {
+  PaymentWebhookEvent,
+  PaymentWebhookEventSchema,
+} from "./schemas/payment-webhook-event.schema";
 
 // Payments → Rides (ride payment state), Earnings (ledger + clawbacks),
 // Users/Drivers (names). Nothing depends on Payments except Admin.
@@ -28,7 +37,10 @@ import { PaymentWebhookEvent, PaymentWebhookEventSchema } from "./schemas/paymen
       { name: Payment.name, schema: PaymentSchema },
       { name: PaymentWebhookEvent.name, schema: PaymentWebhookEventSchema },
       { name: PaymentRefund.name, schema: PaymentRefundSchema },
-      { name: PaymentReconciliationRun.name, schema: PaymentReconciliationRunSchema },
+      {
+        name: PaymentReconciliationRun.name,
+        schema: PaymentReconciliationRunSchema,
+      },
     ]),
     UsersModule,
     DriversModule,
@@ -45,6 +57,12 @@ import { PaymentWebhookEvent, PaymentWebhookEventSchema } from "./schemas/paymen
     PaymentsReconciler,
     PaymentsAdminService,
   ],
-  exports: [PaymentsService, PaymentsAdminService, PaymentsReconciler, RefundsService, PaymentReconciliationService],
+  exports: [
+    PaymentsService,
+    PaymentsAdminService,
+    PaymentsReconciler,
+    RefundsService,
+    PaymentReconciliationService,
+  ],
 })
 export class PaymentsModule {}

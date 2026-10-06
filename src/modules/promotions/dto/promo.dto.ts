@@ -21,12 +21,15 @@ import { PromoDiscountType, PromoStatus } from "../promo-rules";
 import { PROMO_CODE_PATTERN } from "../schemas/promo-code.schema";
 
 const MONEY = { allowNaN: false, allowInfinity: false, maxDecimalPlaces: 2 };
-const upper = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim().toUpperCase() : value);
+const upper = ({ value }: { value: unknown }) =>
+  typeof value === "string" ? value.trim().toUpperCase() : value;
 
 export class CreatePromoDto {
   @ApiProperty({ example: "BRAJ50" })
   @Transform(upper)
-  @Matches(PROMO_CODE_PATTERN, { message: "code must be 3–20 letters or digits" })
+  @Matches(PROMO_CODE_PATTERN, {
+    message: "code must be 3–20 letters or digits",
+  })
   code!: string;
 
   @ApiProperty({ example: "₹50 off your first ride" })
@@ -64,7 +67,10 @@ export class CreatePromoDto {
   @Max(20_000)
   minRideValue?: number;
 
-  @ApiPropertyOptional({ example: 1000, description: "Total uses; omit for unlimited" })
+  @ApiPropertyOptional({
+    example: 1000,
+    description: "Total uses; omit for unlimited",
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -93,7 +99,10 @@ export class CreatePromoDto {
   @IsEnum(PromoStatus)
   status?: PromoStatus;
 
-  @ApiPropertyOptional({ type: [String], description: "Ride type codes; empty = all" })
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Ride type codes; empty = all",
+  })
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(20)
@@ -219,7 +228,10 @@ export class ListPromosQueryDto {
   @IsEnum(PromoStatus)
   status?: PromoStatus;
 
-  @ApiPropertyOptional({ enum: ["LIVE", "SCHEDULED", "EXPIRED"], description: "Validity window relative to now" })
+  @ApiPropertyOptional({
+    enum: ["LIVE", "SCHEDULED", "EXPIRED"],
+    description: "Validity window relative to now",
+  })
   @IsOptional()
   @IsEnum(["LIVE", "SCHEDULED", "EXPIRED"])
   window?: "LIVE" | "SCHEDULED" | "EXPIRED";

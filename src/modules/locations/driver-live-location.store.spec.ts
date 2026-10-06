@@ -21,7 +21,12 @@ describe("DriverLiveLocationStore", () => {
   it("returns the latest fix only while fresh", () => {
     const store = new DriverLiveLocationStore();
     const receivedAt = new Date(Date.now() - 5_000);
-    store.save("d1", { latitude: 27.5, longitude: 77.6, recordedAt: receivedAt, receivedAt });
+    store.save("d1", {
+      latitude: 27.5,
+      longitude: 77.6,
+      recordedAt: receivedAt,
+      receivedAt,
+    });
     expect(store.latest("d1")?.latitude).toBe(27.5);
     expect(store.latest("d1", 10_000)).toBeDefined();
     expect(store.latest("d1", 1_000)).toBeUndefined();

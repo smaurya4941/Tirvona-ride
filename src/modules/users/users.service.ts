@@ -2,7 +2,11 @@ import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
 import * as argon2 from "argon2";
-import { apiBadRequest, apiConflict, apiNotFound } from "../../common/exceptions/api.exception";
+import {
+  apiBadRequest,
+  apiConflict,
+  apiNotFound,
+} from "../../common/exceptions/api.exception";
 import type { UserRole } from "../../common/types/user-role.enum";
 import { User, UserStatus } from "./schemas/user.schema";
 import type { UserDocument } from "./schemas/user.schema";
@@ -37,7 +41,9 @@ export interface UserSummary {
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectModel(User.name) private readonly userModel: Model<User>) {}
+  constructor(
+    @InjectModel(User.name) private readonly userModel: Model<User>,
+  ) {}
 
   toSummary(user: UserDocument): UserSummary {
     return {
@@ -86,7 +92,10 @@ export class UsersService {
   }
 
   async existsByEmail(email: string): Promise<boolean> {
-    return (await this.userModel.exists({ email: email.trim().toLowerCase() })) !== null;
+    return (
+      (await this.userModel.exists({ email: email.trim().toLowerCase() })) !==
+      null
+    );
   }
 
   async hashPassword(password: string): Promise<string> {
@@ -111,7 +120,9 @@ export class UsersService {
    * the password was hashed when the form was submitted, and the phone is
    * verified from the first moment the user exists.
    */
-  async createVerified(input: Omit<CreateUserInput, "password"> & { passwordHash: string }): Promise<UserDocument> {
+  async createVerified(
+    input: Omit<CreateUserInput, "password"> & { passwordHash: string },
+  ): Promise<UserDocument> {
     return this.userModel.create({
       phone: input.phone,
       email: input.email,
@@ -163,7 +174,10 @@ export class UsersService {
     if (dto.email !== undefined) {
       const email = dto.email ?? undefined;
       if (email !== user.email) {
-        if (email && (await this.userModel.exists({ email, _id: { $ne: user._id } })))
+        if (
+          email &&
+          (await this.userModel.exists({ email, _id: { $ne: user._id } }))
+        )
           throw this.emailTaken();
         user.email = email;
         // A new address has not been proven yet.
@@ -181,7 +195,11 @@ export class UsersService {
   }
 
   /** Sets a new password (already validated against the policy). */
-  async setPassword(userId: string, password: string, options: { markPhoneVerified?: boolean } = {}): Promise<void> {
+  async setPassword(
+    userId: string,
+    password: string,
+    options: { markPhoneVerified?: boolean } = {},
+  ): Promise<void> {
     await this.userModel
       .updateOne(
         { _id: userId },
@@ -196,10 +214,7 @@ export class UsersService {
       .exec();
   }
 
-  async changePassword(
-    userId: string,
-    dto: ChangePasswordDto,
-  ): Promise<void> {
+  async changePassword(userId: string, dto: ChangePasswordDto): Promise<void> {
     const user = await this.userModel
       .findById(userId)
       .select("+passwordHash")
@@ -216,7 +231,10 @@ export class UsersService {
       );
 
     if (await argon2.verify(user.passwordHash!, dto.newPassword))
-      throw apiBadRequest("Choose a password you haven't used for this account.", "PASSWORD_UNCHANGED");
+      throw apiBadRequest(
+        "Choose a password you haven't used for this account.",
+        "PASSWORD_UNCHANGED",
+      );
 
     user.passwordHash = await argon2.hash(dto.newPassword);
     user.passwordChangedAt = new Date();
@@ -224,6 +242,9 @@ export class UsersService {
   }
 
   private emailTaken() {
-    return apiConflict("This email is already used by another account.", "EMAIL_ALREADY_REGISTERED");
+    return apiConflict(
+      "This email is already used by another account.",
+      "EMAIL_ALREADY_REGISTERED",
+    );
   }
 }

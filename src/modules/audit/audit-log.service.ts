@@ -37,14 +37,16 @@ export interface AuditLogQuery {
   action?: string;
 }
 
-const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegex = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 @Injectable()
 export class AuditLogService {
   private readonly logger = new Logger(AuditLogService.name);
 
   constructor(
-    @InjectModel(AdminAuditLog.name) private readonly auditModel: Model<AdminAuditLog>,
+    @InjectModel(AdminAuditLog.name)
+    private readonly auditModel: Model<AdminAuditLog>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
   ) {}
 
@@ -54,7 +56,10 @@ export class AuditLogService {
    */
   async record(entry: AuditEntry): Promise<void> {
     try {
-      await this.auditModel.create({ ...entry, adminId: new Types.ObjectId(entry.adminId) });
+      await this.auditModel.create({
+        ...entry,
+        adminId: new Types.ObjectId(entry.adminId),
+      });
     } catch (error) {
       this.logger.error(
         `Failed to audit ${entry.action} on ${entry.targetType}:${entry.targetId} by ${entry.adminId}`,
@@ -67,7 +72,8 @@ export class AuditLogService {
     const filter: QueryFilter<AdminAuditLog> = {};
     if (query.targetType) filter.targetType = query.targetType;
     if (query.targetId) filter.targetId = query.targetId;
-    if (query.action) filter.action = { $regex: `^${escapeRegex(query.action)}` };
+    if (query.action)
+      filter.action = { $regex: `^${escapeRegex(query.action)}` };
 
     const [rows, total] = await Promise.all([
       this.auditModel
@@ -80,11 +86,22 @@ export class AuditLogService {
       this.auditModel.countDocuments(filter).exec(),
     ]);
     const admins = await this.userModel
-      .find({ _id: { $in: [...new Set(rows.map((row) => row.adminId.toString()))].map((id) => new Types.ObjectId(id)) } })
+      .find({
+        _id: {
+          $in: [...new Set(rows.map((row) => row.adminId.toString()))].map(
+            (id) => new Types.ObjectId(id),
+          ),
+        },
+      })
       .select("firstName lastName")
       .lean()
       .exec();
-    const nameOf = new Map(admins.map((admin) => [admin._id.toString(), [admin.firstName, admin.lastName].filter(Boolean).join(" ")]));
+    const nameOf = new Map(
+      admins.map((admin) => [
+        admin._id.toString(),
+        [admin.firstName, admin.lastName].filter(Boolean).join(" "),
+      ]),
+    );
 
     return {
       items: rows.map((row) => ({

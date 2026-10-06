@@ -31,7 +31,11 @@ export class DriverPayout {
   @Prop({ min: 0, default: 0 })
   deductionPaise!: number;
 
-  @Prop({ type: [SchemaTypes.ObjectId], ref: "DriverEarningAdjustment", default: [] })
+  @Prop({
+    type: [SchemaTypes.ObjectId],
+    ref: "DriverEarningAdjustment",
+    default: [],
+  })
   adjustmentIds!: Types.ObjectId[];
 
   @Prop({ required: true, default: "INR" })

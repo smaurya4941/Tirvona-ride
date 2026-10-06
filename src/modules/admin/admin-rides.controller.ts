@@ -1,4 +1,13 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  Query,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -9,9 +18,15 @@ import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
 import { AuditLogService } from "../audit/audit-log.service";
 import { RidesAdminService } from "../rides/rides-admin.service";
-import type { AdminRideDetail, AdminRideListItem } from "../rides/rides-admin.service";
+import type {
+  AdminRideDetail,
+  AdminRideListItem,
+} from "../rides/rides-admin.service";
 import type { Page } from "../rides/rides.service";
-import { AdminCancelRideDto, AdminListRidesQueryDto } from "./dto/admin-rides.dto";
+import {
+  AdminCancelRideDto,
+  AdminListRidesQueryDto,
+} from "./dto/admin-rides.dto";
 
 @ApiTags("Admin")
 @ApiBearerAuth()
@@ -25,13 +40,19 @@ export class AdminRidesController {
 
   @Get()
   @ApiOperation({ summary: "List rides with filters and pagination" })
-  async list(@Query() query: AdminListRidesQueryDto): Promise<ApiSuccessBody<Page<AdminRideListItem>>> {
+  async list(
+    @Query() query: AdminListRidesQueryDto,
+  ): Promise<ApiSuccessBody<Page<AdminRideListItem>>> {
     return ok(await this.rides.list(query));
   }
 
   @Get(":id")
-  @ApiOperation({ summary: "Ride detail with customer, driver and status history" })
-  async detail(@Param("id", ParseObjectIdPipe) id: string): Promise<ApiSuccessBody<AdminRideDetail>> {
+  @ApiOperation({
+    summary: "Ride detail with customer, driver and status history",
+  })
+  async detail(
+    @Param("id", ParseObjectIdPipe) id: string,
+  ): Promise<ApiSuccessBody<AdminRideDetail>> {
     return ok(await this.rides.detail(id));
   }
 
@@ -43,7 +64,12 @@ export class AdminRidesController {
     @CurrentUser() admin: AuthenticatedUser,
     @Body() dto: AdminCancelRideDto,
   ): Promise<ApiSuccessBody<AdminRideDetail>> {
-    const detail = await this.rides.cancel(id, admin.userId, dto.reason, dto.reasonCode);
+    const detail = await this.rides.cancel(
+      id,
+      admin.userId,
+      dto.reason,
+      dto.reasonCode,
+    );
     await this.audit.record({
       adminId: admin.userId,
       action: "ride.cancel",

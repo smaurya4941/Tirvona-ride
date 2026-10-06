@@ -38,6 +38,7 @@ export class RideStatusHistory {
 }
 
 export type RideStatusHistoryDocument = HydratedDocument<RideStatusHistory>;
-export const RideStatusHistorySchema = SchemaFactory.createForClass(RideStatusHistory);
+export const RideStatusHistorySchema =
+  SchemaFactory.createForClass(RideStatusHistory);
 
 RideStatusHistorySchema.index({ rideId: 1, createdAt: 1 });

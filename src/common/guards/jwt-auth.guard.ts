@@ -39,14 +39,11 @@ export class JwtAuthGuard implements CanActivate {
 
     let payload: JwtAccessPayload;
     try {
-      payload = await this.jwtService.verifyAsync<JwtAccessPayload>(
-        token,
-        {
-          secret: this.config.getOrThrow<string>("jwtAccessSecret"),
-          issuer: this.config.get<string>("jwtIssuer"),
-          audience: this.config.get<string>("jwtAudience"),
-        },
-      );
+      payload = await this.jwtService.verifyAsync<JwtAccessPayload>(token, {
+        secret: this.config.getOrThrow<string>("jwtAccessSecret"),
+        issuer: this.config.get<string>("jwtIssuer"),
+        audience: this.config.get<string>("jwtAudience"),
+      });
     } catch {
       throw apiUnauthorized(
         "Your session has expired. Please sign in again.",

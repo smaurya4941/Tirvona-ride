@@ -36,7 +36,8 @@ export function formatRupees(amount?: number): string {
   return `₹${Number.isInteger(amount) ? amount : amount.toFixed(2)}`;
 }
 
-const shortPlace = (address: string): string => address.split(",")[0]?.trim() || address;
+const shortPlace = (address: string): string =>
+  address.split(",")[0]?.trim() || address;
 
 function draft(
   ride: RideSnapshot,
@@ -74,7 +75,9 @@ export function planRideNotifications(
 ): NotificationDraft[] {
   const { ride, from, to } = event;
   const customer = { userId: ride.customerId, role: UserRole.CUSTOMER };
-  const driver = ride.driverUserId ? { userId: ride.driverUserId, role: UserRole.DRIVER } : undefined;
+  const driver = ride.driverUserId
+    ? { userId: ride.driverUserId, role: UserRole.DRIVER }
+    : undefined;
   const driverName = context.driverName ?? "Your driver";
   const plate = context.vehiclePlate ? ` (${context.vehiclePlate})` : "";
   const key = `${to}:v${ride.stateVersion}`;
@@ -86,79 +89,147 @@ export function planRideNotifications(
       break;
     case RideStatus.DRIVER_ASSIGNED:
       drafts.push(
-        draft(ride, customer, NotificationType.RIDE_DRIVER_ASSIGNED, "Driver found",
-          `${driverName} has been assigned to your ride and is confirming it.`, key),
+        draft(
+          ride,
+          customer,
+          NotificationType.RIDE_DRIVER_ASSIGNED,
+          "Driver found",
+          `${driverName} has been assigned to your ride and is confirming it.`,
+          key,
+        ),
       );
       if (driver)
         drafts.push(
-          draft(ride, driver, NotificationType.RIDE_REQUEST, "New ride request",
+          draft(
+            ride,
+            driver,
+            NotificationType.RIDE_REQUEST,
+            "New ride request",
             ride.circuitName
               ? `${ride.circuitName}: pickup at ${shortPlace(ride.pickupAddress)} · package ${formatRupees(ride.estimatedFare)}. Respond quickly to accept.`
-              : `Pickup at ${shortPlace(ride.pickupAddress)} · ${formatRupees(ride.estimatedFare)}. Respond quickly to accept.`, key),
+              : `Pickup at ${shortPlace(ride.pickupAddress)} · ${formatRupees(ride.estimatedFare)}. Respond quickly to accept.`,
+            key,
+          ),
         );
       break;
     case RideStatus.DRIVER_ACCEPTED:
       drafts.push(
-        draft(ride, customer, NotificationType.RIDE_DRIVER_ACCEPTED, "Driver on the way",
-          `${driverName}${plate} accepted your ride and is heading to ${shortPlace(ride.pickupAddress)}.`, key),
+        draft(
+          ride,
+          customer,
+          NotificationType.RIDE_DRIVER_ACCEPTED,
+          "Driver on the way",
+          `${driverName}${plate} accepted your ride and is heading to ${shortPlace(ride.pickupAddress)}.`,
+          key,
+        ),
       );
       break;
     case RideStatus.DRIVER_ARRIVED:
       drafts.push(
-        draft(ride, customer, NotificationType.RIDE_DRIVER_ARRIVED, "Your driver has arrived",
-          `${driverName}${plate} is at the pickup point. Share your ride OTP to start.`, key),
+        draft(
+          ride,
+          customer,
+          NotificationType.RIDE_DRIVER_ARRIVED,
+          "Your driver has arrived",
+          `${driverName}${plate} is at the pickup point. Share your ride OTP to start.`,
+          key,
+        ),
       );
       break;
     case RideStatus.RIDE_STARTED:
       drafts.push(
-        draft(ride, customer, NotificationType.RIDE_STARTED, "Ride started",
+        draft(
+          ride,
+          customer,
+          NotificationType.RIDE_STARTED,
+          "Ride started",
           ride.circuitName
-          ? `Your ${ride.circuitName} has started. Your included time begins now.`
-          : `Your trip to ${shortPlace(ride.destinationAddress)} has started. Have a peaceful journey.`, key),
+            ? `Your ${ride.circuitName} has started. Your included time begins now.`
+            : `Your trip to ${shortPlace(ride.destinationAddress)} has started. Have a peaceful journey.`,
+          key,
+        ),
       );
       if (driver)
         drafts.push(
-          draft(ride, driver, NotificationType.RIDE_STARTED, "Trip started",
+          draft(
+            ride,
+            driver,
+            NotificationType.RIDE_STARTED,
+            "Trip started",
             ride.circuitName
               ? `${ride.circuitName} started. Take the customer to each stop in order.`
-              : `Drop the customer at ${shortPlace(ride.destinationAddress)}.`, key),
+              : `Drop the customer at ${shortPlace(ride.destinationAddress)}.`,
+            key,
+          ),
         );
       break;
     case RideStatus.COMPLETED:
       drafts.push(
-        draft(ride, customer, NotificationType.RIDE_COMPLETED, "Ride completed",
+        draft(
+          ride,
+          customer,
+          NotificationType.RIDE_COMPLETED,
+          "Ride completed",
           ride.circuitName
-          ? `${ride.circuitName} is complete. Final fare ${formatRupees(ride.finalFare ?? ride.estimatedFare)} — tap to pay.`
-          : `You have arrived. Trip fare ${formatRupees(ride.finalFare ?? ride.estimatedFare)} — tap to pay.`, key),
+            ? `${ride.circuitName} is complete. Final fare ${formatRupees(ride.finalFare ?? ride.estimatedFare)} — tap to pay.`
+            : `You have arrived. Trip fare ${formatRupees(ride.finalFare ?? ride.estimatedFare)} — tap to pay.`,
+          key,
+        ),
       );
       if (driver)
         drafts.push(
-          draft(ride, driver, NotificationType.RIDE_COMPLETED, "Ride completed",
-            `Fare ${formatRupees(ride.finalFare ?? ride.estimatedFare)}. Your earnings update once the customer pays.`, key),
+          draft(
+            ride,
+            driver,
+            NotificationType.RIDE_COMPLETED,
+            "Ride completed",
+            `Fare ${formatRupees(ride.finalFare ?? ride.estimatedFare)}. Your earnings update once the customer pays.`,
+            key,
+          ),
         );
       break;
     case RideStatus.CANCELLED: {
       const by = ride.cancelledBy;
       if (by !== RideActorType.CUSTOMER)
         drafts.push(
-          draft(ride, customer, NotificationType.RIDE_CANCELLED, "Ride cancelled",
+          draft(
+            ride,
+            customer,
+            NotificationType.RIDE_CANCELLED,
+            "Ride cancelled",
             by === RideActorType.DRIVER
               ? "Your driver had to cancel this ride. Please book again."
-              : "Your ride has been cancelled.", key),
+              : "Your ride has been cancelled.",
+            key,
+          ),
         );
       // Includes a driver who was only offered the ride (their request card must go).
       if (driver && by !== RideActorType.DRIVER)
         drafts.push(
-          draft(ride, driver, NotificationType.RIDE_CANCELLED, "Ride cancelled",
-            by === RideActorType.CUSTOMER ? "The customer cancelled the ride." : "This ride has been cancelled.", key),
+          draft(
+            ride,
+            driver,
+            NotificationType.RIDE_CANCELLED,
+            "Ride cancelled",
+            by === RideActorType.CUSTOMER
+              ? "The customer cancelled the ride."
+              : "This ride has been cancelled.",
+            key,
+          ),
         );
       break;
     }
     case RideStatus.NO_DRIVER_AVAILABLE:
       if (from !== undefined)
         drafts.push(
-          draft(ride, customer, NotificationType.RIDE_NO_DRIVER, "No drivers available",
-            "All nearby drivers are busy right now. Please try booking again in a few minutes.", key),
+          draft(
+            ride,
+            customer,
+            NotificationType.RIDE_NO_DRIVER,
+            "No drivers available",
+            "All nearby drivers are busy right now. Please try booking again in a few minutes.",
+            key,
+          ),
         );
       break;
   }
@@ -171,7 +242,10 @@ export function planArrivingNotification(
   etaSeconds: number | undefined,
   context: RideNotificationContext = {},
 ): NotificationDraft {
-  const minutes = etaSeconds === undefined ? undefined : Math.max(1, Math.round(etaSeconds / 60));
+  const minutes =
+    etaSeconds === undefined
+      ? undefined
+      : Math.max(1, Math.round(etaSeconds / 60));
   return draft(
     ride,
     { userId: ride.customerId, role: UserRole.CUSTOMER },
@@ -197,32 +271,62 @@ export function planPaymentNotifications(
   const key = `PAYMENT_${status}:v${ride.stateVersion}`;
   if (status === RidePaymentStatus.SUCCESS && method === "cash") {
     const drafts = [
-      draft(ride, customer, NotificationType.PAYMENT_SUCCESS, "Paying in cash",
-        `Please hand ${money} in cash to your driver for ride ${ride.rideCode}. Tap to rate your driver.`, key),
+      draft(
+        ride,
+        customer,
+        NotificationType.PAYMENT_SUCCESS,
+        "Paying in cash",
+        `Please hand ${money} in cash to your driver for ride ${ride.rideCode}. Tap to rate your driver.`,
+        key,
+      ),
     ];
     if (ride.driverUserId)
       drafts.push(
-        draft(ride, { userId: ride.driverUserId, role: UserRole.DRIVER }, NotificationType.PAYMENT_RECEIVED,
-          "Collect cash", `The customer is paying ${money} in cash for ride ${ride.rideCode}. Please collect it.`, key),
+        draft(
+          ride,
+          { userId: ride.driverUserId, role: UserRole.DRIVER },
+          NotificationType.PAYMENT_RECEIVED,
+          "Collect cash",
+          `The customer is paying ${money} in cash for ride ${ride.rideCode}. Please collect it.`,
+          key,
+        ),
       );
     return drafts;
   }
   if (status === RidePaymentStatus.SUCCESS) {
     const drafts = [
-      draft(ride, customer, NotificationType.PAYMENT_SUCCESS, "Payment successful",
-        `${money} paid for ride ${ride.rideCode}. Tap to rate your driver.`, key),
+      draft(
+        ride,
+        customer,
+        NotificationType.PAYMENT_SUCCESS,
+        "Payment successful",
+        `${money} paid for ride ${ride.rideCode}. Tap to rate your driver.`,
+        key,
+      ),
     ];
     if (ride.driverUserId)
       drafts.push(
-        draft(ride, { userId: ride.driverUserId, role: UserRole.DRIVER }, NotificationType.PAYMENT_RECEIVED,
-          "Payment received", `The customer paid ${money} for ride ${ride.rideCode}. Your earnings are updated.`, key),
+        draft(
+          ride,
+          { userId: ride.driverUserId, role: UserRole.DRIVER },
+          NotificationType.PAYMENT_RECEIVED,
+          "Payment received",
+          `The customer paid ${money} for ride ${ride.rideCode}. Your earnings are updated.`,
+          key,
+        ),
       );
     return drafts;
   }
   if (status === RidePaymentStatus.FAILED)
     return [
-      draft(ride, customer, NotificationType.PAYMENT_FAILED, "Payment failed",
-        `Your payment of ${money} for ride ${ride.rideCode} did not go through. Tap to try again.`, key),
+      draft(
+        ride,
+        customer,
+        NotificationType.PAYMENT_FAILED,
+        "Payment failed",
+        `Your payment of ${money} for ride ${ride.rideCode} did not go through. Tap to try again.`,
+        key,
+      ),
     ];
   return [];
 }
@@ -233,7 +337,9 @@ export function planPaymentNotifications(
  * matter (the customer is told nothing they cannot act on). Refunds of a
  * duplicate capture use the same wording.
  */
-export function planRefundNotifications(event: PaymentRefundUpdatedEvent): NotificationDraft[] {
+export function planRefundNotifications(
+  event: PaymentRefundUpdatedEvent,
+): NotificationDraft[] {
   if (!event.changed) return [];
   const money = formatRupees(event.amount);
   const base = {
@@ -241,7 +347,12 @@ export function planRefundNotifications(event: PaymentRefundUpdatedEvent): Notif
     recipientRole: UserRole.CUSTOMER,
     rideId: event.rideId,
     referenceId: event.paymentId,
-    data: { rideId: event.rideId, rideCode: event.rideCode, paymentId: event.paymentId, refundId: event.refundId },
+    data: {
+      rideId: event.rideId,
+      rideCode: event.rideCode,
+      paymentId: event.paymentId,
+      refundId: event.refundId,
+    },
   };
   if (event.status === "PENDING")
     return [
@@ -266,7 +377,9 @@ export function planRefundNotifications(event: PaymentRefundUpdatedEvent): Notif
   return [];
 }
 
-export function planEarningAdjustedNotification(event: EarningsAdjustedEvent): NotificationDraft | null {
+export function planEarningAdjustedNotification(
+  event: EarningsAdjustedEvent,
+): NotificationDraft | null {
   if (event.amount <= 0) return null;
   return {
     userId: event.driverUserId,
@@ -278,11 +391,14 @@ export function planEarningAdjustedNotification(event: EarningsAdjustedEvent): N
     )} will be deducted from your next payout.`,
     rideId: event.rideId,
     referenceId: event.adjustmentId,
-    data: { rideId: event.rideId, rideCode: event.rideCode, adjustmentId: event.adjustmentId },
+    data: {
+      rideId: event.rideId,
+      rideCode: event.rideCode,
+      adjustmentId: event.adjustmentId,
+    },
     dedupeKey: `adjustment:${event.adjustmentId}`,
   };
 }
-
 
 function circuitDraft(
   ride: RideSnapshot,
@@ -309,28 +425,57 @@ function circuitDraft(
  * dedupe key is the notice itself), for the customer and the driver as
  * their roles need.
  */
-export function planCircuitNotifications(event: CircuitNoticeEvent): NotificationDraft[] {
+export function planCircuitNotifications(
+  event: CircuitNoticeEvent,
+): NotificationDraft[] {
   const { ride } = event;
   const customer = { userId: ride.customerId, role: UserRole.CUSTOMER };
-  const driver = ride.driverUserId ? { userId: ride.driverUserId, role: UserRole.DRIVER } : undefined;
+  const driver = ride.driverUserId
+    ? { userId: ride.driverUserId, role: UserRole.DRIVER }
+    : undefined;
   const name = ride.circuitName ?? "Your circuit";
   const stop = event.stopName ?? "the stop";
   const key = `${event.kind}:${event.stopOrder ?? 0}`;
   const drafts: NotificationDraft[] = [];
-  const both = (type: NotificationType, title: string, customerMessage: string, driverMessage = customerMessage): void => {
-    drafts.push(circuitDraft(ride, customer, type, title, customerMessage, key));
-    if (driver) drafts.push(circuitDraft(ride, driver, type, title, driverMessage, key));
+  const both = (
+    type: NotificationType,
+    title: string,
+    customerMessage: string,
+    driverMessage = customerMessage,
+  ): void => {
+    drafts.push(
+      circuitDraft(ride, customer, type, title, customerMessage, key),
+    );
+    if (driver)
+      drafts.push(circuitDraft(ride, driver, type, title, driverMessage, key));
   };
 
   switch (event.kind) {
     case "STOP_ARRIVED":
-      drafts.push(circuitDraft(ride, customer, NotificationType.CIRCUIT_STOP, `Arrived at ${stop}`, `You have reached ${stop}. Take your time — your included time keeps running.`, key));
+      drafts.push(
+        circuitDraft(
+          ride,
+          customer,
+          NotificationType.CIRCUIT_STOP,
+          `Arrived at ${stop}`,
+          `You have reached ${stop}. Take your time — your included time keeps running.`,
+          key,
+        ),
+      );
       break;
     case "NEXT_STOP":
-      both(NotificationType.CIRCUIT_STOP, `Next stop: ${event.nextStopName ?? "your next stop"}`, `Heading to ${event.nextStopName ?? "the next stop"} next.`);
+      both(
+        NotificationType.CIRCUIT_STOP,
+        `Next stop: ${event.nextStopName ?? "your next stop"}`,
+        `Heading to ${event.nextStopName ?? "the next stop"} next.`,
+      );
       break;
     case "STOP_SKIPPED":
-      both(NotificationType.CIRCUIT_STOP, `${stop} skipped`, `${stop} was skipped by Tirvona support.${event.nextStopName ? ` Next: ${event.nextStopName}.` : ""}`);
+      both(
+        NotificationType.CIRCUIT_STOP,
+        `${stop} skipped`,
+        `${stop} was skipped by Tirvona support.${event.nextStopName ? ` Next: ${event.nextStopName}.` : ""}`,
+      );
       break;
     case "STOP_BLOCKED":
       both(
@@ -341,22 +486,51 @@ export function planCircuitNotifications(event: CircuitNoticeEvent): Notificatio
       );
       break;
     case "EXCEPTION_RESOLVED":
-      both(NotificationType.CIRCUIT_EXCEPTION, "Issue resolved", `${name} can continue.`);
+      both(
+        NotificationType.CIRCUIT_EXCEPTION,
+        "Issue resolved",
+        `${name} can continue.`,
+      );
       break;
     case "TIME_30_MIN":
-      both(NotificationType.CIRCUIT_WARNING, "30 minutes left", `Your included circuit time expires in 30 minutes.`, `Circuit package time remaining: 30 minutes.`);
+      both(
+        NotificationType.CIRCUIT_WARNING,
+        "30 minutes left",
+        `Your included circuit time expires in 30 minutes.`,
+        `Circuit package time remaining: 30 minutes.`,
+      );
       break;
     case "TIME_10_MIN":
-      both(NotificationType.CIRCUIT_WARNING, "10 minutes left", `Your included circuit time expires in 10 minutes. Extra time is charged after that.`, `Circuit package time remaining: 10 minutes.`);
+      both(
+        NotificationType.CIRCUIT_WARNING,
+        "10 minutes left",
+        `Your included circuit time expires in 10 minutes. Extra time is charged after that.`,
+        `Circuit package time remaining: 10 minutes.`,
+      );
       break;
     case "TIME_EXHAUSTED":
-      both(NotificationType.CIRCUIT_WARNING, "Included time used up", "Your included time is over. Additional time charges may apply.", "Included package time is over. Extra time is now being charged to the customer.");
+      both(
+        NotificationType.CIRCUIT_WARNING,
+        "Included time used up",
+        "Your included time is over. Additional time charges may apply.",
+        "Included package time is over. Extra time is now being charged to the customer.",
+      );
       break;
     case "DISTANCE_80":
-      both(NotificationType.CIRCUIT_WARNING, "Included distance running low", "You have used most of your included distance.", "Most of the included package distance is used.");
+      both(
+        NotificationType.CIRCUIT_WARNING,
+        "Included distance running low",
+        "You have used most of your included distance.",
+        "Most of the included package distance is used.",
+      );
       break;
     case "DISTANCE_EXHAUSTED":
-      both(NotificationType.CIRCUIT_WARNING, "Included distance used up", "Included distance exhausted. Additional distance charges may apply.", "Included package distance is exhausted. Extra distance is now being charged.");
+      both(
+        NotificationType.CIRCUIT_WARNING,
+        "Included distance used up",
+        "Included distance exhausted. Additional distance charges may apply.",
+        "Included package distance is exhausted. Extra distance is now being charged.",
+      );
       break;
   }
   return drafts;

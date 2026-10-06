@@ -1,11 +1,21 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Length, Max, Min } from "class-validator";
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Length,
+  Max,
+  Min,
+} from "class-validator";
 import { DriverStatus } from "../../drivers/schemas/driver-profile.schema";
 import { UserStatus } from "../../users/schemas/user.schema";
 import { VehicleType } from "../../vehicles/schemas/vehicle.schema";
 
-const toBoolean = ({ value }: { value: unknown }) => (value === "true" ? true : value === "false" ? false : value);
+const toBoolean = ({ value }: { value: unknown }) =>
+  value === "true" ? true : value === "false" ? false : value;
 
 class PageQueryDto {
   @ApiPropertyOptional({ default: 1 })

@@ -2,7 +2,11 @@ import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { SchemaTypes, Types } from "mongoose";
 import type { HydratedDocument } from "mongoose";
 import { UserRole } from "../../../common/types/user-role.enum";
-import { ComplaintCategory, ComplaintPriority, ComplaintStatus } from "../complaint-rules";
+import {
+  ComplaintCategory,
+  ComplaintPriority,
+  ComplaintStatus,
+} from "../complaint-rules";
 
 @Schema({ _id: false })
 export class TicketHistoryEntry {
@@ -24,7 +28,8 @@ export class TicketHistoryEntry {
   @Prop({ trim: true, maxlength: 2000 })
   note?: string;
 }
-const TicketHistoryEntrySchema = SchemaFactory.createForClass(TicketHistoryEntry);
+const TicketHistoryEntrySchema =
+  SchemaFactory.createForClass(TicketHistoryEntry);
 
 /** A customer or driver complaint, optionally about one ride. */
 @Schema({ timestamps: true, collection: "support_tickets" })
@@ -61,10 +66,18 @@ export class SupportTicket {
   @Prop({ required: true, trim: true, maxlength: 2000 })
   description!: string;
 
-  @Prop({ required: true, enum: ComplaintStatus, default: ComplaintStatus.OPEN })
+  @Prop({
+    required: true,
+    enum: ComplaintStatus,
+    default: ComplaintStatus.OPEN,
+  })
   status!: ComplaintStatus;
 
-  @Prop({ required: true, enum: ComplaintPriority, default: ComplaintPriority.MEDIUM })
+  @Prop({
+    required: true,
+    enum: ComplaintPriority,
+    default: ComplaintPriority.MEDIUM,
+  })
   priority!: ComplaintPriority;
 
   @Prop({ type: SchemaTypes.ObjectId, ref: "User" })

@@ -57,8 +57,12 @@ export class RideShareToken {
 }
 
 export type RideShareTokenDocument = HydratedDocument<RideShareToken>;
-export const RideShareTokenSchema = SchemaFactory.createForClass(RideShareToken);
+export const RideShareTokenSchema =
+  SchemaFactory.createForClass(RideShareToken);
 
 RideShareTokenSchema.index({ tokenHash: 1 }, { unique: true });
 RideShareTokenSchema.index({ rideId: 1, isActive: 1 });
-RideShareTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: SHARE_TOKEN_PURGE_AFTER_SECONDS });
+RideShareTokenSchema.index(
+  { expiresAt: 1 },
+  { expireAfterSeconds: SHARE_TOKEN_PURGE_AFTER_SECONDS },
+);

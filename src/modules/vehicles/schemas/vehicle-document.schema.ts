@@ -24,7 +24,11 @@ export class VehicleDocument {
   @Prop({ required: true })
   filePath!: string;
 
-  @Prop({ required: true, enum: DocumentStatus, default: DocumentStatus.PENDING })
+  @Prop({
+    required: true,
+    enum: DocumentStatus,
+    default: DocumentStatus.PENDING,
+  })
   status!: DocumentStatus;
 
   @Prop()
@@ -38,6 +42,7 @@ export class VehicleDocument {
 }
 
 export type VehicleDocumentDocument = HydratedDocument<VehicleDocument>;
-export const VehicleDocumentSchema = SchemaFactory.createForClass(VehicleDocument);
+export const VehicleDocumentSchema =
+  SchemaFactory.createForClass(VehicleDocument);
 
 VehicleDocumentSchema.index({ vehicleId: 1, documentType: 1 });

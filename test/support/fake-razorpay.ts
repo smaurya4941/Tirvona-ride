@@ -1,4 +1,7 @@
-import { RazorpayGateway, RazorpayGatewayError } from "../../src/modules/payments/razorpay/razorpay.gateway";
+import {
+  RazorpayGateway,
+  RazorpayGatewayError,
+} from "../../src/modules/payments/razorpay/razorpay.gateway";
 import type {
   CreateOrderInput,
   CreateRefundInput,
@@ -37,7 +40,8 @@ export class FakeRazorpay extends RazorpayGateway {
   }
 
   private guard(): void {
-    if (this.unreachable) throw new RazorpayGatewayError("Could not reach Razorpay: timeout");
+    if (this.unreachable)
+      throw new RazorpayGatewayError("Could not reach Razorpay: timeout");
   }
 
   async createOrder(input: CreateOrderInput): Promise<RazorpayOrder> {
@@ -63,15 +67,31 @@ export class FakeRazorpay extends RazorpayGateway {
   async fetchPayment(paymentId: string): Promise<RazorpayPayment> {
     this.guard();
     const payment = this.payments.get(paymentId);
-    if (!payment) throw new RazorpayGatewayError("The id provided does not exist", 400, "BAD_REQUEST_ERROR");
+    if (!payment)
+      throw new RazorpayGatewayError(
+        "The id provided does not exist",
+        400,
+        "BAD_REQUEST_ERROR",
+      );
     return { ...payment };
   }
 
-  async capturePayment(paymentId: string, amountPaise: number): Promise<RazorpayPayment> {
+  async capturePayment(
+    paymentId: string,
+    amountPaise: number,
+  ): Promise<RazorpayPayment> {
     this.guard();
     const payment = this.payments.get(paymentId);
-    if (!payment || payment.status !== "authorized" || payment.amount !== amountPaise)
-      throw new RazorpayGatewayError("Capture not allowed", 400, "BAD_REQUEST_ERROR");
+    if (
+      !payment ||
+      payment.status !== "authorized" ||
+      payment.amount !== amountPaise
+    )
+      throw new RazorpayGatewayError(
+        "Capture not allowed",
+        400,
+        "BAD_REQUEST_ERROR",
+      );
     payment.status = "captured";
     payment.captured = true;
     return { ...payment };
@@ -79,19 +99,36 @@ export class FakeRazorpay extends RazorpayGateway {
 
   async fetchOrderPayments(orderId: string): Promise<RazorpayPayment[]> {
     this.guard();
-    return [...this.payments.values()].filter((payment) => payment.order_id === orderId).map((p) => ({ ...p }));
+    return [...this.payments.values()]
+      .filter((payment) => payment.order_id === orderId)
+      .map((p) => ({ ...p }));
   }
 
   async createRefund(input: CreateRefundInput): Promise<RazorpayRefund> {
     this.guard();
     if (this.refundFailure === "reject")
-      throw new RazorpayGatewayError("The refund could not be initiated for this payment", 400, "BAD_REQUEST_ERROR");
+      throw new RazorpayGatewayError(
+        "The refund could not be initiated for this payment",
+        400,
+        "BAD_REQUEST_ERROR",
+      );
     const payment = this.payments.get(input.razorpayPaymentId);
-    if (!payment || (payment.status !== "captured" && payment.status !== "refunded"))
-      throw new RazorpayGatewayError("The payment has not been captured", 400, "BAD_REQUEST_ERROR");
+    if (
+      !payment ||
+      (payment.status !== "captured" && payment.status !== "refunded")
+    )
+      throw new RazorpayGatewayError(
+        "The payment has not been captured",
+        400,
+        "BAD_REQUEST_ERROR",
+      );
     const refunded = payment.amount_refunded ?? 0;
     if (refunded + input.amountPaise > payment.amount)
-      throw new RazorpayGatewayError("The total refund amount is greater than the refund payment amount", 400, "BAD_REQUEST_ERROR");
+      throw new RazorpayGatewayError(
+        "The total refund amount is greater than the refund payment amount",
+        400,
+        "BAD_REQUEST_ERROR",
+      );
 
     const refund: RazorpayRefund = {
       id: this.nextId("rfnd"),
@@ -103,35 +140,52 @@ export class FakeRazorpay extends RazorpayGateway {
       notes: input.notes,
       receipt: input.receipt,
       speed_processed: "normal",
-      acquirer_data: this.refundSpeed === "processed" ? { arn: `ARN${this.seq}` } : null,
+      acquirer_data:
+        this.refundSpeed === "processed" ? { arn: `ARN${this.seq}` } : null,
       created_at: Math.floor(Date.now() / 1000),
     };
     this.refunds.set(refund.id, refund);
     this.refundsCreated += 1;
     payment.amount_refunded = refunded + input.amountPaise;
-    payment.refund_status = payment.amount_refunded >= payment.amount ? "full" : "partial";
+    payment.refund_status =
+      payment.amount_refunded >= payment.amount ? "full" : "partial";
     if (payment.amount_refunded >= payment.amount) payment.status = "refunded";
-    if (this.refundFailure === "lost") throw new RazorpayGatewayError("Could not reach Razorpay: timeout");
+    if (this.refundFailure === "lost")
+      throw new RazorpayGatewayError("Could not reach Razorpay: timeout");
     return { ...refund };
   }
 
-  async fetchRefund(razorpayPaymentId: string, refundId: string): Promise<RazorpayRefund> {
+  async fetchRefund(
+    razorpayPaymentId: string,
+    refundId: string,
+  ): Promise<RazorpayRefund> {
     this.guard();
     const refund = this.refunds.get(refundId);
     if (!refund || refund.payment_id !== razorpayPaymentId)
-      throw new RazorpayGatewayError("The id provided does not exist", 400, "BAD_REQUEST_ERROR");
+      throw new RazorpayGatewayError(
+        "The id provided does not exist",
+        400,
+        "BAD_REQUEST_ERROR",
+      );
     return { ...refund };
   }
 
-  async fetchPaymentRefunds(razorpayPaymentId: string): Promise<RazorpayRefund[]> {
+  async fetchPaymentRefunds(
+    razorpayPaymentId: string,
+  ): Promise<RazorpayRefund[]> {
     this.guard();
-    return [...this.refunds.values()].filter((refund) => refund.payment_id === razorpayPaymentId).map((r) => ({ ...r }));
+    return [...this.refunds.values()]
+      .filter((refund) => refund.payment_id === razorpayPaymentId)
+      .map((r) => ({ ...r }));
   }
 
   async listPayments(input: ListPaymentsInput): Promise<RazorpayPayment[]> {
     this.guard();
     return [...this.payments.values()]
-      .filter((payment) => payment.created_at >= input.from && payment.created_at <= input.to)
+      .filter(
+        (payment) =>
+          payment.created_at >= input.from && payment.created_at <= input.to,
+      )
       .sort((a, b) => b.created_at - a.created_at)
       .slice(input.skip, input.skip + input.count)
       .map((payment) => ({ ...payment }));
@@ -142,7 +196,12 @@ export class FakeRazorpay extends RazorpayGateway {
   /** The customer completing (or failing) the checkout sheet. */
   pay(
     orderId: string,
-    options: { status?: RazorpayPaymentStatus; method?: string; amount?: number; notes?: Record<string, string> } = {},
+    options: {
+      status?: RazorpayPaymentStatus;
+      method?: string;
+      amount?: number;
+      notes?: Record<string, string>;
+    } = {},
   ): RazorpayPayment {
     const order = this.orders.get(orderId);
     if (!order) throw new Error(`Unknown order ${orderId}`);
@@ -161,7 +220,8 @@ export class FakeRazorpay extends RazorpayGateway {
       wallet: null,
       card: null,
       error_code: status === "failed" ? "BAD_REQUEST_ERROR" : null,
-      error_description: status === "failed" ? "Payment failed due to incorrect UPI PIN" : null,
+      error_description:
+        status === "failed" ? "Payment failed due to incorrect UPI PIN" : null,
       notes: options.notes ?? (order.notes as Record<string, string>),
       created_at: Math.floor(Date.now() / 1000),
     };
@@ -190,7 +250,10 @@ export class FakeRazorpay extends RazorpayGateway {
   }
 
   /** A refund made in the Razorpay dashboard (not through Tirvona). */
-  dashboardRefund(razorpayPaymentId: string, amountPaise: number): RazorpayRefund {
+  dashboardRefund(
+    razorpayPaymentId: string,
+    amountPaise: number,
+  ): RazorpayRefund {
     const payment = this.payments.get(razorpayPaymentId);
     if (!payment) throw new Error(`Unknown payment ${razorpayPaymentId}`);
     const refund: RazorpayRefund = {
@@ -224,8 +287,15 @@ export class FakeRazorpay extends RazorpayGateway {
     refund.status = "failed";
     const payment = this.payments.get(refund.payment_id);
     if (payment) {
-      payment.amount_refunded = Math.max(0, (payment.amount_refunded ?? 0) - refund.amount);
-      if (payment.status === "refunded" && payment.amount_refunded < payment.amount) payment.status = "captured";
+      payment.amount_refunded = Math.max(
+        0,
+        (payment.amount_refunded ?? 0) - refund.amount,
+      );
+      if (
+        payment.status === "refunded" &&
+        payment.amount_refunded < payment.amount
+      )
+        payment.status = "captured";
     }
     return { ...refund };
   }

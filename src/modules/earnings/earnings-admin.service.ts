@@ -2,7 +2,11 @@ import { HttpStatus, Injectable, Logger } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model, QueryFilter } from "mongoose";
 import { Types } from "mongoose";
-import { ApiException, apiBadRequest, apiNotFound } from "../../common/exceptions/api.exception";
+import {
+  ApiException,
+  apiBadRequest,
+  apiNotFound,
+} from "../../common/exceptions/api.exception";
 import { toRupees } from "../../common/utils/money";
 import { DriverProfile } from "../drivers/schemas/driver-profile.schema";
 import { User } from "../users/schemas/user.schema";
@@ -12,7 +16,11 @@ import type {
   CreatePayoutDto,
   MarkEarningPaidDto,
 } from "./dto/earnings-query.dto";
-import { EarningsService, LEDGER_TOTALS, STATUS_TOTALS } from "./earnings.service";
+import {
+  EarningsService,
+  LEDGER_TOTALS,
+  STATUS_TOTALS,
+} from "./earnings.service";
 import type { StatusTotalsRow } from "./earnings.service";
 import { AdjustmentStatus, EarningStatus } from "./interfaces/earning-status";
 import type {
@@ -53,9 +61,11 @@ interface DriverTotals {
   lastEarningAt?: Date;
 }
 
-const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const nameOf = (user?: { firstName?: string; lastName?: string } | null): string =>
-  [user?.firstName, user?.lastName].filter(Boolean).join(" ");
+const escapeRegex = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const nameOf = (
+  user?: { firstName?: string; lastName?: string } | null,
+): string => [user?.firstName, user?.lastName].filter(Boolean).join(" ");
 const netWhen = (status: EarningStatus) => ({
   $sum: { $cond: [{ $eq: ["$status", status] }, "$netEarningPaise", 0] },
 });
@@ -71,7 +81,15 @@ const DRIVER_TOTALS = {
   available: netWhen(EarningStatus.AVAILABLE),
   paid: netWhen(EarningStatus.PAID),
   collected: netWhen(EarningStatus.COLLECTED),
-  commissionDue: { $sum: { $cond: [{ $eq: ["$status", EarningStatus.COLLECTED] }, "$commissionPaise", 0] } },
+  commissionDue: {
+    $sum: {
+      $cond: [
+        { $eq: ["$status", EarningStatus.COLLECTED] },
+        "$commissionPaise",
+        0,
+      ],
+    },
+  },
   lastEarningAt: { $max: "$rideCompletedAt" },
 } as const;
 
@@ -81,10 +99,14 @@ export class EarningsAdminService {
   private readonly logger = new Logger(EarningsAdminService.name);
 
   constructor(
-    @InjectModel(DriverEarning.name) private readonly earningModel: Model<DriverEarning>,
-    @InjectModel(DriverPayout.name) private readonly payoutModel: Model<DriverPayout>,
-    @InjectModel(DriverEarningAdjustment.name) private readonly adjustmentModel: Model<DriverEarningAdjustment>,
-    @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
+    @InjectModel(DriverEarning.name)
+    private readonly earningModel: Model<DriverEarning>,
+    @InjectModel(DriverPayout.name)
+    private readonly payoutModel: Model<DriverPayout>,
+    @InjectModel(DriverEarningAdjustment.name)
+    private readonly adjustmentModel: Model<DriverEarningAdjustment>,
+    @InjectModel(DriverProfile.name)
+    private readonly driverModel: Model<DriverProfile>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly earnings: EarningsService,
   ) {}
@@ -92,9 +114,12 @@ export class EarningsAdminService {
   async totals(): Promise<AdminEarningsTotals> {
     await this.earnings.promoteMatured();
     const [[all], statuses, drivers, deductions] = await Promise.all([
-      this.earningModel.aggregate<{ net: number; gross: number; commission: number; rides: number }>([
-        { $group: LEDGER_TOTALS },
-      ]),
+      this.earningModel.aggregate<{
+        net: number;
+        gross: number;
+        commission: number;
+        rides: number;
+      }>([{ $group: LEDGER_TOTALS }]),
       this.earningModel.aggregate<StatusTotalsRow>([{ $group: STATUS_TOTALS }]),
       this.earningModel.distinct("driverId"),
       this.earnings.totalOutstandingDeductions(),
@@ -111,10 +136,13 @@ export class EarningsAdminService {
   }
 
   /** One row per driver who has earned anything, most owed first. */
-  async listDrivers(query: AdminEarningsQueryDto): Promise<Paged<AdminDriverEarningsRow>> {
+  async listDrivers(
+    query: AdminEarningsQueryDto,
+  ): Promise<Paged<AdminDriverEarningsRow>> {
     await this.earnings.promoteMatured();
     const match: QueryFilter<DriverEarning> = {};
-    if (query.search) match.driverId = { $in: await this.searchDrivers(query.search) };
+    if (query.search)
+      match.driverId = { $in: await this.searchDrivers(query.search) };
 
     const [result] = await this.earningModel
       .aggregate<{ items: DriverTotals[]; total: Array<{ count: number }> }>([
@@ -123,7 +151,10 @@ export class EarningsAdminService {
         { $sort: { available: -1, net: -1, _id: 1 } },
         {
           $facet: {
-            items: [{ $skip: (query.page - 1) * query.limit }, { $limit: query.limit }],
+            items: [
+              { $skip: (query.page - 1) * query.limit },
+              { $limit: query.limit },
+            ],
             total: [{ $count: "count" }],
           },
         },
@@ -136,7 +167,13 @@ export class EarningsAdminService {
       this.earnings.outstandingDeductions(rows.map((row) => row._id)),
     ]);
     return {
-      items: rows.map((row) => this.toRow(row, refs.get(row._id.toString()), deductions.get(row._id.toString()))),
+      items: rows.map((row) =>
+        this.toRow(
+          row,
+          refs.get(row._id.toString()),
+          deductions.get(row._id.toString()),
+        ),
+      ),
       page: query.page,
       limit: query.limit,
       total,
@@ -144,28 +181,40 @@ export class EarningsAdminService {
     };
   }
 
-  async driverDetail(driverId: string, query: AdminDriverLedgerQueryDto): Promise<AdminDriverEarningsDetail> {
+  async driverDetail(
+    driverId: string,
+    query: AdminDriverLedgerQueryDto,
+  ): Promise<AdminDriverEarningsDetail> {
     const id = new Types.ObjectId(driverId);
     const refs = await this.driverRefs([id]);
     const driver = refs.get(driverId);
-    if (!driver) throw apiNotFound("Driver profile not found", "DRIVER_NOT_FOUND");
+    if (!driver)
+      throw apiNotFound("Driver profile not found", "DRIVER_NOT_FOUND");
     await this.earnings.promoteMatured();
 
     const ledgerFilter: QueryFilter<DriverEarning> = { driverId: id };
     if (query.status) ledgerFilter.status = query.status;
-    const [[totals], items, total, payouts, deductions, adjustments] = await Promise.all([
-      this.earningModel.aggregate<DriverTotals>([{ $match: { driverId: id } }, { $group: DRIVER_TOTALS }]),
-      this.earningModel
-        .find(ledgerFilter)
-        .sort({ rideCompletedAt: -1, _id: -1 })
-        .skip((query.page - 1) * query.limit)
-        .limit(query.limit)
-        .exec(),
-      this.earningModel.countDocuments(ledgerFilter).exec(),
-      this.payoutModel.find({ driverId: id }).sort({ paidAt: -1 }).limit(50).exec(),
-      this.earnings.outstandingDeductions([id]),
-      this.earnings.adjustmentsForDriver(id, 50),
-    ]);
+    const [[totals], items, total, payouts, deductions, adjustments] =
+      await Promise.all([
+        this.earningModel.aggregate<DriverTotals>([
+          { $match: { driverId: id } },
+          { $group: DRIVER_TOTALS },
+        ]),
+        this.earningModel
+          .find(ledgerFilter)
+          .sort({ rideCompletedAt: -1, _id: -1 })
+          .skip((query.page - 1) * query.limit)
+          .limit(query.limit)
+          .exec(),
+        this.earningModel.countDocuments(ledgerFilter).exec(),
+        this.payoutModel
+          .find({ driverId: id })
+          .sort({ paidAt: -1 })
+          .limit(50)
+          .exec(),
+        this.earnings.outstandingDeductions([id]),
+        this.earnings.adjustmentsForDriver(id, 50),
+      ]);
     return {
       driver,
       summary: this.toRow(
@@ -200,33 +249,58 @@ export class EarningsAdminService {
    * What paying these lines would transfer: their sum minus the driver's
    * outstanding refund clawbacks that fit (oldest first, whole adjustments).
    */
-  async previewPayout(dto: { driverId: string; earningIds: string[] }): Promise<PayoutPreview> {
+  async previewPayout(dto: {
+    driverId: string;
+    earningIds: string[];
+  }): Promise<PayoutPreview> {
     await this.earnings.promoteMatured();
     const driverId = new Types.ObjectId(dto.driverId);
     const earnings = await this.earningModel
-      .find({ _id: { $in: dto.earningIds.map((id) => new Types.ObjectId(id)) }, driverId, status: EarningStatus.AVAILABLE })
+      .find({
+        _id: { $in: dto.earningIds.map((id) => new Types.ObjectId(id)) },
+        driverId,
+        status: EarningStatus.AVAILABLE,
+      })
       .select("netEarningPaise")
       .lean()
       .exec();
-    const gross = earnings.reduce((sum, earning) => sum + earning.netEarningPaise, 0);
+    const gross = earnings.reduce(
+      (sum, earning) => sum + earning.netEarningPaise,
+      0,
+    );
     const outstanding = await this.outstandingAdjustments(driverId);
     const picked = this.pickDeductions(outstanding, gross);
-    const deduction = picked.reduce((sum, adjustment) => sum + adjustment.amountPaise, 0);
+    const deduction = picked.reduce(
+      (sum, adjustment) => sum + adjustment.amountPaise,
+      0,
+    );
     return {
       earningCount: earnings.length,
       grossAmount: toRupees(gross),
       deductionAmount: toRupees(deduction),
       adjustmentCount: picked.length,
       amount: toRupees(gross - deduction),
-      outstandingDeductions: toRupees(outstanding.reduce((sum, adjustment) => sum + adjustment.amountPaise, 0)),
+      outstandingDeductions: toRupees(
+        outstanding.reduce(
+          (sum, adjustment) => sum + adjustment.amountPaise,
+          0,
+        ),
+      ),
     };
   }
 
   /** Write off an outstanding clawback: Tirvona bears it, nothing is deducted. */
-  async waiveAdjustment(adjustmentId: string, note: string, adminUserId: string): Promise<AdjustmentView> {
+  async waiveAdjustment(
+    adjustmentId: string,
+    note: string,
+    adminUserId: string,
+  ): Promise<AdjustmentView> {
     const waived = await this.adjustmentModel
       .findOneAndUpdate(
-        { _id: new Types.ObjectId(adjustmentId), status: AdjustmentStatus.OUTSTANDING },
+        {
+          _id: new Types.ObjectId(adjustmentId),
+          status: AdjustmentStatus.OUTSTANDING,
+        },
         {
           $set: {
             status: AdjustmentStatus.WAIVED,
@@ -239,20 +313,41 @@ export class EarningsAdminService {
       )
       .exec();
     if (!waived) {
-      const current = await this.adjustmentModel.exists({ _id: adjustmentId }).exec();
-      if (!current) throw apiNotFound("Adjustment not found", "ADJUSTMENT_NOT_FOUND");
-      throw new ApiException(HttpStatus.CONFLICT, "Only an outstanding deduction can be waived", "ADJUSTMENT_NOT_OUTSTANDING");
+      const current = await this.adjustmentModel
+        .exists({ _id: adjustmentId })
+        .exec();
+      if (!current)
+        throw apiNotFound("Adjustment not found", "ADJUSTMENT_NOT_FOUND");
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        "Only an outstanding deduction can be waived",
+        "ADJUSTMENT_NOT_OUTSTANDING",
+      );
     }
-    this.logger.log(`Adjustment ${adjustmentId} (${waived.amountPaise}p, ride ${waived.rideCode}) waived by ${adminUserId}`);
+    this.logger.log(
+      `Adjustment ${adjustmentId} (${waived.amountPaise}p, ride ${waived.rideCode}) waived by ${adminUserId}`,
+    );
     return this.earnings.toAdjustmentView(waived);
   }
 
   /** Mark a single AVAILABLE earning as paid (a one-line payout). */
-  async markPaid(earningId: string, dto: MarkEarningPaidDto, adminUserId: string): Promise<PayoutView> {
-    const earning = await this.earningModel.findById(earningId).select("driverId").lean().exec();
+  async markPaid(
+    earningId: string,
+    dto: MarkEarningPaidDto,
+    adminUserId: string,
+  ): Promise<PayoutView> {
+    const earning = await this.earningModel
+      .findById(earningId)
+      .select("driverId")
+      .lean()
+      .exec();
     if (!earning) throw apiNotFound("Earning not found", "EARNING_NOT_FOUND");
     return this.createPayout(
-      { ...dto, driverId: earning.driverId.toString(), earningIds: [earningId] },
+      {
+        ...dto,
+        driverId: earning.driverId.toString(),
+        earningIds: [earningId],
+      },
       adminUserId,
     );
   }
@@ -263,7 +358,10 @@ export class EarningsAdminService {
    * conditional update, so two admins paying the same line concurrently
    * settle it exactly once, and the payout records only what it settled.
    */
-  async createPayout(dto: CreatePayoutDto, adminUserId: string): Promise<PayoutView> {
+  async createPayout(
+    dto: CreatePayoutDto,
+    adminUserId: string,
+  ): Promise<PayoutView> {
     await this.earnings.promoteMatured();
     const driverId = new Types.ObjectId(dto.driverId);
     const ids = dto.earningIds.map((id) => new Types.ObjectId(id));
@@ -273,10 +371,19 @@ export class EarningsAdminService {
       .select("driverId status netEarningPaise")
       .lean()
       .exec();
-    if (earnings.length !== ids.length) throw apiNotFound("One or more earnings were not found", "EARNING_NOT_FOUND");
+    if (earnings.length !== ids.length)
+      throw apiNotFound(
+        "One or more earnings were not found",
+        "EARNING_NOT_FOUND",
+      );
     if (earnings.some((earning) => !earning.driverId.equals(driverId)))
-      throw apiBadRequest("Every earning in a payout must belong to the same driver", "VALIDATION_FAILED");
-    const blocked = earnings.filter((earning) => earning.status !== EarningStatus.AVAILABLE);
+      throw apiBadRequest(
+        "Every earning in a payout must belong to the same driver",
+        "VALIDATION_FAILED",
+      );
+    const blocked = earnings.filter(
+      (earning) => earning.status !== EarningStatus.AVAILABLE,
+    );
     if (blocked.length)
       throw new ApiException(
         HttpStatus.CONFLICT,
@@ -284,7 +391,12 @@ export class EarningsAdminService {
           ? "These earnings have already been paid"
           : "Only AVAILABLE earnings can be paid out",
         "EARNING_NOT_AVAILABLE",
-        { earnings: blocked.map((earning) => ({ id: earning._id.toString(), status: earning.status })) },
+        {
+          earnings: blocked.map((earning) => ({
+            id: earning._id.toString(),
+            status: earning.status,
+          })),
+        },
       );
 
     const paidAt = new Date();
@@ -293,7 +405,10 @@ export class EarningsAdminService {
       driverId,
       earningIds: ids,
       earningCount: ids.length,
-      amountPaise: earnings.reduce((sum, earning) => sum + earning.netEarningPaise, 0),
+      amountPaise: earnings.reduce(
+        (sum, earning) => sum + earning.netEarningPaise,
+        0,
+      ),
       currency: "INR",
       payoutReference: dto.payoutReference.trim(),
       note: dto.note?.trim(),
@@ -332,25 +447,48 @@ export class EarningsAdminService {
         "EARNING_NOT_AVAILABLE",
       );
     }
-    const grossPaise = settled.reduce((sum, earning) => sum + earning.netEarningPaise, 0);
+    const grossPaise = settled.reduce(
+      (sum, earning) => sum + earning.netEarningPaise,
+      0,
+    );
     payout.earningIds = settled.map((earning) => earning._id);
     payout.earningCount = settled.length;
 
     // Recover outstanding refund clawbacks from this payout (oldest first,
     // whole adjustments that fit). Conditional flip: a concurrent payout can
     // never recover the same adjustment twice.
-    const picked = this.pickDeductions(await this.outstandingAdjustments(driverId), grossPaise);
+    const picked = this.pickDeductions(
+      await this.outstandingAdjustments(driverId),
+      grossPaise,
+    );
     if (picked.length)
       await this.adjustmentModel
         .updateMany(
-          { _id: { $in: picked.map((adjustment) => adjustment._id) }, driverId, status: AdjustmentStatus.OUTSTANDING },
-          { $set: { status: AdjustmentStatus.SETTLED, payoutId: payout._id, settledAt: paidAt } },
+          {
+            _id: { $in: picked.map((adjustment) => adjustment._id) },
+            driverId,
+            status: AdjustmentStatus.OUTSTANDING,
+          },
+          {
+            $set: {
+              status: AdjustmentStatus.SETTLED,
+              payoutId: payout._id,
+              settledAt: paidAt,
+            },
+          },
         )
         .exec();
     const recovered = picked.length
-      ? await this.adjustmentModel.find({ payoutId: payout._id }).select("amountPaise").lean().exec()
+      ? await this.adjustmentModel
+          .find({ payoutId: payout._id })
+          .select("amountPaise")
+          .lean()
+          .exec()
       : [];
-    const deductionPaise = recovered.reduce((sum, adjustment) => sum + adjustment.amountPaise, 0);
+    const deductionPaise = recovered.reduce(
+      (sum, adjustment) => sum + adjustment.amountPaise,
+      0,
+    );
     payout.grossAmountPaise = grossPaise;
     payout.deductionPaise = deductionPaise;
     payout.adjustmentIds = recovered.map((adjustment) => adjustment._id);
@@ -394,7 +532,9 @@ export class EarningsAdminService {
     return profiles.map((profile) => profile._id);
   }
 
-  private async driverRefs(driverIds: Types.ObjectId[]): Promise<Map<string, DriverRef>> {
+  private async driverRefs(
+    driverIds: Types.ObjectId[],
+  ): Promise<Map<string, DriverRef>> {
     const profiles = await this.driverModel
       .find({ _id: { $in: driverIds } })
       .select("driverCode userId")
@@ -423,7 +563,9 @@ export class EarningsAdminService {
     );
   }
 
-  private async outstandingAdjustments(driverId: Types.ObjectId): Promise<Array<{ _id: Types.ObjectId; amountPaise: number }>> {
+  private async outstandingAdjustments(
+    driverId: Types.ObjectId,
+  ): Promise<Array<{ _id: Types.ObjectId; amountPaise: number }>> {
     return this.adjustmentModel
       .find({ driverId, status: AdjustmentStatus.OUTSTANDING })
       .sort({ createdAt: 1, _id: 1 })
@@ -433,7 +575,10 @@ export class EarningsAdminService {
   }
 
   /** Oldest-first whole adjustments whose total fits within the payout. */
-  private pickDeductions<T extends { amountPaise: number }>(outstanding: T[], grossPaise: number): T[] {
+  private pickDeductions<T extends { amountPaise: number }>(
+    outstanding: T[],
+    grossPaise: number,
+  ): T[] {
     const picked: T[] = [];
     let remaining = grossPaise;
     for (const adjustment of outstanding) {
@@ -444,7 +589,11 @@ export class EarningsAdminService {
     return picked;
   }
 
-  private toRow(totals: DriverTotals, driver?: DriverRef, deductionsPaise = 0): AdminDriverEarningsRow {
+  private toRow(
+    totals: DriverTotals,
+    driver?: DriverRef,
+    deductionsPaise = 0,
+  ): AdminDriverEarningsRow {
     return {
       driver: driver ?? {
         driverId: totals._id.toString(),
@@ -467,13 +616,17 @@ export class EarningsAdminService {
     };
   }
 
-  private async toPayoutViews(payouts: DriverPayoutDocument[]): Promise<PayoutView[]> {
+  private async toPayoutViews(
+    payouts: DriverPayoutDocument[],
+  ): Promise<PayoutView[]> {
     const admins = await this.userModel
       .find({ _id: { $in: payouts.map((payout) => payout.paidBy) } })
       .select("firstName lastName")
       .lean()
       .exec();
-    const adminName = new Map(admins.map((admin) => [admin._id.toString(), nameOf(admin)]));
+    const adminName = new Map(
+      admins.map((admin) => [admin._id.toString(), nameOf(admin)]),
+    );
     return payouts.map((payout) => ({
       id: payout._id.toString(),
       driverId: payout.driverId.toString(),
@@ -486,7 +639,10 @@ export class EarningsAdminService {
       currency: payout.currency,
       payoutReference: payout.payoutReference,
       note: payout.note,
-      paidBy: { id: payout.paidBy.toString(), name: adminName.get(payout.paidBy.toString()) || "Admin" },
+      paidBy: {
+        id: payout.paidBy.toString(),
+        name: adminName.get(payout.paidBy.toString()) || "Admin",
+      },
       paidAt: payout.paidAt,
     }));
   }

@@ -36,8 +36,13 @@ export class TripDto {
  * no fare field: the server always re-prices, whatever the client displayed.
  */
 export class RideRequestDto extends TripDto {
-  @ApiProperty({ example: "AUTO", description: "Ride type code (GET /ride-types)" })
-  @Matches(RIDE_TYPE_CODE_PATTERN, { message: "rideType must be a ride type code such as AUTO" })
+  @ApiProperty({
+    example: "AUTO",
+    description: "Ride type code (GET /ride-types)",
+  })
+  @Matches(RIDE_TYPE_CODE_PATTERN, {
+    message: "rideType must be a ride type code such as AUTO",
+  })
   rideType!: string;
 }
 
@@ -45,19 +50,28 @@ export class RideRequestDto extends TripDto {
 export class CreateRideDto extends RideRequestDto {
   @ApiPropertyOptional({ example: "BRAJ50" })
   @IsOptional()
-  @Transform(({ value }: { value: unknown }) => (typeof value === "string" ? value.trim().toUpperCase() : value))
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string" ? value.trim().toUpperCase() : value,
+  )
   @IsString()
   @Length(3, 20)
   promoCode?: string;
 }
 
 export class CancelRideDto {
-  @ApiPropertyOptional({ example: "DRIVER_TOO_LONG", description: "Code from GET /rides/:id/cancellation" })
+  @ApiPropertyOptional({
+    example: "DRIVER_TOO_LONG",
+    description: "Code from GET /rides/:id/cancellation",
+  })
   @IsOptional()
   @Matches(/^[A-Z][A-Z0-9_]{1,39}$/)
   reasonCode?: string;
 
-  @ApiPropertyOptional({ example: "Plans changed", description: "Note (required for reasons such as OTHER); legacy free-text reason" })
+  @ApiPropertyOptional({
+    example: "Plans changed",
+    description:
+      "Note (required for reasons such as OTHER); legacy free-text reason",
+  })
   @IsOptional()
   @IsString()
   @Length(1, 240)
@@ -74,7 +88,9 @@ export class RejectRideDto {
 
 export class StartRideDto {
   @ApiProperty({ example: "4821" })
-  @Matches(/^\d{4}$/, { message: "otp must be the 4-digit code shown to the customer" })
+  @Matches(/^\d{4}$/, {
+    message: "otp must be the 4-digit code shown to the customer",
+  })
   otp!: string;
 }
 
@@ -105,16 +121,26 @@ export class ListRidesQueryDto {
    * day, not the server's. Matched against requestedAt: start inclusive,
    * end exclusive.
    */
-  @ApiPropertyOptional({ example: "2026-09-23T18:30:00.000Z", description: "Rides requested at or after this instant" })
+  @ApiPropertyOptional({
+    example: "2026-09-23T18:30:00.000Z",
+    description: "Rides requested at or after this instant",
+  })
   @IsOptional()
   @IsISO8601({ strict: true, strictSeparator: true })
-  @Matches(/(Z|[+-]\d{2}:?\d{2})$/, { message: "startDate must include a time zone offset (e.g. Z)" })
+  @Matches(/(Z|[+-]\d{2}:?\d{2})$/, {
+    message: "startDate must include a time zone offset (e.g. Z)",
+  })
   startDate?: string;
 
-  @ApiPropertyOptional({ example: "2026-09-30T18:30:00.000Z", description: "Rides requested before this instant" })
+  @ApiPropertyOptional({
+    example: "2026-09-30T18:30:00.000Z",
+    description: "Rides requested before this instant",
+  })
   @IsOptional()
   @IsISO8601({ strict: true, strictSeparator: true })
-  @Matches(/(Z|[+-]\d{2}:?\d{2})$/, { message: "endDate must include a time zone offset (e.g. Z)" })
+  @Matches(/(Z|[+-]\d{2}:?\d{2})$/, {
+    message: "endDate must include a time zone offset (e.g. Z)",
+  })
   endDate?: string;
 }
 

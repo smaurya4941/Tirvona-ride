@@ -83,7 +83,9 @@ export class ReconciliationException {
   @Prop()
   resolutionNote?: string;
 }
-const ReconciliationExceptionSchema = SchemaFactory.createForClass(ReconciliationException);
+const ReconciliationExceptionSchema = SchemaFactory.createForClass(
+  ReconciliationException,
+);
 
 @Schema({ _id: false })
 export class ReconciliationStats {
@@ -99,7 +101,8 @@ export class ReconciliationStats {
   /** Paise we recorded as captured (online) in the window. */
   @Prop({ default: 0 }) recordedCapturedPaise!: number;
 }
-const ReconciliationStatsSchema = SchemaFactory.createForClass(ReconciliationStats);
+const ReconciliationStatsSchema =
+  SchemaFactory.createForClass(ReconciliationStats);
 
 /**
  * One Razorpay ↔ MongoDB comparison over a time window: every Razorpay
@@ -122,7 +125,11 @@ export class PaymentReconciliationRun {
   @Prop({ required: true })
   to!: Date;
 
-  @Prop({ required: true, enum: ReconciliationRunStatus, default: ReconciliationRunStatus.RUNNING })
+  @Prop({
+    required: true,
+    enum: ReconciliationRunStatus,
+    default: ReconciliationRunStatus.RUNNING,
+  })
   status!: ReconciliationRunStatus;
 
   @Prop({ type: SchemaTypes.ObjectId, ref: "User" })
@@ -148,8 +155,11 @@ export class PaymentReconciliationRun {
   error?: string;
 }
 
-export type PaymentReconciliationRunDocument = HydratedDocument<PaymentReconciliationRun>;
-export const PaymentReconciliationRunSchema = SchemaFactory.createForClass(PaymentReconciliationRun);
+export type PaymentReconciliationRunDocument =
+  HydratedDocument<PaymentReconciliationRun>;
+export const PaymentReconciliationRunSchema = SchemaFactory.createForClass(
+  PaymentReconciliationRun,
+);
 
 PaymentReconciliationRunSchema.index({ key: 1 }, { unique: true });
 PaymentReconciliationRunSchema.index({ startedAt: -1 });

@@ -22,14 +22,11 @@ import {
 } from "@nestjs/swagger";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
-import {
-  documentUploadOptions,
-  streamDocument,
-} from "../../common/http/file-upload";
+import { documentUploadOptions } from "../../common/http/file-upload";
+import { StorageService } from "../storage/storage.service";
 import { ok } from "../../common/http/api-response";
 import type { ApiSuccessBody } from "../../common/http/api-response";
 import { apiBadRequest } from "../../common/exceptions/api.exception";
-import { UploadCleanupInterceptor } from "../../common/interceptors/upload-cleanup.interceptor";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
 import { DriversService } from "./drivers.service";
@@ -56,7 +53,10 @@ function toDocumentSummary(document: DriverDocumentDocument) {
 @Roles(UserRole.DRIVER)
 @Controller({ path: "drivers", version: "1" })
 export class DriversController {
-  constructor(private readonly drivers: DriversService) {}
+  constructor(
+    private readonly drivers: DriversService,
+    private readonly storage: StorageService,
+  ) {}
 
   @Get("me")
   @ApiOperation({ summary: "Get the authenticated driver's profile" })
@@ -90,10 +90,7 @@ export class DriversController {
     },
   })
   @ApiOperation({ summary: "Upload (or replace) a KYC document" })
-  @UseInterceptors(
-    FileInterceptor("file", documentUploadOptions),
-    UploadCleanupInterceptor,
-  )
+  @UseInterceptors(FileInterceptor("file", documentUploadOptions))
   async uploadDocument(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UploadDriverDocumentDto,
@@ -124,7 +121,7 @@ export class DriversController {
       user.userId,
       documentId,
     );
-    return streamDocument(document.filePath);
+    return this.storage.stream(document.filePath);
   }
 
   @Delete("me/documents/:id")

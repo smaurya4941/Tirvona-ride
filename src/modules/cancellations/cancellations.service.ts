@@ -3,15 +3,25 @@ import type { OnModuleInit } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model, QueryFilter } from "mongoose";
 import { Types } from "mongoose";
-import { apiBadRequest, apiConflict, apiNotFound } from "../../common/exceptions/api.exception";
+import {
+  apiBadRequest,
+  apiConflict,
+  apiNotFound,
+} from "../../common/exceptions/api.exception";
 import { RideActorType } from "../rides/ride-state-machine";
 import type { RideStatus } from "../rides/ride-state-machine";
 import type { Page } from "../rides/rides.service";
 import { Ride } from "../rides/schemas/ride.schema";
 import { User } from "../users/schemas/user.schema";
-import { DISABLED_CUSTOMER_FEE_RULE, assessCancellationFee } from "./cancellation-fee";
+import {
+  DISABLED_CUSTOMER_FEE_RULE,
+  assessCancellationFee,
+} from "./cancellation-fee";
 import type { CustomerFeeRule, FeeAssessment } from "./cancellation-fee";
-import { DEFAULT_CANCELLATION_REASONS, OTHER_REASON_CODE } from "./cancellation-reasons.seed";
+import {
+  DEFAULT_CANCELLATION_REASONS,
+  OTHER_REASON_CODE,
+} from "./cancellation-reasons.seed";
 import type {
   CreateCancellationReasonDto,
   ListCancellationsQueryDto,
@@ -24,7 +34,10 @@ import {
   CancellationPolicy,
   CancellationReason,
 } from "./schemas/cancellation.schemas";
-import type { CancellationDocument, CancellationReasonDocument } from "./schemas/cancellation.schemas";
+import type {
+  CancellationDocument,
+  CancellationReasonDocument,
+} from "./schemas/cancellation.schemas";
 
 export interface CancellationReasonView {
   code: string;
@@ -91,17 +104,22 @@ export interface CancellationView {
   feeResolutionNote?: string;
 }
 
-const isDuplicateKey = (error: unknown): boolean => (error as { code?: number } | undefined)?.code === 11000;
-const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const isDuplicateKey = (error: unknown): boolean =>
+  (error as { code?: number } | undefined)?.code === 11000;
+const escapeRegex = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 @Injectable()
 export class CancellationsService implements OnModuleInit {
   private readonly logger = new Logger(CancellationsService.name);
 
   constructor(
-    @InjectModel(CancellationReason.name) private readonly reasonModel: Model<CancellationReason>,
-    @InjectModel(CancellationPolicy.name) private readonly policyModel: Model<CancellationPolicy>,
-    @InjectModel(Cancellation.name) private readonly cancellationModel: Model<Cancellation>,
+    @InjectModel(CancellationReason.name)
+    private readonly reasonModel: Model<CancellationReason>,
+    @InjectModel(CancellationPolicy.name)
+    private readonly policyModel: Model<CancellationPolicy>,
+    @InjectModel(Cancellation.name)
+    private readonly cancellationModel: Model<Cancellation>,
     @InjectModel(Ride.name) private readonly rideModel: Model<Ride>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
   ) {}
@@ -115,7 +133,11 @@ export class CancellationsService implements OnModuleInit {
     for (const reason of DEFAULT_CANCELLATION_REASONS) {
       try {
         await this.reasonModel
-          .updateOne({ actor: reason.actor, code: reason.code }, { $setOnInsert: { ...reason, isActive: true } }, { upsert: true })
+          .updateOne(
+            { actor: reason.actor, code: reason.code },
+            { $setOnInsert: { ...reason, isActive: true } },
+            { upsert: true },
+          )
           .exec();
       } catch (error) {
         if (!isDuplicateKey(error)) throw error;
@@ -125,7 +147,13 @@ export class CancellationsService implements OnModuleInit {
       await this.policyModel
         .updateOne(
           { version: 1 },
-          { $setOnInsert: { version: 1, customerFee: DISABLED_CUSTOMER_FEE_RULE, note: "Initial policy: no cancellation fees" } },
+          {
+            $setOnInsert: {
+              version: 1,
+              customerFee: DISABLED_CUSTOMER_FEE_RULE,
+              note: "Initial policy: no cancellation fees",
+            },
+          },
           { upsert: true },
         )
         .exec();
@@ -147,15 +175,23 @@ export class CancellationsService implements OnModuleInit {
     };
   }
 
-  async listReasons(actor?: RideActorType, activeOnly = true): Promise<CancellationReasonView[]> {
+  async listReasons(
+    actor?: RideActorType,
+    activeOnly = true,
+  ): Promise<CancellationReasonView[]> {
     const filter: QueryFilter<CancellationReason> = {};
     if (actor) filter.actor = actor;
     if (activeOnly) filter.isActive = true;
-    const reasons = await this.reasonModel.find(filter).sort({ actor: 1, sortOrder: 1, label: 1 }).exec();
+    const reasons = await this.reasonModel
+      .find(filter)
+      .sort({ actor: 1, sortOrder: 1, label: 1 })
+      .exec();
     return reasons.map((reason) => this.reasonView(reason));
   }
 
-  async createReason(dto: CreateCancellationReasonDto): Promise<CancellationReasonView> {
+  async createReason(
+    dto: CreateCancellationReasonDto,
+  ): Promise<CancellationReasonView> {
     try {
       const reason = await this.reasonModel.create({
         code: dto.code,
@@ -168,16 +204,30 @@ export class CancellationsService implements OnModuleInit {
       return this.reasonView(reason);
     } catch (error) {
       if (isDuplicateKey(error))
-        throw apiConflict(`Reason ${dto.code} already exists for ${dto.actor}`, "CANCELLATION_REASON_EXISTS");
+        throw apiConflict(
+          `Reason ${dto.code} already exists for ${dto.actor}`,
+          "CANCELLATION_REASON_EXISTS",
+        );
       throw error;
     }
   }
 
-  async updateReason(actor: RideActorType, code: string, dto: UpdateCancellationReasonDto): Promise<CancellationReasonView> {
+  async updateReason(
+    actor: RideActorType,
+    code: string,
+    dto: UpdateCancellationReasonDto,
+  ): Promise<CancellationReasonView> {
     const reason = await this.reasonModel.findOne({ actor, code }).exec();
-    if (!reason) throw apiNotFound("Cancellation reason not found", "CANCELLATION_REASON_NOT_FOUND");
+    if (!reason)
+      throw apiNotFound(
+        "Cancellation reason not found",
+        "CANCELLATION_REASON_NOT_FOUND",
+      );
     if (dto.isActive === false && code === OTHER_REASON_CODE)
-      throw apiBadRequest("The 'Other' reason cannot be retired: older app versions rely on it", "VALIDATION_FAILED");
+      throw apiBadRequest(
+        "The 'Other' reason cannot be retired: older app versions rely on it",
+        "VALIDATION_FAILED",
+      );
     if (dto.label !== undefined) reason.label = dto.label;
     if (dto.requiresNote !== undefined) reason.requiresNote = dto.requiresNote;
     if (dto.isActive !== undefined) reason.isActive = dto.isActive;
@@ -191,33 +241,57 @@ export class CancellationsService implements OnModuleInit {
    * free text: that is recorded under OTHER so every cancellation still has
    * a controlled code for reporting.
    */
-  async resolveReason(actor: RideActorType, reasonCode?: string, note?: string): Promise<ResolvedReason> {
+  async resolveReason(
+    actor: RideActorType,
+    reasonCode?: string,
+    note?: string,
+  ): Promise<ResolvedReason> {
     const code = reasonCode ?? OTHER_REASON_CODE;
-    const reason = await this.reasonModel.findOne({ actor, code, isActive: true }).exec();
+    const reason = await this.reasonModel
+      .findOne({ actor, code, isActive: true })
+      .exec();
     if (!reason)
-      throw apiBadRequest("Choose one of the listed cancellation reasons", "CANCELLATION_REASON_INVALID");
+      throw apiBadRequest(
+        "Choose one of the listed cancellation reasons",
+        "CANCELLATION_REASON_INVALID",
+      );
     const trimmed = note?.trim() || undefined;
     // Legacy clients (no reasonCode) may send nothing at all; don't break them.
     if (reason.requiresNote && !trimmed && reasonCode !== undefined)
-      throw apiBadRequest("Please tell us briefly why you are cancelling", "CANCELLATION_REASON_INVALID");
+      throw apiBadRequest(
+        "Please tell us briefly why you are cancelling",
+        "CANCELLATION_REASON_INVALID",
+      );
     return { code: reason.code, label: reason.label, note: trimmed };
   }
 
   // ── Policy ────────────────────────────────────────────────────────────
 
   async currentPolicy(): Promise<CancellationPolicyView> {
-    const policy = await this.policyModel.findOne().sort({ version: -1 }).lean().exec();
+    const policy = await this.policyModel
+      .findOne()
+      .sort({ version: -1 })
+      .lean()
+      .exec();
     if (!policy) return { version: 0, customerFee: DISABLED_CUSTOMER_FEE_RULE };
     return {
       version: policy.version,
-      customerFee: { ...policy.customerFee, applicableStatuses: [...policy.customerFee.applicableStatuses] },
+      customerFee: {
+        ...policy.customerFee,
+        applicableStatuses: [...policy.customerFee.applicableStatuses],
+      },
       note: policy.note,
       createdAt: policy.createdAt,
     };
   }
 
   async policyHistory(): Promise<CancellationPolicyView[]> {
-    const rows = await this.policyModel.find().sort({ version: -1 }).limit(50).lean().exec();
+    const rows = await this.policyModel
+      .find()
+      .sort({ version: -1 })
+      .limit(50)
+      .lean()
+      .exec();
     return rows.map((policy) => ({
       version: policy.version,
       customerFee: policy.customerFee,
@@ -226,7 +300,10 @@ export class CancellationsService implements OnModuleInit {
     }));
   }
 
-  async updatePolicy(dto: UpdateCancellationPolicyDto, adminUserId: string): Promise<CancellationPolicyView> {
+  async updatePolicy(
+    dto: UpdateCancellationPolicyDto,
+    adminUserId: string,
+  ): Promise<CancellationPolicyView> {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const current = await this.currentPolicy();
       try {
@@ -247,7 +324,10 @@ export class CancellationsService implements OnModuleInit {
         if (!isDuplicateKey(error)) throw error;
       }
     }
-    throw apiConflict("The policy changed while saving. Reload and retry.", "VALIDATION_FAILED");
+    throw apiConflict(
+      "The policy changed while saving. Reload and retry.",
+      "VALIDATION_FAILED",
+    );
   }
 
   // ── Assessment ────────────────────────────────────────────────────────
@@ -284,12 +364,21 @@ export class CancellationsService implements OnModuleInit {
       this.listReasons(input.actor),
       input.cancellable
         ? this.assess(input)
-        : Promise.resolve<FeeAssessment>({ amount: 0, applies: false, explanation: "This ride can no longer be cancelled" }),
+        : Promise.resolve<FeeAssessment>({
+            amount: 0,
+            applies: false,
+            explanation: "This ride can no longer be cancelled",
+          }),
     ]);
     return {
       cancellable: input.cancellable,
       reasons,
-      fee: { amount: fee.amount, applies: fee.applies, explanation: fee.explanation, freeUntil: fee.freeUntil },
+      fee: {
+        amount: fee.amount,
+        applies: fee.applies,
+        explanation: fee.explanation,
+        freeUntil: fee.freeUntil,
+      },
       currency: input.currency,
     };
   }
@@ -328,7 +417,10 @@ export class CancellationsService implements OnModuleInit {
         rideStatusAtCancellation: details.statusAtCancellation,
         estimatedFare: ride.fare.estimatedFare,
         feeAmount: details.feeAmount,
-        feeStatus: details.feeAmount > 0 ? CancellationFeeStatus.DUE : CancellationFeeStatus.NOT_APPLICABLE,
+        feeStatus:
+          details.feeAmount > 0
+            ? CancellationFeeStatus.DUE
+            : CancellationFeeStatus.NOT_APPLICABLE,
         policyVersion: details.policyVersion,
         cancelledAt: ride.cancelledAt ?? new Date(),
       });
@@ -341,14 +433,22 @@ export class CancellationsService implements OnModuleInit {
     }
   }
 
-  async list(query: ListCancellationsQueryDto): Promise<Page<CancellationView>> {
+  async list(
+    query: ListCancellationsQueryDto,
+  ): Promise<Page<CancellationView>> {
     const filter: QueryFilter<Cancellation> = {};
     if (query.cancelledBy) filter.cancelledBy = query.cancelledBy;
     if (query.feeStatus) filter.feeStatus = query.feeStatus;
     if (query.reasonCode) filter.reasonCode = query.reasonCode;
-    if (query.search) filter.rideCode = { $regex: `^${escapeRegex(query.search.trim().toUpperCase())}` };
+    if (query.search)
+      filter.rideCode = {
+        $regex: `^${escapeRegex(query.search.trim().toUpperCase())}`,
+      };
     if (query.from || query.to)
-      filter.cancelledAt = { ...(query.from ? { $gte: query.from } : {}), ...(query.to ? { $lt: query.to } : {}) };
+      filter.cancelledAt = {
+        ...(query.from ? { $gte: query.from } : {}),
+        ...(query.to ? { $lt: query.to } : {}),
+      };
 
     const [rows, total] = await Promise.all([
       this.cancellationModel
@@ -364,9 +464,13 @@ export class CancellationsService implements OnModuleInit {
       .select("firstName lastName phone")
       .lean()
       .exec();
-    const byId = new Map(customers.map((customer) => [customer._id.toString(), customer]));
+    const byId = new Map(
+      customers.map((customer) => [customer._id.toString(), customer]),
+    );
     return {
-      items: rows.map((row) => this.view(row, byId.get(row.customerId.toString()))),
+      items: rows.map((row) =>
+        this.view(row, byId.get(row.customerId.toString())),
+      ),
       page: query.page,
       limit: query.limit,
       total,
@@ -380,11 +484,19 @@ export class CancellationsService implements OnModuleInit {
   }
 
   /** Outstanding (DUE) cancellation fees of one customer, rupees. */
-  async outstandingFor(customerId: Types.ObjectId): Promise<{ count: number; amount: number }> {
+  async outstandingFor(
+    customerId: Types.ObjectId,
+  ): Promise<{ count: number; amount: number }> {
     const [row] = await this.cancellationModel
       .aggregate<{ count: number; amount: number }>([
         { $match: { customerId, feeStatus: CancellationFeeStatus.DUE } },
-        { $group: { _id: null, count: { $sum: 1 }, amount: { $sum: "$feeAmount" } } },
+        {
+          $group: {
+            _id: null,
+            count: { $sum: 1 },
+            amount: { $sum: "$feeAmount" },
+          },
+        },
       ])
       .exec();
     return { count: row?.count ?? 0, amount: row?.amount ?? 0 };
@@ -413,22 +525,36 @@ export class CancellationsService implements OnModuleInit {
       .exec();
     if (!updated) {
       const exists = await this.cancellationModel.exists({ _id: id });
-      if (!exists) throw apiNotFound("Cancellation not found", "CANCELLATION_NOT_FOUND");
-      throw apiConflict("This cancellation has no fee due", "CANCELLATION_FEE_NOT_DUE");
+      if (!exists)
+        throw apiNotFound("Cancellation not found", "CANCELLATION_NOT_FOUND");
+      throw apiConflict(
+        "This cancellation has no fee due",
+        "CANCELLATION_FEE_NOT_DUE",
+      );
     }
     // Keep the ride's denormalised copy in step (what the customer app shows).
-    await this.rideModel.updateOne({ _id: updated.rideId }, { $set: { "cancellation.feeStatus": status } }).exec();
+    await this.rideModel
+      .updateOne(
+        { _id: updated.rideId },
+        { $set: { "cancellation.feeStatus": status } },
+      )
+      .exec();
     return this.view(updated);
   }
 
-  view(row: CancellationDocument, customer?: { firstName?: string; lastName?: string; phone?: string } | null): CancellationView {
+  view(
+    row: CancellationDocument,
+    customer?: { firstName?: string; lastName?: string; phone?: string } | null,
+  ): CancellationView {
     return {
       id: row._id.toString(),
       rideId: row.rideId.toString(),
       rideCode: row.rideCode,
       rideType: row.rideType,
       customerId: row.customerId.toString(),
-      customerName: customer ? [customer.firstName, customer.lastName].filter(Boolean).join(" ") : undefined,
+      customerName: customer
+        ? [customer.firstName, customer.lastName].filter(Boolean).join(" ")
+        : undefined,
       customerPhone: customer?.phone,
       driverId: row.driverId?.toString(),
       cancelledBy: row.cancelledBy,

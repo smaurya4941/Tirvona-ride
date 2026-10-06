@@ -30,7 +30,11 @@ export enum DriverChangeStatus {
  * One PENDING request per target (`targetKey`): submitting again for the
  * same target replaces the waiting request instead of queueing a second one.
  */
-@Schema({ collection: "driver_change_requests", timestamps: true, versionKey: false })
+@Schema({
+  collection: "driver_change_requests",
+  timestamps: true,
+  versionKey: false,
+})
 export class DriverChangeRequest {
   @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "DriverProfile" })
   driverId!: Types.ObjectId;
@@ -66,7 +70,11 @@ export class DriverChangeRequest {
   @Prop({ select: false })
   filePath?: string;
 
-  @Prop({ required: true, enum: DriverChangeStatus, default: DriverChangeStatus.PENDING })
+  @Prop({
+    required: true,
+    enum: DriverChangeStatus,
+    default: DriverChangeStatus.PENDING,
+  })
   status!: DriverChangeStatus;
 
   /** Why an admin rejected it (shown to the driver). */
@@ -84,11 +92,15 @@ export class DriverChangeRequest {
 }
 
 export type DriverChangeRequestDocument = HydratedDocument<DriverChangeRequest>;
-export const DriverChangeRequestSchema = SchemaFactory.createForClass(DriverChangeRequest);
+export const DriverChangeRequestSchema =
+  SchemaFactory.createForClass(DriverChangeRequest);
 
 DriverChangeRequestSchema.index(
   { driverId: 1, targetKey: 1 },
-  { unique: true, partialFilterExpression: { status: DriverChangeStatus.PENDING } },
+  {
+    unique: true,
+    partialFilterExpression: { status: DriverChangeStatus.PENDING },
+  },
 );
 // The driver's history, newest first.
 DriverChangeRequestSchema.index({ driverId: 1, createdAt: -1 });

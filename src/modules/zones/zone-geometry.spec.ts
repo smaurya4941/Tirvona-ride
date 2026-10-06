@@ -1,4 +1,9 @@
-import { ZoneGeometryError, circlePoints, pointsFromPolygon, polygonFromPoints } from "./zone-geometry";
+import {
+  ZoneGeometryError,
+  circlePoints,
+  pointsFromPolygon,
+  polygonFromPoints,
+} from "./zone-geometry";
 
 const SQUARE = [
   { latitude: 27.5, longitude: 77.6 },
@@ -22,7 +27,9 @@ describe("polygonFromPoints", () => {
   });
 
   it("rejects fewer than three distinct points", () => {
-    expect(() => polygonFromPoints([SQUARE[0], SQUARE[1], SQUARE[1]])).toThrow(ZoneGeometryError);
+    expect(() => polygonFromPoints([SQUARE[0], SQUARE[1], SQUARE[1]])).toThrow(
+      ZoneGeometryError,
+    );
   });
 
   it("rejects a boundary with no area", () => {
@@ -40,7 +47,12 @@ describe("polygonFromPoints", () => {
   });
 
   it("rejects out-of-range coordinates", () => {
-    expect(() => polygonFromPoints([...SQUARE.slice(0, 3), { latitude: 91, longitude: 0 }])).toThrow(ZoneGeometryError);
+    expect(() =>
+      polygonFromPoints([
+        ...SQUARE.slice(0, 3),
+        { latitude: 91, longitude: 0 },
+      ]),
+    ).toThrow(ZoneGeometryError);
   });
 });
 

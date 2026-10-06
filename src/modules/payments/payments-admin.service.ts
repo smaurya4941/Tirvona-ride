@@ -3,7 +3,10 @@ import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model, QueryFilter } from "mongoose";
 import { Types } from "mongoose";
-import { apiBadRequest, apiNotFound } from "../../common/exceptions/api.exception";
+import {
+  apiBadRequest,
+  apiNotFound,
+} from "../../common/exceptions/api.exception";
 import { toRupees } from "../../common/utils/money";
 import { startOfDayInTimeZone } from "../../common/utils/time";
 import { DriverProfile } from "../drivers/schemas/driver-profile.schema";
@@ -13,7 +16,11 @@ import { RidePaymentStateService } from "../rides/ride-payment-state.service";
 import type { RideDocument } from "../rides/schemas/ride.schema";
 import { User } from "../users/schemas/user.schema";
 import type { AdminPaymentsQueryDto } from "./dto/payment.dto";
-import { PaymentGateway, PaymentStatus, SETTLED_PAYMENT_STATUSES } from "./interfaces/payment-status";
+import {
+  PaymentGateway,
+  PaymentStatus,
+  SETTLED_PAYMENT_STATUSES,
+} from "./interfaces/payment-status";
 import { PaymentRefundState } from "./interfaces/refund-status";
 import { finalFareView } from "../rides/ride-view.service";
 import type {
@@ -35,12 +42,18 @@ interface GatewayTotals {
 }
 
 const DAY_MS = 86_400_000;
-const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const nameOf = (user?: { firstName?: string; lastName?: string } | null): string =>
-  [user?.firstName, user?.lastName].filter(Boolean).join(" ");
-const isDateOnly = (value: string): boolean => /^\d{4}-\d{2}-\d{2}$/.test(value);
+const escapeRegex = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const nameOf = (
+  user?: { firstName?: string; lastName?: string } | null,
+): string => [user?.firstName, user?.lastName].filter(Boolean).join(" ");
+const isDateOnly = (value: string): boolean =>
+  /^\d{4}-\d{2}-\d{2}$/.test(value);
 
-type DriverPerson = AdminPaymentPerson & { driverId: string; driverCode: string };
+type DriverPerson = AdminPaymentPerson & {
+  driverId: string;
+  driverCode: string;
+};
 
 /** Admin read side of payments: list with filters, detail, headline numbers. */
 @Injectable()
@@ -50,7 +63,8 @@ export class PaymentsAdminService {
   constructor(
     @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
-    @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
+    @InjectModel(DriverProfile.name)
+    private readonly driverModel: Model<DriverProfile>,
     private readonly payments: PaymentsService,
     private readonly rides: RidePaymentStateService,
     private readonly earnings: EarningsService,
@@ -63,7 +77,13 @@ export class PaymentsAdminService {
 
   async list(
     query: AdminPaymentsQueryDto,
-  ): Promise<{ items: AdminPaymentListItem[]; page: number; limit: number; total: number; hasMore: boolean }> {
+  ): Promise<{
+    items: AdminPaymentListItem[];
+    page: number;
+    limit: number;
+    total: number;
+    hasMore: boolean;
+  }> {
     const filter = await this.buildFilter(query);
     const [payments, total] = await Promise.all([
       this.paymentModel
@@ -80,7 +100,13 @@ export class PaymentsAdminService {
     ]);
     const rideById = new Map(rides.map((ride) => [ride._id.toString(), ride]));
     return {
-      items: payments.map((payment) => this.toListItem(payment, people, rideById.get(payment.rideId.toString()))),
+      items: payments.map((payment) =>
+        this.toListItem(
+          payment,
+          people,
+          rideById.get(payment.rideId.toString()),
+        ),
+      ),
       page: query.page,
       limit: query.limit,
       total,
@@ -100,8 +126,15 @@ export class PaymentsAdminService {
     ]);
     // What can still be refunded: captured − (processed + requested/pending).
     const refundable =
-      payment.gateway === PaymentGateway.RAZORPAY && SETTLED_PAYMENT_STATUSES.includes(payment.status) && payment.razorpayPaymentId
-        ? Math.max(0, payment.amountPaise - (payment.refundAmountPaise ?? 0) - (payment.refundPendingPaise ?? 0))
+      payment.gateway === PaymentGateway.RAZORPAY &&
+      SETTLED_PAYMENT_STATUSES.includes(payment.status) &&
+      payment.razorpayPaymentId
+        ? Math.max(
+            0,
+            payment.amountPaise -
+              (payment.refundAmountPaise ?? 0) -
+              (payment.refundPendingPaise ?? 0),
+          )
         : 0;
     return {
       ...this.toListItem(payment, people, ride ?? undefined),
@@ -144,7 +177,10 @@ export class PaymentsAdminService {
         fromStatus: event.fromStatus,
         toStatus: event.toStatus,
         actorId: event.actorId?.toString(),
-        amount: event.amountPaise !== undefined ? toRupees(event.amountPaise) : undefined,
+        amount:
+          event.amountPaise !== undefined
+            ? toRupees(event.amountPaise)
+            : undefined,
         refundId: event.refundId?.toString(),
       })),
       duplicateCaptures: payment.duplicateCaptures.map((duplicate) => ({
@@ -153,7 +189,9 @@ export class PaymentsAdminService {
         amount: toRupees(duplicate.amountPaise),
         detectedAt: duplicate.detectedAt,
         refunded: toRupees(duplicate.refundedPaise ?? 0),
-        refundState: (duplicate.refundState as PaymentRefundState | undefined) ?? PaymentRefundState.NONE,
+        refundState:
+          (duplicate.refundState as PaymentRefundState | undefined) ??
+          PaymentRefundState.NONE,
       })),
       earning: earning
         ? {
@@ -172,26 +210,63 @@ export class PaymentsAdminService {
 
   async summary(): Promise<AdminPaymentsSummary> {
     const today = startOfDayInTimeZone(new Date(), this.timeZone);
-    const captured = { status: { $in: [PaymentStatus.CAPTURED, PaymentStatus.REFUNDED, PaymentStatus.PARTIALLY_REFUNDED] } };
-    const [todayRows, allRows, failedToday, outstanding, needsAttention, earnings, refunds] = await Promise.all([
+    const captured = {
+      status: {
+        $in: [
+          PaymentStatus.CAPTURED,
+          PaymentStatus.REFUNDED,
+          PaymentStatus.PARTIALLY_REFUNDED,
+        ],
+      },
+    };
+    const [
+      todayRows,
+      allRows,
+      failedToday,
+      outstanding,
+      needsAttention,
+      earnings,
+      refunds,
+    ] = await Promise.all([
       this.paymentModel
         .aggregate<GatewayTotals>([
           { $match: { ...captured, paidAt: { $gte: today } } },
-          { $group: { _id: "$gateway", amount: { $sum: "$amountPaise" }, count: { $sum: 1 } } },
+          {
+            $group: {
+              _id: "$gateway",
+              amount: { $sum: "$amountPaise" },
+              count: { $sum: 1 },
+            },
+          },
         ])
         .exec(),
       this.paymentModel
         .aggregate<GatewayTotals>([
           { $match: captured },
-          { $group: { _id: "$gateway", amount: { $sum: "$amountPaise" }, count: { $sum: 1 } } },
+          {
+            $group: {
+              _id: "$gateway",
+              amount: { $sum: "$amountPaise" },
+              count: { $sum: 1 },
+            },
+          },
         ])
         .exec(),
-      this.paymentModel.countDocuments({ status: PaymentStatus.FAILED, updatedAt: { $gte: today } }).exec(),
+      this.paymentModel
+        .countDocuments({
+          status: PaymentStatus.FAILED,
+          updatedAt: { $gte: today },
+        })
+        .exec(),
       this.rides.outstanding(),
       this.paymentModel
         .countDocuments({
           duplicateCaptures: {
-            $elemMatch: { refundState: { $nin: [PaymentRefundState.FULL, PaymentRefundState.PENDING] } },
+            $elemMatch: {
+              refundState: {
+                $nin: [PaymentRefundState.FULL, PaymentRefundState.PENDING],
+              },
+            },
           },
         })
         .exec(),
@@ -199,9 +274,12 @@ export class PaymentsAdminService {
       this.refunds.summary(today),
     ]);
     // "Collected" is money Tirvona received online; cash stayed with drivers.
-    const online = (rows: GatewayTotals[]) => rows.filter((row) => row._id !== PaymentGateway.CASH);
-    const cash = (rows: GatewayTotals[]) => rows.find((row) => row._id === PaymentGateway.CASH);
-    const sum = (rows: GatewayTotals[], key: "amount" | "count") => rows.reduce((total, row) => total + row[key], 0);
+    const online = (rows: GatewayTotals[]) =>
+      rows.filter((row) => row._id !== PaymentGateway.CASH);
+    const cash = (rows: GatewayTotals[]) =>
+      rows.find((row) => row._id === PaymentGateway.CASH);
+    const sum = (rows: GatewayTotals[], key: "amount" | "count") =>
+      rows.reduce((total, row) => total + row[key], 0);
     return {
       currency: "INR",
       collectedToday: toRupees(sum(online(todayRows), "amount")),
@@ -229,7 +307,9 @@ export class PaymentsAdminService {
 
   // ── Helpers ───────────────────────────────────────────────────────────
 
-  private async buildFilter(query: AdminPaymentsQueryDto): Promise<QueryFilter<Payment>> {
+  private async buildFilter(
+    query: AdminPaymentsQueryDto,
+  ): Promise<QueryFilter<Payment>> {
     const filter: QueryFilter<Payment> = {};
     const and: QueryFilter<Payment>[] = [];
     if (query.status) filter.status = query.status;
@@ -242,7 +322,10 @@ export class PaymentsAdminService {
       throw apiBadRequest("'from' must be before 'to'", "VALIDATION_FAILED");
     if (Object.keys(createdAt).length) filter.createdAt = createdAt;
 
-    if (query.ride) and.push({ rideId: { $in: await this.rides.findIdsByReference(query.ride) } });
+    if (query.ride)
+      and.push({
+        rideId: { $in: await this.rides.findIdsByReference(query.ride) },
+      });
 
     if (query.customer) {
       const pattern = escapeRegex(query.customer.trim());
@@ -258,7 +341,9 @@ export class PaymentsAdminService {
         .limit(200)
         .lean()
         .exec();
-      and.push({ customerId: { $in: customers.map((customer) => customer._id) } });
+      and.push({
+        customerId: { $in: customers.map((customer) => customer._id) },
+      });
     }
 
     if (query.driver) {
@@ -291,11 +376,22 @@ export class PaymentsAdminService {
 
     if (query.payment) {
       const term = query.payment.trim();
-      if (/^[0-9a-f]{24}$/i.test(term)) and.push({ _id: new Types.ObjectId(term) });
+      if (/^[0-9a-f]{24}$/i.test(term))
+        and.push({ _id: new Types.ObjectId(term) });
       else if (term.startsWith("pay_"))
-        and.push({ $or: [{ razorpayPaymentId: term }, { "attempts.razorpayPaymentId": term }] });
-      else if (term.startsWith("order_")) and.push({ "attempts.orderId": term });
-      else throw apiBadRequest("Search a payment by its id, pay_… or order_…", "VALIDATION_FAILED");
+        and.push({
+          $or: [
+            { razorpayPaymentId: term },
+            { "attempts.razorpayPaymentId": term },
+          ],
+        });
+      else if (term.startsWith("order_"))
+        and.push({ "attempts.orderId": term });
+      else
+        throw apiBadRequest(
+          "Search a payment by its id, pay_… or order_…",
+          "VALIDATION_FAILED",
+        );
     }
 
     if (and.length) filter.$and = and;
@@ -305,17 +401,24 @@ export class PaymentsAdminService {
   /** A date-only bound covers the whole local business day. */
   private boundary(value: string, end: boolean): Date {
     if (isDateOnly(value)) {
-      const start = startOfDayInTimeZone(new Date(`${value}T12:00:00Z`), this.timeZone);
+      const start = startOfDayInTimeZone(
+        new Date(`${value}T12:00:00Z`),
+        this.timeZone,
+      );
       return end ? new Date(start.getTime() + DAY_MS) : start;
     }
     const instant = new Date(value);
-    if (Number.isNaN(instant.getTime())) throw apiBadRequest("Invalid date filter", "VALIDATION_FAILED");
+    if (Number.isNaN(instant.getTime()))
+      throw apiBadRequest("Invalid date filter", "VALIDATION_FAILED");
     return instant;
   }
 
   private async people(
     payments: PaymentDocument[],
-  ): Promise<{ customers: Map<string, AdminPaymentPerson>; drivers: Map<string, DriverPerson> }> {
+  ): Promise<{
+    customers: Map<string, AdminPaymentPerson>;
+    drivers: Map<string, DriverPerson>;
+  }> {
     const profiles = await this.driverModel
       .find({ _id: { $in: payments.map((payment) => payment.driverId) } })
       .select("driverCode userId")
@@ -324,7 +427,10 @@ export class PaymentsAdminService {
     const users = await this.userModel
       .find({
         _id: {
-          $in: [...payments.map((payment) => payment.customerId), ...profiles.map((profile) => profile.userId)],
+          $in: [
+            ...payments.map((payment) => payment.customerId),
+            ...profiles.map((profile) => profile.userId),
+          ],
         },
       })
       .select("firstName lastName phone")
@@ -334,7 +440,12 @@ export class PaymentsAdminService {
     const customers = new Map<string, AdminPaymentPerson>();
     for (const payment of payments) {
       const user = userById.get(payment.customerId.toString());
-      if (user) customers.set(payment.customerId.toString(), { id: user._id.toString(), name: nameOf(user), phone: user.phone });
+      if (user)
+        customers.set(payment.customerId.toString(), {
+          id: user._id.toString(),
+          name: nameOf(user),
+          phone: user.phone,
+        });
     }
     const drivers = new Map<string, DriverPerson>();
     for (const profile of profiles) {
@@ -352,7 +463,10 @@ export class PaymentsAdminService {
 
   private toListItem(
     payment: PaymentDocument,
-    people: { customers: Map<string, AdminPaymentPerson>; drivers: Map<string, DriverPerson> },
+    people: {
+      customers: Map<string, AdminPaymentPerson>;
+      drivers: Map<string, DriverPerson>;
+    },
     ride?: RideDocument,
   ): AdminPaymentListItem {
     return {
@@ -361,7 +475,9 @@ export class PaymentsAdminService {
       driver: people.drivers.get(payment.driverId.toString()) ?? null,
       attempts: payment.attempts.length,
       needsAttention: payment.duplicateCaptures.some(
-        (duplicate) => duplicate.refundState !== PaymentRefundState.FULL && duplicate.refundState !== PaymentRefundState.PENDING,
+        (duplicate) =>
+          duplicate.refundState !== PaymentRefundState.FULL &&
+          duplicate.refundState !== PaymentRefundState.PENDING,
       ),
     };
   }

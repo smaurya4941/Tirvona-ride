@@ -11,7 +11,13 @@ export const PROMO_CODE_PATTERN = /^[A-Z0-9]{3,20}$/;
  */
 @Schema({ timestamps: true, collection: "promo_codes" })
 export class PromoCode {
-  @Prop({ required: true, uppercase: true, trim: true, match: PROMO_CODE_PATTERN, immutable: true })
+  @Prop({
+    required: true,
+    uppercase: true,
+    trim: true,
+    match: PROMO_CODE_PATTERN,
+    immutable: true,
+  })
   code!: string;
 
   @Prop({ required: true, trim: true })
@@ -115,7 +121,11 @@ export class PromoRedemption {
   @Prop({ required: true, min: 0 })
   discount!: number;
 
-  @Prop({ required: true, enum: PromoRedemptionStatus, default: PromoRedemptionStatus.RESERVED })
+  @Prop({
+    required: true,
+    enum: PromoRedemptionStatus,
+    default: PromoRedemptionStatus.RESERVED,
+  })
   status!: PromoRedemptionStatus;
 
   @Prop()
@@ -128,7 +138,8 @@ export class PromoRedemption {
 }
 
 export type PromoRedemptionDocument = HydratedDocument<PromoRedemption>;
-export const PromoRedemptionSchema = SchemaFactory.createForClass(PromoRedemption);
+export const PromoRedemptionSchema =
+  SchemaFactory.createForClass(PromoRedemption);
 
 // One promo per ride.
 PromoRedemptionSchema.index({ rideId: 1 }, { unique: true });

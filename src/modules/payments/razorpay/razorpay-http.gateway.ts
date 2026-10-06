@@ -33,8 +33,12 @@ export class RazorpayHttpGateway extends RazorpayGateway {
     this.keySecret = config.get<string>("razorpayKeySecret") ?? "";
     this.baseUrl = config.getOrThrow<string>("razorpayApiBaseUrl");
     this.timeoutMs = config.getOrThrow<number>("razorpayTimeoutMs");
-    if (!this.isConfigured) this.logger.warn("Razorpay keys are not set: customer payments are disabled");
-    else if (this.keyId.startsWith("rzp_test_")) this.logger.log("Razorpay is in TEST mode");
+    if (!this.isConfigured)
+      this.logger.warn(
+        "Razorpay keys are not set: customer payments are disabled",
+      );
+    else if (this.keyId.startsWith("rzp_test_"))
+      this.logger.log("Razorpay is in TEST mode");
   }
 
   get isConfigured(): boolean {
@@ -51,14 +55,25 @@ export class RazorpayHttpGateway extends RazorpayGateway {
   }
 
   fetchPayment(paymentId: string): Promise<RazorpayPayment> {
-    return this.request<RazorpayPayment>("GET", `/payments/${encodeURIComponent(paymentId)}`);
+    return this.request<RazorpayPayment>(
+      "GET",
+      `/payments/${encodeURIComponent(paymentId)}`,
+    );
   }
 
-  capturePayment(paymentId: string, amountPaise: number, currency: string): Promise<RazorpayPayment> {
-    return this.request<RazorpayPayment>("POST", `/payments/${encodeURIComponent(paymentId)}/capture`, {
-      amount: amountPaise,
-      currency,
-    });
+  capturePayment(
+    paymentId: string,
+    amountPaise: number,
+    currency: string,
+  ): Promise<RazorpayPayment> {
+    return this.request<RazorpayPayment>(
+      "POST",
+      `/payments/${encodeURIComponent(paymentId)}/capture`,
+      {
+        amount: amountPaise,
+        currency,
+      },
+    );
   }
 
   async fetchOrderPayments(orderId: string): Promise<RazorpayPayment[]> {
@@ -70,22 +85,31 @@ export class RazorpayHttpGateway extends RazorpayGateway {
   }
 
   createRefund(input: CreateRefundInput): Promise<RazorpayRefund> {
-    return this.request<RazorpayRefund>("POST", `/payments/${encodeURIComponent(input.razorpayPaymentId)}/refund`, {
-      amount: input.amountPaise,
-      speed: "normal",
-      receipt: input.receipt.slice(0, 40),
-      notes: input.notes,
-    });
+    return this.request<RazorpayRefund>(
+      "POST",
+      `/payments/${encodeURIComponent(input.razorpayPaymentId)}/refund`,
+      {
+        amount: input.amountPaise,
+        speed: "normal",
+        receipt: input.receipt.slice(0, 40),
+        notes: input.notes,
+      },
+    );
   }
 
-  fetchRefund(razorpayPaymentId: string, refundId: string): Promise<RazorpayRefund> {
+  fetchRefund(
+    razorpayPaymentId: string,
+    refundId: string,
+  ): Promise<RazorpayRefund> {
     return this.request<RazorpayRefund>(
       "GET",
       `/payments/${encodeURIComponent(razorpayPaymentId)}/refunds/${encodeURIComponent(refundId)}`,
     );
   }
 
-  async fetchPaymentRefunds(razorpayPaymentId: string): Promise<RazorpayRefund[]> {
+  async fetchPaymentRefunds(
+    razorpayPaymentId: string,
+  ): Promise<RazorpayRefund[]> {
     const body = await this.request<{ items?: RazorpayRefund[] }>(
       "GET",
       `/payments/${encodeURIComponent(razorpayPaymentId)}/refunds?count=100`,
@@ -100,12 +124,20 @@ export class RazorpayHttpGateway extends RazorpayGateway {
       count: String(Math.min(100, input.count)),
       skip: String(input.skip),
     });
-    const body = await this.request<{ items?: RazorpayPayment[] }>("GET", `/payments?${query.toString()}`);
+    const body = await this.request<{ items?: RazorpayPayment[] }>(
+      "GET",
+      `/payments?${query.toString()}`,
+    );
     return body.items ?? [];
   }
 
-  private async request<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
-    if (!this.isConfigured) throw new RazorpayGatewayError("Razorpay is not configured");
+  private async request<T>(
+    method: "GET" | "POST",
+    path: string,
+    body?: unknown,
+  ): Promise<T> {
+    if (!this.isConfigured)
+      throw new RazorpayGatewayError("Razorpay is not configured");
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}${path}`, {
@@ -133,7 +165,9 @@ export class RazorpayHttpGateway extends RazorpayGateway {
     }
     if (!response.ok) {
       const error = (parsed as RazorpayErrorBody).error;
-      this.logger.warn(`Razorpay ${method} ${path} → ${response.status} ${error?.code ?? ""} ${error?.description ?? ""}`);
+      this.logger.warn(
+        `Razorpay ${method} ${path} → ${response.status} ${error?.code ?? ""} ${error?.description ?? ""}`,
+      );
       throw new RazorpayGatewayError(
         error?.description || `Razorpay responded ${response.status}`,
         response.status,

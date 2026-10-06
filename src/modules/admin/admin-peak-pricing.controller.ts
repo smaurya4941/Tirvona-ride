@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Header, Param, Patch, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Header,
+  Param,
+  Patch,
+  Post,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -9,10 +18,20 @@ import { ParseObjectIdPipe } from "../../common/pipes/parse-object-id.pipe";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
 import { AuditLogService } from "../audit/audit-log.service";
-import { CreatePeakSlotDto, SetPeakSlotStatusDto, UpdatePeakSlotDto } from "../pricing/dto/peak-slot.dto";
+import {
+  CreatePeakSlotDto,
+  SetPeakSlotStatusDto,
+  UpdatePeakSlotDto,
+} from "../pricing/dto/peak-slot.dto";
 import { effectivePerKmRate } from "../pricing/peak-pricing";
-import { PeakPricingService, snapshotOf } from "../pricing/peak-pricing.service";
-import type { PeakSlotSnapshot, PeakSlotView } from "../pricing/peak-pricing.service";
+import {
+  PeakPricingService,
+  snapshotOf,
+} from "../pricing/peak-pricing.service";
+import type {
+  PeakSlotSnapshot,
+  PeakSlotView,
+} from "../pricing/peak-pricing.service";
 import { PricingService } from "../pricing/pricing.service";
 import { RideTypesService } from "../ride-types/ride-types.service";
 
@@ -26,7 +45,13 @@ export interface PeakStatusRow {
   basePerKmRate?: number;
   /** The rate a trip started now would be charged at. */
   currentPerKmRate?: number;
-  peak?: { slotId: string; name: string; hikePercent: number; startTime: string; endTime: string };
+  peak?: {
+    slotId: string;
+    name: string;
+    hikePercent: number;
+    startTime: string;
+    endTime: string;
+  };
 }
 
 export interface PeakStatusView {
@@ -50,30 +75,52 @@ export class AdminPeakPricingController {
   ) {}
 
   @Get()
-  @ApiOperation({ summary: "Every peak slot, enabled or not, with whether it is in force right now" })
-  async list(): Promise<ApiSuccessBody<{ timeZone: string; items: PeakSlotView[] }>> {
+  @ApiOperation({
+    summary:
+      "Every peak slot, enabled or not, with whether it is in force right now",
+  })
+  async list(): Promise<
+    ApiSuccessBody<{ timeZone: string; items: PeakSlotView[] }>
+  > {
     const now = new Date();
     const slots = await this.peaks.list();
-    return ok({ timeZone: this.peaks.businessTimeZone, items: slots.map((slot) => this.peaks.toView(slot, now)) });
+    return ok({
+      timeZone: this.peaks.businessTimeZone,
+      items: slots.map((slot) => this.peaks.toView(slot, now)),
+    });
   }
 
   @Get("status")
   @Header("Cache-Control", "no-store")
-  @ApiOperation({ summary: "Current pricing status: normal or peak, per ride type, from the server clock" })
+  @ApiOperation({
+    summary:
+      "Current pricing status: normal or peak, per ride type, from the server clock",
+  })
   async status(): Promise<ApiSuccessBody<PeakStatusView>> {
     const now = new Date();
-    const [rideTypes, tariffs] = await Promise.all([this.rideTypes.listAll(), this.pricing.listAll()]);
+    const [rideTypes, tariffs] = await Promise.all([
+      this.rideTypes.listAll(),
+      this.pricing.listAll(),
+    ]);
     const rows = await Promise.all(
       rideTypes.map(async (rideType): Promise<PeakStatusRow> => {
-        const tariff = tariffs.find((entry) => entry.rideType === rideType.code);
-        const base = { rideType: rideType.code, displayName: rideType.displayName, isActive: rideType.isActive };
+        const tariff = tariffs.find(
+          (entry) => entry.rideType === rideType.code,
+        );
+        const base = {
+          rideType: rideType.code,
+          displayName: rideType.displayName,
+          isActive: rideType.isActive,
+        };
         if (!tariff) return { ...base, hasTariff: false };
         const slot = await this.peaks.resolve(rideType.code, now);
         return {
           ...base,
           hasTariff: true,
           basePerKmRate: tariff.perKmRate,
-          currentPerKmRate: slot ? effectivePerKmRate(tariff.perKmRate, slot.hikePercent) : tariff.perKmRate,
+          currentPerKmRate: slot
+            ? effectivePerKmRate(tariff.perKmRate, slot.hikePercent)
+            : tariff.perKmRate,
           peak: slot && {
             slotId: slot.id,
             name: slot.name,
@@ -94,7 +141,9 @@ export class AdminPeakPricingController {
 
   @Get(":id")
   @ApiOperation({ summary: "One peak slot" })
-  async get(@Param("id", ParseObjectIdPipe) id: string): Promise<ApiSuccessBody<PeakSlotView>> {
+  async get(
+    @Param("id", ParseObjectIdPipe) id: string,
+  ): Promise<ApiSuccessBody<PeakSlotView>> {
     return ok(this.peaks.toView(await this.peaks.get(id)));
   }
 
@@ -122,7 +171,10 @@ export class AdminPeakPricingController {
   }
 
   @Patch(":id")
-  @ApiOperation({ summary: "Edit a peak slot. Affects new estimates and bookings only; booked rides keep their price." })
+  @ApiOperation({
+    summary:
+      "Edit a peak slot. Affects new estimates and bookings only; booked rides keep their price.",
+  })
   async update(
     @Param("id", ParseObjectIdPipe) id: string,
     @Body() dto: UpdatePeakSlotDto,
@@ -134,19 +186,35 @@ export class AdminPeakPricingController {
   }
 
   @Patch(":id/status")
-  @ApiOperation({ summary: "Enable or disable a peak slot without deleting it" })
+  @ApiOperation({
+    summary: "Enable or disable a peak slot without deleting it",
+  })
   async setStatus(
     @Param("id", ParseObjectIdPipe) id: string,
     @Body() dto: SetPeakSlotStatusDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApiSuccessBody<PeakSlotView>> {
-    const { before, slot } = await this.peaks.setActive(id, dto.isActive, admin.userId);
+    const { before, slot } = await this.peaks.setActive(
+      id,
+      dto.isActive,
+      admin.userId,
+    );
     if (before.isActive === slot.isActive) return ok(this.peaks.toView(slot));
-    return ok(await this.audited(admin, slot.isActive ? "peak_slot.enable" : "peak_slot.disable", before, slot));
+    return ok(
+      await this.audited(
+        admin,
+        slot.isActive ? "peak_slot.enable" : "peak_slot.disable",
+        before,
+        slot,
+      ),
+    );
   }
 
   @Delete(":id")
-  @ApiOperation({ summary: "Delete a disabled peak slot. Booked rides keep the peak they were priced with." })
+  @ApiOperation({
+    summary:
+      "Delete a disabled peak slot. Booked rides keep the peak they were priced with.",
+  })
   async remove(
     @Param("id", ParseObjectIdPipe) id: string,
     @CurrentUser() admin: AuthenticatedUser,
@@ -184,7 +252,8 @@ export class AdminPeakPricingController {
   private async assertRideTypesExist(codes?: string[]): Promise<void> {
     for (const code of codes ?? []) {
       const known = await this.rideTypes.findByCode(code);
-      if (!known) throw apiBadRequest(`Unknown ride type ${code}`, "PEAK_SLOT_INVALID");
+      if (!known)
+        throw apiBadRequest(`Unknown ride type ${code}`, "PEAK_SLOT_INVALID");
     }
   }
 }

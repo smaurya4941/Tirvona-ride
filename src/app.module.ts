@@ -15,6 +15,7 @@ import { RedisModule } from "./infrastructure/redis/redis.module";
 import { AccountDeletionModule } from "./modules/account-deletion/account-deletion.module";
 import { LegalModule } from "./modules/legal/legal.module";
 import { AdminModule } from "./modules/admin/admin.module";
+import { StorageModule } from "./modules/storage/storage.module";
 import { AuditModule } from "./modules/audit/audit.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { CircuitRidesModule } from "./modules/circuit-rides/circuit-rides.module";
@@ -90,7 +91,10 @@ const ENV_FILES: Record<string, string[]> = {
           serializers: {
             req: (req: { url?: string }) => ({
               ...req,
-              url: req.url?.replace(/(shared-rides\/(?:view\/)?)[^/?#]+/, "$1[token]"),
+              url: req.url?.replace(
+                /(shared-rides\/(?:view\/)?)[^/?#]+/,
+                "$1[token]",
+              ),
             }),
           },
           redact: [
@@ -111,16 +115,36 @@ const ENV_FILES: Record<string, string[]> = {
         configureThrottlePolicies({
           throttleAuthLimit: config.get("throttleAuthLimit", { infer: true }),
           throttleAuthTtlMs: config.get("throttleAuthTtlMs", { infer: true }),
-          throttleSignupLimit: config.get("throttleSignupLimit", { infer: true }),
-          throttleSignupTtlMs: config.get("throttleSignupTtlMs", { infer: true }),
-          throttleOtpSendLimit: config.get("throttleOtpSendLimit", { infer: true }),
-          throttleOtpSendTtlMs: config.get("throttleOtpSendTtlMs", { infer: true }),
-          throttleOtpVerifyLimit: config.get("throttleOtpVerifyLimit", { infer: true }),
-          throttleOtpVerifyTtlMs: config.get("throttleOtpVerifyTtlMs", { infer: true }),
-          throttleRefreshLimit: config.get("throttleRefreshLimit", { infer: true }),
-          throttleRefreshTtlMs: config.get("throttleRefreshTtlMs", { infer: true }),
-          throttleAdminLoginLimit: config.get("throttleAdminLoginLimit", { infer: true }),
-          throttleAdminLoginTtlMs: config.get("throttleAdminLoginTtlMs", { infer: true }),
+          throttleSignupLimit: config.get("throttleSignupLimit", {
+            infer: true,
+          }),
+          throttleSignupTtlMs: config.get("throttleSignupTtlMs", {
+            infer: true,
+          }),
+          throttleOtpSendLimit: config.get("throttleOtpSendLimit", {
+            infer: true,
+          }),
+          throttleOtpSendTtlMs: config.get("throttleOtpSendTtlMs", {
+            infer: true,
+          }),
+          throttleOtpVerifyLimit: config.get("throttleOtpVerifyLimit", {
+            infer: true,
+          }),
+          throttleOtpVerifyTtlMs: config.get("throttleOtpVerifyTtlMs", {
+            infer: true,
+          }),
+          throttleRefreshLimit: config.get("throttleRefreshLimit", {
+            infer: true,
+          }),
+          throttleRefreshTtlMs: config.get("throttleRefreshTtlMs", {
+            infer: true,
+          }),
+          throttleAdminLoginLimit: config.get("throttleAdminLoginLimit", {
+            infer: true,
+          }),
+          throttleAdminLoginTtlMs: config.get("throttleAdminLoginTtlMs", {
+            infer: true,
+          }),
           throttlePromoLimit: config.get("throttlePromoLimit", { infer: true }),
           throttlePromoTtlMs: config.get("throttlePromoTtlMs", { infer: true }),
         });
@@ -136,6 +160,7 @@ const ENV_FILES: Record<string, string[]> = {
     DatabaseModule,
     RedisModule,
     DomainEventsModule,
+    StorageModule,
     HealthModule,
     AuthModule,
     BrandingModule,

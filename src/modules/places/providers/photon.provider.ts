@@ -3,7 +3,10 @@ import { ConfigService } from "@nestjs/config";
 import type { GeoCoordinates } from "../../locations/geo";
 import { bookingAddress, secondaryLine } from "../place-text";
 import type { PlaceSuggestion, ResolvedPlace } from "../places.types";
-import { GeocodingProvider, GeocodingProviderError } from "./geocoding.provider";
+import {
+  GeocodingProvider,
+  GeocodingProviderError,
+} from "./geocoding.provider";
 import type { ProviderSearchRequest } from "./geocoding.provider";
 import { RequestSpacer } from "./request-spacer";
 
@@ -74,7 +77,9 @@ export class PhotonProvider extends GeocodingProvider {
       location_bias_scale: BIAS_PROMINENCE_SCALE,
     });
     const response = await this.get<PhotonResponse>("/api/", params);
-    const countries = new Set(request.countryCodes.map((code) => code.toUpperCase()));
+    const countries = new Set(
+      request.countryCodes.map((code) => code.toUpperCase()),
+    );
     const suggestions: Suggestion[] = [];
     for (const feature of response.features ?? []) {
       const country = feature.properties?.countrycode?.toUpperCase();
@@ -83,7 +88,11 @@ export class PhotonProvider extends GeocodingProvider {
       if (!place) continue;
       // Photon often returns the node, way and relation of one building.
       if (
-        suggestions.some((existing) => existing.name === place.name && existing.secondaryText === place.secondaryText)
+        suggestions.some(
+          (existing) =>
+            existing.name === place.name &&
+            existing.secondaryText === place.secondaryText,
+        )
       )
         continue;
       suggestions.push(place);
@@ -121,13 +130,28 @@ export class PhotonProvider extends GeocodingProvider {
   private toSuggestion(feature: PhotonFeature | undefined): Suggestion | null {
     const props = feature?.properties;
     const coordinates = feature?.geometry?.coordinates;
-    if (!props?.osm_type || props.osm_id === undefined || !Array.isArray(coordinates)) return null;
+    if (
+      !props?.osm_type ||
+      props.osm_id === undefined ||
+      !Array.isArray(coordinates)
+    )
+      return null;
     const longitude = Number(coordinates[0]);
     const latitude = Number(coordinates[1]);
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
 
-    const streetLine = [props.housenumber, props.street].filter(Boolean).join(" ").trim();
-    const name = (props.name || streetLine || props.street || props.district || props.city || "").trim();
+    const streetLine = [props.housenumber, props.street]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    const name = (
+      props.name ||
+      streetLine ||
+      props.street ||
+      props.district ||
+      props.city ||
+      ""
+    ).trim();
     if (!name) return null;
     const parts = [
       props.name && streetLine ? streetLine : "",
@@ -164,7 +188,10 @@ export class PhotonProvider extends GeocodingProvider {
       throw new GeocodingProviderError(`Photon unreachable: ${reason}`, true);
     }
     if (!response.ok)
-      throw new GeocodingProviderError(`Photon ${response.status}`, response.status === 429 || response.status >= 500);
+      throw new GeocodingProviderError(
+        `Photon ${response.status}`,
+        response.status === 429 || response.status >= 500,
+      );
     try {
       return (await response.json()) as T;
     } catch {

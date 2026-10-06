@@ -2,12 +2,26 @@ import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model, QueryFilter } from "mongoose";
 import { Types } from "mongoose";
-import { ApiException, apiBadRequest, apiConflict, apiNotFound } from "../../common/exceptions/api.exception";
+import {
+  ApiException,
+  apiBadRequest,
+  apiConflict,
+  apiNotFound,
+} from "../../common/exceptions/api.exception";
 import type { Page } from "../rides/rides.service";
 import type { CreatePromoDto, UpdatePromoDto } from "./dto/promo.dto";
-import { PromoDiscountType, PromoStatus, evaluatePromo, precheckPromo } from "./promo-rules";
+import {
+  PromoDiscountType,
+  PromoStatus,
+  evaluatePromo,
+  precheckPromo,
+} from "./promo-rules";
 import type { PromoDiscountRules, PromoEvaluation } from "./promo-rules";
-import { PromoCode, PromoRedemption, PromoRedemptionStatus } from "./schemas/promo-code.schema";
+import {
+  PromoCode,
+  PromoRedemption,
+  PromoRedemptionStatus,
+} from "./schemas/promo-code.schema";
 import type { PromoCodeDocument } from "./schemas/promo-code.schema";
 
 export interface PromoView {
@@ -68,18 +82,26 @@ export interface AppliedPromo extends PromoDiscountRules {
   estimatedDiscount: number;
 }
 
-const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegex = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const isDuplicateKey = (error: unknown, index?: string): boolean => {
   const mongoError = error as { code?: number; message?: string } | undefined;
-  return mongoError?.code === 11000 && (!index || (mongoError.message ?? "").includes(index));
+  return (
+    mongoError?.code === 11000 &&
+    (!index || (mongoError.message ?? "").includes(index))
+  );
 };
-const ACTIVE_USE = [PromoRedemptionStatus.RESERVED, PromoRedemptionStatus.REDEEMED];
+const ACTIVE_USE = [
+  PromoRedemptionStatus.RESERVED,
+  PromoRedemptionStatus.REDEEMED,
+];
 
 @Injectable()
 export class PromotionsService {
   constructor(
     @InjectModel(PromoCode.name) private readonly promoModel: Model<PromoCode>,
-    @InjectModel(PromoRedemption.name) private readonly redemptionModel: Model<PromoRedemption>,
+    @InjectModel(PromoRedemption.name)
+    private readonly redemptionModel: Model<PromoRedemption>,
   ) {}
 
   // ── Views ─────────────────────────────────────────────────────────────
@@ -99,7 +121,10 @@ export class PromotionsService {
       startsAt: promo.startsAt,
       endsAt: promo.endsAt,
       status: promo.status,
-      isLive: promo.status === PromoStatus.ACTIVE && promo.startsAt <= now && promo.endsAt > now,
+      isLive:
+        promo.status === PromoStatus.ACTIVE &&
+        promo.startsAt <= now &&
+        promo.endsAt > now,
       applicableRideTypes: promo.applicableRideTypes,
       showInApp: promo.showInApp,
       usedCount: promo.usedCount,
@@ -136,12 +161,16 @@ export class PromotionsService {
     const now = new Date();
     const filter: QueryFilter<PromoCode> = {};
     if (query.status) filter.status = query.status;
-    if (query.window === "LIVE") Object.assign(filter, { startsAt: { $lte: now }, endsAt: { $gt: now } });
+    if (query.window === "LIVE")
+      Object.assign(filter, { startsAt: { $lte: now }, endsAt: { $gt: now } });
     if (query.window === "SCHEDULED") filter.startsAt = { $gt: now };
     if (query.window === "EXPIRED") filter.endsAt = { $lte: now };
     if (query.search) {
       const term = escapeRegex(query.search.trim());
-      filter.$or = [{ code: { $regex: term.toUpperCase() } }, { title: { $regex: term, $options: "i" } }];
+      filter.$or = [
+        { code: { $regex: term.toUpperCase() } },
+        { title: { $regex: term, $options: "i" } },
+      ];
     }
     const [promos, total] = await Promise.all([
       this.promoModel
@@ -167,8 +196,16 @@ export class PromotionsService {
     return promo;
   }
 
-  async recentRedemptions(promoId: Types.ObjectId, limit = 50): Promise<PromoRedemptionView[]> {
-    const rows = await this.redemptionModel.find({ promoId }).sort({ createdAt: -1 }).limit(limit).lean().exec();
+  async recentRedemptions(
+    promoId: Types.ObjectId,
+    limit = 50,
+  ): Promise<PromoRedemptionView[]> {
+    const rows = await this.redemptionModel
+      .find({ promoId })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean()
+      .exec();
     return rows.map((row) => ({
       id: row._id.toString(),
       userId: row.userId.toString(),
@@ -182,7 +219,10 @@ export class PromotionsService {
     }));
   }
 
-  async create(dto: CreatePromoDto, adminUserId: string): Promise<PromoCodeDocument> {
+  async create(
+    dto: CreatePromoDto,
+    adminUserId: string,
+  ): Promise<PromoCodeDocument> {
     this.assertRules(dto);
     try {
       return await this.promoModel.create({
@@ -195,23 +235,40 @@ export class PromotionsService {
         updatedBy: new Types.ObjectId(adminUserId),
       });
     } catch (error) {
-      if (isDuplicateKey(error)) throw apiConflict(`Promo code ${dto.code} already exists`, "PROMO_ALREADY_EXISTS");
+      if (isDuplicateKey(error))
+        throw apiConflict(
+          `Promo code ${dto.code} already exists`,
+          "PROMO_ALREADY_EXISTS",
+        );
       throw error;
     }
   }
 
-  async update(id: string, dto: UpdatePromoDto, adminUserId: string): Promise<PromoCodeDocument> {
+  async update(
+    id: string,
+    dto: UpdatePromoDto,
+    adminUserId: string,
+  ): Promise<PromoCodeDocument> {
     const promo = await this.get(id);
     const unset: Record<string, 1> = {};
-    const set: Record<string, unknown> = { updatedBy: new Types.ObjectId(adminUserId) };
+    const set: Record<string, unknown> = {
+      updatedBy: new Types.ObjectId(adminUserId),
+    };
     for (const [key, value] of Object.entries(dto)) {
       if (value === undefined) continue;
       if (value === null) unset[key] = 1;
-      else set[key] = key === "applicableRideTypes" ? [...new Set(value as string[])] : value;
+      else
+        set[key] =
+          key === "applicableRideTypes"
+            ? [...new Set(value as string[])]
+            : value;
     }
     const merged = {
-      discountType: (set.discountType as PromoDiscountType | undefined) ?? promo.discountType,
-      discountValue: (set.discountValue as number | undefined) ?? promo.discountValue,
+      discountType:
+        (set.discountType as PromoDiscountType | undefined) ??
+        promo.discountType,
+      discountValue:
+        (set.discountValue as number | undefined) ?? promo.discountValue,
       startsAt: (set.startsAt as Date | undefined) ?? promo.startsAt,
       endsAt: (set.endsAt as Date | undefined) ?? promo.endsAt,
     };
@@ -224,16 +281,24 @@ export class PromotionsService {
       );
 
     const updated = await this.promoModel
-      .findByIdAndUpdate(id, { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) }, {
-        returnDocument: "after",
-        runValidators: true,
-      })
+      .findByIdAndUpdate(
+        id,
+        { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}) },
+        {
+          returnDocument: "after",
+          runValidators: true,
+        },
+      )
       .exec();
     if (!updated) throw apiNotFound("Promo code not found", "PROMO_NOT_FOUND");
     return updated;
   }
 
-  async setStatus(id: string, status: PromoStatus, adminUserId: string): Promise<{ promo: PromoCodeDocument; changed: boolean }> {
+  async setStatus(
+    id: string,
+    status: PromoStatus,
+    adminUserId: string,
+  ): Promise<{ promo: PromoCodeDocument; changed: boolean }> {
     const promo = await this.get(id);
     if (promo.status === status) return { promo, changed: false };
     promo.status = status;
@@ -248,12 +313,22 @@ export class PromotionsService {
   async listForCustomers(): Promise<CustomerPromoView[]> {
     const now = new Date();
     const promos = await this.promoModel
-      .find({ showInApp: true, status: PromoStatus.ACTIVE, startsAt: { $lte: now }, endsAt: { $gt: now } })
+      .find({
+        showInApp: true,
+        status: PromoStatus.ACTIVE,
+        startsAt: { $lte: now },
+        endsAt: { $gt: now },
+      })
       .sort({ endsAt: 1 })
       .limit(20)
       .exec();
     return promos
-      .filter((promo) => promo.usageLimit === undefined || promo.usageLimit === null || promo.usedCount < promo.usageLimit)
+      .filter(
+        (promo) =>
+          promo.usageLimit === undefined ||
+          promo.usageLimit === null ||
+          promo.usedCount < promo.usageLimit,
+      )
       .map((promo) => this.toCustomerView(promo));
   }
 
@@ -262,10 +337,21 @@ export class PromotionsService {
    * Works for codes not shown in the app too. Throws the specific PROMO_* error.
    */
   async check(userId: string, code: string): Promise<CustomerPromoView> {
-    const promo = await this.promoModel.findOne({ code: code.trim().toUpperCase() }).exec();
-    if (!promo) throw this.rejection({ ok: false, code: "PROMO_INVALID", message: "This promo code is not valid" });
+    const promo = await this.promoModel
+      .findOne({ code: code.trim().toUpperCase() })
+      .exec();
+    if (!promo)
+      throw this.rejection({
+        ok: false,
+        code: "PROMO_INVALID",
+        message: "This promo code is not valid",
+      });
     const userUses = await this.redemptionModel
-      .countDocuments({ promoId: promo._id, userId: new Types.ObjectId(userId), status: { $in: ACTIVE_USE } })
+      .countDocuments({
+        promoId: promo._id,
+        userId: new Types.ObjectId(userId),
+        status: { $in: ACTIVE_USE },
+      })
       .exec();
     const result = precheckPromo(
       {
@@ -292,11 +378,24 @@ export class PromotionsService {
     rideType: string,
     fare: number,
   ): Promise<{ promo: PromoCodeDocument | null; result: PromoEvaluation }> {
-    const promo = await this.promoModel.findOne({ code: code.trim().toUpperCase() }).exec();
+    const promo = await this.promoModel
+      .findOne({ code: code.trim().toUpperCase() })
+      .exec();
     if (!promo)
-      return { promo: null, result: { ok: false, code: "PROMO_INVALID", message: "This promo code is not valid" } };
+      return {
+        promo: null,
+        result: {
+          ok: false,
+          code: "PROMO_INVALID",
+          message: "This promo code is not valid",
+        },
+      };
     const userUses = await this.redemptionModel
-      .countDocuments({ promoId: promo._id, userId: new Types.ObjectId(userId), status: { $in: ACTIVE_USE } })
+      .countDocuments({
+        promoId: promo._id,
+        userId: new Types.ObjectId(userId),
+        status: { $in: ACTIVE_USE },
+      })
       .exec();
     return {
       promo,
@@ -332,7 +431,12 @@ export class PromotionsService {
     rideType: string;
     fare: number;
   }): Promise<AppliedPromo> {
-    const { promo, result } = await this.evaluate(input.userId, input.code, input.rideType, input.fare);
+    const { promo, result } = await this.evaluate(
+      input.userId,
+      input.code,
+      input.rideType,
+      input.fare,
+    );
     if (!result.ok || !promo) throw this.rejection(result);
 
     const now = new Date();
@@ -353,7 +457,12 @@ export class PromotionsService {
         { returnDocument: "after" },
       )
       .exec();
-    if (!claimed) throw this.rejection({ ok: false, code: "PROMO_USAGE_LIMIT_REACHED", message: "This promo code has been fully used" });
+    if (!claimed)
+      throw this.rejection({
+        ok: false,
+        code: "PROMO_USAGE_LIMIT_REACHED",
+        message: "This promo code has been fully used",
+      });
 
     try {
       await this.redemptionModel.create({
@@ -366,7 +475,12 @@ export class PromotionsService {
         status: PromoRedemptionStatus.RESERVED,
       });
     } catch (error) {
-      await this.promoModel.updateOne({ _id: promo._id, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } }).exec();
+      await this.promoModel
+        .updateOne(
+          { _id: promo._id, usedCount: { $gt: 0 } },
+          { $inc: { usedCount: -1 } },
+        )
+        .exec();
       throw error;
     }
 
@@ -382,17 +496,32 @@ export class PromotionsService {
   }
 
   /** The ride completed: the use becomes permanent with the final discount. Idempotent. */
-  async redeem(rideId: Types.ObjectId | string, finalDiscount: number): Promise<boolean> {
+  async redeem(
+    rideId: Types.ObjectId | string,
+    finalDiscount: number,
+  ): Promise<boolean> {
     const redemption = await this.redemptionModel
       .findOneAndUpdate(
-        { rideId: new Types.ObjectId(rideId), status: PromoRedemptionStatus.RESERVED },
-        { $set: { status: PromoRedemptionStatus.REDEEMED, discount: finalDiscount, redeemedAt: new Date() } },
+        {
+          rideId: new Types.ObjectId(rideId),
+          status: PromoRedemptionStatus.RESERVED,
+        },
+        {
+          $set: {
+            status: PromoRedemptionStatus.REDEEMED,
+            discount: finalDiscount,
+            redeemedAt: new Date(),
+          },
+        },
         { returnDocument: "after" },
       )
       .exec();
     if (!redemption) return false;
     await this.promoModel
-      .updateOne({ _id: redemption.promoId }, { $inc: { redeemedCount: 1, discountGiven: finalDiscount } })
+      .updateOne(
+        { _id: redemption.promoId },
+        { $inc: { redeemedCount: 1, discountGiven: finalDiscount } },
+      )
       .exec();
     return true;
   }
@@ -401,13 +530,26 @@ export class PromotionsService {
   async release(rideId: Types.ObjectId | string): Promise<boolean> {
     const redemption = await this.redemptionModel
       .findOneAndUpdate(
-        { rideId: new Types.ObjectId(rideId), status: PromoRedemptionStatus.RESERVED },
-        { $set: { status: PromoRedemptionStatus.RELEASED, releasedAt: new Date() } },
+        {
+          rideId: new Types.ObjectId(rideId),
+          status: PromoRedemptionStatus.RESERVED,
+        },
+        {
+          $set: {
+            status: PromoRedemptionStatus.RELEASED,
+            releasedAt: new Date(),
+          },
+        },
         { returnDocument: "after" },
       )
       .exec();
     if (!redemption) return false;
-    await this.promoModel.updateOne({ _id: redemption.promoId, usedCount: { $gt: 0 } }, { $inc: { usedCount: -1 } }).exec();
+    await this.promoModel
+      .updateOne(
+        { _id: redemption.promoId, usedCount: { $gt: 0 } },
+        { $inc: { usedCount: -1 } },
+      )
+      .exec();
     return true;
   }
 
@@ -415,13 +557,31 @@ export class PromotionsService {
 
   rejection(result: PromoEvaluation): ApiException {
     if (result.ok) throw new Error("rejection() called for a valid promo");
-    return new ApiException(result.code === "PROMO_INVALID" ? 404 : 400, result.message, result.code);
+    return new ApiException(
+      result.code === "PROMO_INVALID" ? 404 : 400,
+      result.message,
+      result.code,
+    );
   }
 
-  private assertRules(rules: { discountType: PromoDiscountType; discountValue: number; startsAt: Date; endsAt: Date }): void {
-    if (rules.discountType === PromoDiscountType.PERCENTAGE && rules.discountValue > 100)
-      throw apiBadRequest("A percentage discount cannot exceed 100", "VALIDATION_FAILED");
+  private assertRules(rules: {
+    discountType: PromoDiscountType;
+    discountValue: number;
+    startsAt: Date;
+    endsAt: Date;
+  }): void {
+    if (
+      rules.discountType === PromoDiscountType.PERCENTAGE &&
+      rules.discountValue > 100
+    )
+      throw apiBadRequest(
+        "A percentage discount cannot exceed 100",
+        "VALIDATION_FAILED",
+      );
     if (rules.endsAt <= rules.startsAt)
-      throw apiBadRequest("The end date must be after the start date", "VALIDATION_FAILED");
+      throw apiBadRequest(
+        "The end date must be after the start date",
+        "VALIDATION_FAILED",
+      );
   }
 }

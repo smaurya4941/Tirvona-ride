@@ -23,7 +23,11 @@ export class RideCircuitStop {
   @Prop({ required: true })
   longitude!: number;
 
-  @Prop({ required: true, enum: CircuitStopStatus, default: CircuitStopStatus.UPCOMING })
+  @Prop({
+    required: true,
+    enum: CircuitStopStatus,
+    default: CircuitStopStatus.UPCOMING,
+  })
   status!: CircuitStopStatus;
 
   @Prop()
@@ -58,7 +62,8 @@ export class RideCircuitPricing {
   @Prop({ required: true, min: 0 })
   extraDurationRatePerHour!: number;
 }
-const RideCircuitPricingSchema = SchemaFactory.createForClass(RideCircuitPricing);
+const RideCircuitPricingSchema =
+  SchemaFactory.createForClass(RideCircuitPricing);
 
 /** How much of the package this trip has used. Written by the circuit monitor; completion re-measures. */
 @Schema({ _id: false })
@@ -93,7 +98,8 @@ export class RideCircuitWarnings {
   @Prop()
   distanceExhaustedAt?: Date;
 }
-const RideCircuitWarningsSchema = SchemaFactory.createForClass(RideCircuitWarnings);
+const RideCircuitWarningsSchema =
+  SchemaFactory.createForClass(RideCircuitWarnings);
 
 /** An open operational exception (e.g. a blocked stop). While set, the driver cannot progress. */
 @Schema({ _id: false })
@@ -113,7 +119,8 @@ export class RideCircuitException {
   @Prop({ type: SchemaTypes.ObjectId, ref: "User" })
   reportedBy?: Types.ObjectId;
 }
-const RideCircuitExceptionSchema = SchemaFactory.createForClass(RideCircuitException);
+const RideCircuitExceptionSchema =
+  SchemaFactory.createForClass(RideCircuitException);
 
 /** How the final fare was reached: what the circuit used beyond the package. Frozen at completion. */
 @Schema({ _id: false })
@@ -138,7 +145,9 @@ export class RideCircuitSettlement {
   @Prop({ required: true })
   completedBy!: string;
 }
-const RideCircuitSettlementSchema = SchemaFactory.createForClass(RideCircuitSettlement);
+const RideCircuitSettlementSchema = SchemaFactory.createForClass(
+  RideCircuitSettlement,
+);
 
 /** What the customer was shown and agreed to; a frozen copy of the package at booking. */
 @Schema({ _id: false })

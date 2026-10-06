@@ -4,11 +4,20 @@ import { Injectable } from "@nestjs/common";
 import { MongooseModule } from "@nestjs/mongoose";
 import { LocationsModule } from "../locations/locations.module";
 import { RideTypesModule } from "../ride-types/ride-types.module";
-import { RideType, RideTypeSchema } from "../ride-types/schemas/ride-type.schema";
+import {
+  RideType,
+  RideTypeSchema,
+} from "../ride-types/schemas/ride-type.schema";
 import { PlatformSettingsService } from "./platform-settings.service";
 import { RideDistanceConfigService } from "./ride-distance-config.service";
-import { PlatformSettings, PlatformSettingsSchema } from "./schemas/platform-settings.schema";
-import { RideDistanceConfig, RideDistanceConfigSchema } from "./schemas/ride-distance-config.schema";
+import {
+  PlatformSettings,
+  PlatformSettingsSchema,
+} from "./schemas/platform-settings.schema";
+import {
+  RideDistanceConfig,
+  RideDistanceConfigSchema,
+} from "./schemas/ride-distance-config.schema";
 import { TripPolicyService } from "./trip-policy.service";
 
 /**
@@ -41,7 +50,16 @@ export class RideConfigMigration implements OnApplicationBootstrap {
     LocationsModule,
     RideTypesModule,
   ],
-  providers: [RideDistanceConfigService, PlatformSettingsService, TripPolicyService, RideConfigMigration],
-  exports: [RideDistanceConfigService, PlatformSettingsService, TripPolicyService],
+  providers: [
+    RideDistanceConfigService,
+    PlatformSettingsService,
+    TripPolicyService,
+    RideConfigMigration,
+  ],
+  exports: [
+    RideDistanceConfigService,
+    PlatformSettingsService,
+    TripPolicyService,
+  ],
 })
 export class RideConfigModule {}

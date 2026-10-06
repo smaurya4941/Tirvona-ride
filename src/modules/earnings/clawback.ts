@@ -36,11 +36,23 @@ export interface Clawback {
 export function refundClawback(input: ClawbackInput): Clawback {
   const { earning } = input;
   if (input.paidAmountPaise <= 0 || input.refundAmountPaise <= 0)
-    return { grossReversalPaise: 0, commissionReversalPaise: 0, amountPaise: 0 };
+    return {
+      grossReversalPaise: 0,
+      commissionReversalPaise: 0,
+      amountPaise: 0,
+    };
 
-  const remainingGross = Math.max(0, earning.grossFarePaise - input.previous.grossPaise);
-  const remainingCommission = Math.max(0, earning.commissionPaise - input.previous.commissionPaise);
-  const fullyRefunded = input.previousRefundsPaise + input.refundAmountPaise >= input.paidAmountPaise;
+  const remainingGross = Math.max(
+    0,
+    earning.grossFarePaise - input.previous.grossPaise,
+  );
+  const remainingCommission = Math.max(
+    0,
+    earning.commissionPaise - input.previous.commissionPaise,
+  );
+  const fullyRefunded =
+    input.previousRefundsPaise + input.refundAmountPaise >=
+    input.paidAmountPaise;
 
   let gross: number;
   let commission: number;
@@ -49,9 +61,19 @@ export function refundClawback(input: ClawbackInput): Clawback {
     commission = remainingCommission;
   } else {
     const fraction = input.refundAmountPaise / input.paidAmountPaise;
-    gross = Math.min(remainingGross, Math.round(earning.grossFarePaise * fraction));
-    commission = Math.min(remainingCommission, Math.round(earning.commissionPaise * fraction));
+    gross = Math.min(
+      remainingGross,
+      Math.round(earning.grossFarePaise * fraction),
+    );
+    commission = Math.min(
+      remainingCommission,
+      Math.round(earning.commissionPaise * fraction),
+    );
   }
   const amount = Math.max(0, gross - commission);
-  return { grossReversalPaise: gross, commissionReversalPaise: commission, amountPaise: amount };
+  return {
+    grossReversalPaise: gross,
+    commissionReversalPaise: commission,
+    amountPaise: amount,
+  };
 }

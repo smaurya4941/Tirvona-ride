@@ -4,15 +4,29 @@ import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
 import { Types } from "mongoose";
-import { ApiException, apiBadRequest, apiConflict, apiNotFound } from "../../common/exceptions/api.exception";
+import {
+  ApiException,
+  apiBadRequest,
+  apiConflict,
+  apiNotFound,
+} from "../../common/exceptions/api.exception";
 import { RideType } from "../ride-types/schemas/ride-type.schema";
 import type { UpdateCommissionDto } from "./dto/commission.dto";
-import { CommissionConfigStatus, CommissionPhase, CommissionType } from "./interfaces/earning-status";
-import type { CommissionChangeResult, CommissionView, RideTypeCommissionView } from "./interfaces/earning-views";
+import {
+  CommissionConfigStatus,
+  CommissionPhase,
+  CommissionType,
+} from "./interfaces/earning-status";
+import type {
+  CommissionChangeResult,
+  CommissionView,
+  RideTypeCommissionView,
+} from "./interfaces/earning-views";
 import { CommissionConfig } from "./schemas/commission-config.schema";
 import type { CommissionConfigDocument } from "./schemas/commission-config.schema";
 
-const isDuplicateKey = (error: unknown): boolean => (error as { code?: number } | undefined)?.code === 11000;
+const isDuplicateKey = (error: unknown): boolean =>
+  (error as { code?: number } | undefined)?.code === 11000;
 
 // A change may be back-dated by at most this much (clock skew between the
 // admin's browser and the server), never further: history is not rewritable.
@@ -33,7 +47,8 @@ export class CommissionService implements OnModuleInit {
   private readonly defaultPercent: number;
 
   constructor(
-    @InjectModel(CommissionConfig.name) private readonly configModel: Model<CommissionConfig>,
+    @InjectModel(CommissionConfig.name)
+    private readonly configModel: Model<CommissionConfig>,
     @InjectModel(RideType.name) private readonly rideTypeModel: Model<RideType>,
     config: ConfigService,
   ) {
@@ -59,7 +74,9 @@ export class CommissionService implements OnModuleInit {
 
   /** Gives every existing ride type a commission history (migration on first boot, idempotent). */
   async seedAll(): Promise<void> {
-    const codes = (await this.rideTypeModel.find().select("code").lean().exec()).map((rideType) => rideType.code);
+    const codes = (
+      await this.rideTypeModel.find().select("code").lean().exec()
+    ).map((rideType) => rideType.code);
     for (const code of codes) await this.ensureForRideType(code);
   }
 
@@ -114,7 +131,11 @@ export class CommissionService implements OnModuleInit {
       );
     } catch (error) {
       // A concurrent boot or request created it first.
-      if (!isDuplicateKey(error) && !(error as { writeErrors?: unknown[] }).writeErrors) throw error;
+      if (
+        !isDuplicateKey(error) &&
+        !(error as { writeErrors?: unknown[] }).writeErrors
+      )
+        throw error;
     }
   }
 
@@ -126,7 +147,10 @@ export class CommissionService implements OnModuleInit {
    * before the ride type's first version (history that predates the
    * migration), the earliest version applies.
    */
-  async resolve(rideType: string, at: Date = new Date()): Promise<CommissionConfigDocument> {
+  async resolve(
+    rideType: string,
+    at: Date = new Date(),
+  ): Promise<CommissionConfigDocument> {
     const found = await this.findInForce(rideType, at);
     if (found) return found;
     await this.ensureForRideType(rideType);
@@ -145,9 +169,16 @@ export class CommissionService implements OnModuleInit {
     return retried;
   }
 
-  private findInForce(rideType: string, at: Date): Promise<CommissionConfigDocument | null> {
+  private findInForce(
+    rideType: string,
+    at: Date,
+  ): Promise<CommissionConfigDocument | null> {
     return this.configModel
-      .findOne({ rideType, status: CommissionConfigStatus.ACTIVE, effectiveFrom: { $lte: at } })
+      .findOne({
+        rideType,
+        status: CommissionConfigStatus.ACTIVE,
+        effectiveFrom: { $lte: at },
+      })
       .sort({ effectiveFrom: -1, version: -1 })
       .exec();
   }
@@ -156,29 +187,50 @@ export class CommissionService implements OnModuleInit {
 
   /** Every ride type with its current and scheduled commission. */
   async overview(): Promise<RideTypeCommissionView[]> {
-    const rideTypes = await this.rideTypeModel.find().sort({ sortOrder: 1, code: 1 }).lean().exec();
+    const rideTypes = await this.rideTypeModel
+      .find()
+      .sort({ sortOrder: 1, code: 1 })
+      .lean()
+      .exec();
     return Promise.all(rideTypes.map((rideType) => this.currentFor(rideType)));
   }
 
-  async forRideType(code: string): Promise<RideTypeCommissionView & { history: CommissionView[] }> {
+  async forRideType(
+    code: string,
+  ): Promise<RideTypeCommissionView & { history: CommissionView[] }> {
     const rideType = await this.requireRideType(code);
-    const [summary, history] = await Promise.all([this.currentFor(rideType), this.history(code)]);
+    const [summary, history] = await Promise.all([
+      this.currentFor(rideType),
+      this.history(code),
+    ]);
     return { ...summary, history };
   }
 
-  private async currentFor(rideType: Pick<RideType, "code" | "displayName" | "isActive">): Promise<RideTypeCommissionView> {
+  private async currentFor(
+    rideType: Pick<RideType, "code" | "displayName" | "isActive">,
+  ): Promise<RideTypeCommissionView> {
     const now = new Date();
     const [current, scheduled] = await Promise.all([
       this.resolve(rideType.code, now).catch(() => null),
       this.configModel
-        .find({ rideType: rideType.code, status: CommissionConfigStatus.ACTIVE, effectiveFrom: { $gt: now } })
+        .find({
+          rideType: rideType.code,
+          status: CommissionConfigStatus.ACTIVE,
+          effectiveFrom: { $gt: now },
+        })
         .sort({ effectiveFrom: 1, version: 1 })
         .exec(),
     ]);
     return {
-      rideType: { code: rideType.code, displayName: rideType.displayName, isActive: rideType.isActive },
+      rideType: {
+        code: rideType.code,
+        displayName: rideType.displayName,
+        isActive: rideType.isActive,
+      },
       current: current ? this.toView(current, CommissionPhase.CURRENT) : null,
-      scheduled: scheduled.map((entry) => this.toView(entry, CommissionPhase.SCHEDULED)),
+      scheduled: scheduled.map((entry) =>
+        this.toView(entry, CommissionPhase.SCHEDULED),
+      ),
     };
   }
 
@@ -187,12 +239,17 @@ export class CommissionService implements OnModuleInit {
     await this.requireRideType(code);
     const now = new Date();
     const [all, current] = await Promise.all([
-      this.configModel.find({ rideType: code }).sort({ effectiveFrom: -1, version: -1 }).limit(200).exec(),
+      this.configModel
+        .find({ rideType: code })
+        .sort({ effectiveFrom: -1, version: -1 })
+        .limit(200)
+        .exec(),
       this.resolve(code, now).catch(() => null),
     ]);
     return all.map((entry) => {
       let phase: CommissionPhase;
-      if (entry.status === CommissionConfigStatus.CANCELLED) phase = CommissionPhase.CANCELLED;
+      if (entry.status === CommissionConfigStatus.CANCELLED)
+        phase = CommissionPhase.CANCELLED;
       else if (current?._id.equals(entry._id)) phase = CommissionPhase.CURRENT;
       else if (entry.effectiveFrom > now) phase = CommissionPhase.SCHEDULED;
       else phase = CommissionPhase.SUPERSEDED;
@@ -203,21 +260,36 @@ export class CommissionService implements OnModuleInit {
   // ── Writing (admin) ───────────────────────────────────────────────────
 
   /** Appends a version to the ride type's history; earlier versions stay untouched. */
-  async update(rideType: string, dto: UpdateCommissionDto, adminUserId: string): Promise<CommissionChangeResult> {
+  async update(
+    rideType: string,
+    dto: UpdateCommissionDto,
+    adminUserId: string,
+  ): Promise<CommissionChangeResult> {
     await this.requireRideType(rideType);
     await this.ensureForRideType(rideType);
 
     const now = Date.now();
-    const effectiveFrom = dto.effectiveFrom ? new Date(dto.effectiveFrom) : new Date(now);
+    const effectiveFrom = dto.effectiveFrom
+      ? new Date(dto.effectiveFrom)
+      : new Date(now);
     if (Number.isNaN(effectiveFrom.getTime()))
-      throw apiBadRequest("effectiveFrom must be a valid date", "VALIDATION_FAILED");
+      throw apiBadRequest(
+        "effectiveFrom must be a valid date",
+        "VALIDATION_FAILED",
+      );
     if (effectiveFrom.getTime() < now - BACKDATE_TOLERANCE_MS)
       throw apiBadRequest(
         "A commission change cannot take effect in the past — earnings already recorded keep their rate",
         "VALIDATION_FAILED",
       );
 
-    if (await this.configModel.exists({ rideType, status: CommissionConfigStatus.ACTIVE, effectiveFrom }))
+    if (
+      await this.configModel.exists({
+        rideType,
+        status: CommissionConfigStatus.ACTIVE,
+        effectiveFrom,
+      })
+    )
       throw apiConflict(
         `${rideType} already has a commission taking effect at exactly that time. Pick another time, or cancel the scheduled change first.`,
         "COMMISSION_VERSION_CONFLICT",
@@ -232,7 +304,12 @@ export class CommissionService implements OnModuleInit {
       );
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      const latest = await this.configModel.findOne({ rideType }).sort({ version: -1 }).select("version").lean().exec();
+      const latest = await this.configModel
+        .findOne({ rideType })
+        .sort({ version: -1 })
+        .select("version")
+        .lean()
+        .exec();
       try {
         const created = await this.configModel.create({
           rideType,
@@ -250,25 +327,40 @@ export class CommissionService implements OnModuleInit {
         return {
           commission: this.toView(
             created,
-            effectiveFrom.getTime() > Date.now() ? CommissionPhase.SCHEDULED : CommissionPhase.CURRENT,
+            effectiveFrom.getTime() > Date.now()
+              ? CommissionPhase.SCHEDULED
+              : CommissionPhase.CURRENT,
           ),
           previousValue: before.value,
         };
       } catch (error) {
         if (!isDuplicateKey(error)) throw error;
         // Same start instant taken meanwhile → conflict; otherwise another admin took the version number: retry.
-        if (await this.configModel.exists({ rideType, status: CommissionConfigStatus.ACTIVE, effectiveFrom }))
+        if (
+          await this.configModel.exists({
+            rideType,
+            status: CommissionConfigStatus.ACTIVE,
+            effectiveFrom,
+          })
+        )
           throw apiConflict(
             `${rideType} already has a commission taking effect at exactly that time.`,
             "COMMISSION_VERSION_CONFLICT",
           );
       }
     }
-    throw new ApiException(HttpStatus.CONFLICT, "Commission changed concurrently. Retry.", "VALIDATION_FAILED");
+    throw new ApiException(
+      HttpStatus.CONFLICT,
+      "Commission changed concurrently. Retry.",
+      "VALIDATION_FAILED",
+    );
   }
 
   /** Withdraws a scheduled change. Versions already in force cannot be cancelled. */
-  async cancelScheduled(id: string, adminUserId: string): Promise<CommissionView> {
+  async cancelScheduled(
+    id: string,
+    adminUserId: string,
+  ): Promise<CommissionView> {
     const cancelled = await this.configModel
       .findOneAndUpdate(
         {
@@ -289,7 +381,11 @@ export class CommissionService implements OnModuleInit {
       .exec();
     if (cancelled) return this.toView(cancelled, CommissionPhase.CANCELLED);
     const existing = await this.configModel.findById(id).exec();
-    if (!existing) throw apiNotFound("Commission version not found", "COMMISSION_NOT_CONFIGURED");
+    if (!existing)
+      throw apiNotFound(
+        "Commission version not found",
+        "COMMISSION_NOT_CONFIGURED",
+      );
     throw new ApiException(
       HttpStatus.CONFLICT,
       "Only a scheduled change that has not taken effect can be cancelled",
@@ -297,13 +393,23 @@ export class CommissionService implements OnModuleInit {
     );
   }
 
-  private async requireRideType(code: string): Promise<Pick<RideType, "code" | "displayName" | "isActive">> {
-    const rideType = await this.rideTypeModel.findOne({ code }).select("code displayName isActive").lean().exec();
-    if (!rideType) throw apiNotFound(`Ride type ${code} not found`, "RIDE_TYPE_NOT_FOUND");
+  private async requireRideType(
+    code: string,
+  ): Promise<Pick<RideType, "code" | "displayName" | "isActive">> {
+    const rideType = await this.rideTypeModel
+      .findOne({ code })
+      .select("code displayName isActive")
+      .lean()
+      .exec();
+    if (!rideType)
+      throw apiNotFound(`Ride type ${code} not found`, "RIDE_TYPE_NOT_FOUND");
     return rideType;
   }
 
-  toView(config: CommissionConfigDocument, phase: CommissionPhase): CommissionView {
+  toView(
+    config: CommissionConfigDocument,
+    phase: CommissionPhase,
+  ): CommissionView {
     return {
       id: config._id.toString(),
       rideType: config.rideType,

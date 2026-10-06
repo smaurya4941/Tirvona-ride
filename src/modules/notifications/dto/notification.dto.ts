@@ -1,6 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
-import { IsBoolean, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Matches, Max, MaxLength, Min } from "class-validator";
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+} from "class-validator";
 import { DevicePlatform } from "../schemas/device-token.schema";
 
 export class ListNotificationsQueryDto {
@@ -33,7 +44,9 @@ export class RegisterDeviceTokenDto {
   @IsNotEmpty()
   @MaxLength(4096)
   // FCM tokens are URL-safe base64 with ':' separators; nothing else.
-  @Matches(/^[A-Za-z0-9_:\-.]+$/, { message: "token is not a valid FCM registration token" })
+  @Matches(/^[A-Za-z0-9_:\-.]+$/, {
+    message: "token is not a valid FCM registration token",
+  })
   token!: string;
 
   @ApiProperty({ enum: DevicePlatform })

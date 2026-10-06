@@ -1,9 +1,20 @@
-import { Body, Controller, Get, Injectable, Param, Patch, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Injectable,
+  Param,
+  Patch,
+  Post,
+} from "@nestjs/common";
 import type { PipeTransform } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
-import { apiBadRequest, apiConflict } from "../../common/exceptions/api.exception";
+import {
+  apiBadRequest,
+  apiConflict,
+} from "../../common/exceptions/api.exception";
 import { ok } from "../../common/http/api-response";
 import type { ApiSuccessBody } from "../../common/http/api-response";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
@@ -13,7 +24,10 @@ import { CommissionService } from "../earnings/commission.service";
 import { UpdatePricingDto } from "../pricing/dto/update-pricing.dto";
 import { PricingService } from "../pricing/pricing.service";
 import type { PricingSummary } from "../pricing/pricing.service";
-import { CreateRideTypeDto, UpdateRideTypeDto } from "../ride-types/dto/update-ride-type.dto";
+import {
+  CreateRideTypeDto,
+  UpdateRideTypeDto,
+} from "../ride-types/dto/update-ride-type.dto";
 import { distanceLimitsProblem } from "../ride-config/distance-policy";
 import { RideDistanceConfigService } from "../ride-config/ride-distance-config.service";
 import { RideTypesService } from "../ride-types/ride-types.service";
@@ -34,7 +48,12 @@ export class ParseRideTypeCodePipe implements PipeTransform<string, string> {
   }
 }
 
-const RATE_FIELDS = ["baseFare", "perKmRate", "perMinuteRate", "minimumFare"] as const;
+const RATE_FIELDS = [
+  "baseFare",
+  "perKmRate",
+  "perMinuteRate",
+  "minimumFare",
+] as const;
 
 @ApiTags("Admin · Configuration")
 @ApiBearerAuth()
@@ -59,7 +78,8 @@ export class AdminPricingController {
 
   @Patch("pricing/:rideType")
   @ApiOperation({
-    summary: "Change a ride type's tariff (new estimates only; booked rides keep theirs). Creates the first tariff when all four rates are given.",
+    summary:
+      "Change a ride type's tariff (new estimates only; booked rides keep theirs). Creates the first tariff when all four rates are given.",
   })
   async update(
     @Param("rideType", ParseRideTypeCodePipe) rideType: string,
@@ -77,7 +97,11 @@ export class AdminPricingController {
           "This ride type has no tariff yet: provide base fare, per km, per minute and minimum fare",
           "PRICING_NOT_CONFIGURED",
         );
-      config = await this.pricing.create(rideType, dto as Required<UpdatePricingDto>, admin.userId);
+      config = await this.pricing.create(
+        rideType,
+        dto as Required<UpdatePricingDto>,
+        admin.userId,
+      );
     }
     await this.audit.record({
       adminId: admin.userId,
@@ -93,32 +117,55 @@ export class AdminPricingController {
   // ── Ride types ────────────────────────────────────────────────────────
 
   @Get("ride-types")
-  @ApiOperation({ summary: "All ride types, active and inactive, with their tariff" })
+  @ApiOperation({
+    summary: "All ride types, active and inactive, with their tariff",
+  })
   async listRideTypes(): Promise<ApiSuccessBody<PricingRow[]>> {
     return ok(await this.rows());
   }
 
   @Post("ride-types")
-  @ApiOperation({ summary: "Create a ride type (optionally with its first tariff). Active requires a tariff." })
+  @ApiOperation({
+    summary:
+      "Create a ride type (optionally with its first tariff). Active requires a tariff.",
+  })
   async createRideType(
     @Body() dto: CreateRideTypeDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApiSuccessBody<PricingRow>> {
     if (dto.isActive && !dto.pricing)
-      throw apiBadRequest("Set a tariff to create the ride type as active", "RIDE_TYPE_PRICING_REQUIRED");
+      throw apiBadRequest(
+        "Set a tariff to create the ride type as active",
+        "RIDE_TYPE_PRICING_REQUIRED",
+      );
     if (dto.isActive && !dto.distance)
-      throw apiBadRequest("Set the trip distance limits to create the ride type as active", "RIDE_TYPE_DISTANCE_REQUIRED");
-    if ((await this.rideTypes.findByCode(dto.code)) || (await this.pricing.findConfig(dto.code)))
-      throw apiConflict(`A ride type with code ${dto.code} already exists`, "RIDE_TYPE_ALREADY_EXISTS");
+      throw apiBadRequest(
+        "Set the trip distance limits to create the ride type as active",
+        "RIDE_TYPE_DISTANCE_REQUIRED",
+      );
+    if (
+      (await this.rideTypes.findByCode(dto.code)) ||
+      (await this.pricing.findConfig(dto.code))
+    )
+      throw apiConflict(
+        `A ride type with code ${dto.code} already exists`,
+        "RIDE_TYPE_ALREADY_EXISTS",
+      );
 
     // Reject bad limits before anything is created, so an active ride type never exists without sound ones.
-    const distanceProblem = dto.distance ? distanceLimitsProblem(dto.distance) : null;
-    if (distanceProblem) throw apiBadRequest(distanceProblem, "VALIDATION_FAILED");
+    const distanceProblem = dto.distance
+      ? distanceLimitsProblem(dto.distance)
+      : null;
+    if (distanceProblem)
+      throw apiBadRequest(distanceProblem, "VALIDATION_FAILED");
 
     const { pricing: tariff, distance, ...fields } = dto;
     const rideType = await this.rideTypes.create(fields);
-    if (distance) await this.distanceConfigs.save(rideType.code, distance, admin.userId);
-    const config = tariff ? await this.pricing.create(rideType.code, tariff, admin.userId) : null;
+    if (distance)
+      await this.distanceConfigs.save(rideType.code, distance, admin.userId);
+    const config = tariff
+      ? await this.pricing.create(rideType.code, tariff, admin.userId)
+      : null;
     // Every ride type has a commission from the start (admins can change it on the Commission page).
     await this.commission.ensureForRideType(rideType.code);
     await this.audit.record({
@@ -141,20 +188,31 @@ export class AdminPricingController {
   }
 
   @Patch("ride-types/:rideType")
-  @ApiOperation({ summary: "Edit, activate or deactivate a ride type (never deleted; history stays readable)" })
+  @ApiOperation({
+    summary:
+      "Edit, activate or deactivate a ride type (never deleted; history stays readable)",
+  })
   async updateRideType(
     @Param("rideType", ParseRideTypeCodePipe) code: string,
     @Body() dto: UpdateRideTypeDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApiSuccessBody<RideTypeSummary>> {
     const before = await this.rideTypes.getByCode(code);
-    if (dto.isActive === true && !before.isActive && !(await this.pricing.findConfig(code)))
+    if (
+      dto.isActive === true &&
+      !before.isActive &&
+      !(await this.pricing.findConfig(code))
+    )
       throw apiBadRequest(
         `Set a tariff for ${before.displayName} before making it bookable`,
         "RIDE_TYPE_PRICING_REQUIRED",
       );
 
-    if (dto.isActive === true && !before.isActive && !(await this.distanceConfigs.hasUsable(code)))
+    if (
+      dto.isActive === true &&
+      !before.isActive &&
+      !(await this.distanceConfigs.hasUsable(code))
+    )
       throw apiBadRequest(
         `Set the trip distance limits for ${before.displayName} before making it bookable`,
         "RIDE_TYPE_DISTANCE_REQUIRED",
@@ -162,10 +220,15 @@ export class AdminPricingController {
 
     const { reason, ...changes } = dto;
     const updated = await this.rideTypes.update(code, changes);
-    const toggled = dto.isActive !== undefined && dto.isActive !== before.isActive;
+    const toggled =
+      dto.isActive !== undefined && dto.isActive !== before.isActive;
     await this.audit.record({
       adminId: admin.userId,
-      action: toggled ? (updated.isActive ? "ride_type.activate" : "ride_type.deactivate") : "ride_type.update",
+      action: toggled
+        ? updated.isActive
+          ? "ride_type.activate"
+          : "ride_type.deactivate"
+        : "ride_type.update",
       targetType: "RIDE_TYPE",
       targetId: code,
       targetLabel: updated.displayName,
@@ -176,7 +239,10 @@ export class AdminPricingController {
   }
 
   private async rows(): Promise<PricingRow[]> {
-    const [rideTypes, configs] = await Promise.all([this.rideTypes.listAll(), this.pricing.listAll()]);
+    const [rideTypes, configs] = await Promise.all([
+      this.rideTypes.listAll(),
+      this.pricing.listAll(),
+    ]);
     return rideTypes.map((rideType) => {
       const config = configs.find((entry) => entry.rideType === rideType.code);
       return {

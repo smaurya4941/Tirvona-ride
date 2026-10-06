@@ -9,8 +9,14 @@ import { MongoMemoryServer } from "mongodb-memory-server";
 import type { Connection } from "mongoose";
 import request from "supertest";
 import type { App } from "supertest/types";
-import { WhatsAppDeliveryError, WhatsAppGateway } from "../src/modules/whatsapp/whatsapp.gateway";
-import type { AuthenticationCodeMessage, WhatsAppSendResult } from "../src/modules/whatsapp/whatsapp.gateway";
+import {
+  WhatsAppDeliveryError,
+  WhatsAppGateway,
+} from "../src/modules/whatsapp/whatsapp.gateway";
+import type {
+  AuthenticationCodeMessage,
+  WhatsAppSendResult,
+} from "../src/modules/whatsapp/whatsapp.gateway";
 
 /**
  * Login with a WhatsApp code (docs/auth/otp-login.md): the passwordless
@@ -33,7 +39,9 @@ class FakeWhatsApp extends WhatsAppGateway {
     return this.sent.filter((item) => item.to === phone).length;
   }
 
-  async sendAuthenticationCode(message: AuthenticationCodeMessage): Promise<WhatsAppSendResult> {
+  async sendAuthenticationCode(
+    message: AuthenticationCodeMessage,
+  ): Promise<WhatsAppSendResult> {
     if (this.failNext) {
       this.failNext = false;
       throw new WhatsAppDeliveryError("UNAVAILABLE", "fake outage");
@@ -47,12 +55,19 @@ const PASSWORD = "Password@123";
 const MAX_ATTEMPTS = 5;
 const MAX_SENDS = 10;
 
-const wrongCode = (code: string): string => (code === "000000" ? "111111" : "000000");
+const wrongCode = (code: string): string =>
+  code === "000000" ? "111111" : "000000";
 
 interface Session {
   accessToken: string;
   refreshToken: string;
-  user: { id: string; phone: string; role: string; isPhoneVerified: boolean; lastLoginAt?: string };
+  user: {
+    id: string;
+    phone: string;
+    role: string;
+    isPhoneVerified: boolean;
+    lastLoginAt?: string;
+  };
 }
 
 describe("Login with a WhatsApp code (e2e)", () => {
@@ -71,9 +86,14 @@ describe("Login with a WhatsApp code (e2e)", () => {
   const skipCooldown = (phone: string, purpose: string) =>
     db
       .collection("otp_send_quotas")
-      .updateOne({ phone, purpose }, { $set: { lastSentAt: new Date(Date.now() - 10 * 60_000) } });
+      .updateOne(
+        { phone, purpose },
+        { $set: { lastSentAt: new Date(Date.now() - 10 * 60_000) } },
+      );
 
-  const signUp = async (role: "CUSTOMER" | "DRIVER" = "CUSTOMER"): Promise<Session> => {
+  const signUp = async (
+    role: "CUSTOMER" | "DRIVER" = "CUSTOMER",
+  ): Promise<Session> => {
     const phone = nextPhone();
     const started = await api()
       .post("/api/v1/auth/register")
@@ -81,25 +101,35 @@ describe("Login with a WhatsApp code (e2e)", () => {
       .expect(202);
     const verified = await api()
       .post("/api/v1/auth/verify-otp")
-      .send({ phone, otp: whatsapp.lastCodeFor(phone), verificationId: started.body.data.verificationId })
+      .send({
+        phone,
+        otp: whatsapp.lastCodeFor(phone),
+        verificationId: started.body.data.verificationId,
+      })
       .expect(200);
     return verified.body.data as Session;
   };
 
-  const requestCode = (phone: string) => api().post("/api/v1/auth/login/otp/request").send({ phone });
+  const requestCode = (phone: string) =>
+    api().post("/api/v1/auth/login/otp/request").send({ phone });
   const verifyCode = (phone: string, otp: string, deviceId = "device-otp") =>
-    api().post("/api/v1/auth/login/otp/verify").send({ phone, otp, deviceId, deviceType: "android" });
+    api()
+      .post("/api/v1/auth/login/otp/verify")
+      .send({ phone, otp, deviceId, deviceType: "android" });
   const passwordLogin = (phone: string, password = PASSWORD) =>
     api().post("/api/v1/auth/login").send({ phone, password });
 
   /** request → code → session, in one step. */
   const otpLogin = async (phone: string): Promise<Session> => {
     await requestCode(phone).expect(200);
-    return (await verifyCode(phone, whatsapp.lastCodeFor(phone)).expect(200)).body.data as Session;
+    return (await verifyCode(phone, whatsapp.lastCodeFor(phone)).expect(200))
+      .body.data as Session;
   };
 
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create({ instance: { launchTimeout: 60_000 } });
+    mongo = await MongoMemoryServer.create({
+      instance: { launchTimeout: 60_000 },
+    });
     workDir = await mkdtemp(join(tmpdir(), "tirvona-ride-otp-login-"));
     process.chdir(workDir);
     Object.assign(process.env, {
@@ -153,32 +183,72 @@ describe("Login with a WhatsApp code (e2e)", () => {
     const phone = account.user.phone;
 
     const challenge = (await requestCode(phone).expect(200)).body.data;
-    expect(challenge).toMatchObject({ phone, channel: "WHATSAPP", codeLength: 6, codeSent: true, maskedPhone: expect.any(String) });
+    expect(challenge).toMatchObject({
+      phone,
+      channel: "WHATSAPP",
+      codeLength: 6,
+      codeSent: true,
+      maskedPhone: expect.any(String),
+    });
     expect(challenge.resendAvailableInSeconds).toBeGreaterThan(0);
     expect(challenge).not.toHaveProperty("code");
     expect(challenge).not.toHaveProperty("verificationId");
     // Only an HMAC is stored, under its own purpose.
-    const record = await db.collection("otp_verifications").findOne({ phone, purpose: "LOGIN" });
+    const record = await db
+      .collection("otp_verifications")
+      .findOne({ phone, purpose: "LOGIN" });
     expect(record).toBeTruthy();
     expect(JSON.stringify(record)).not.toContain(whatsapp.lastCodeFor(phone));
 
-    const session = (await verifyCode(phone, whatsapp.lastCodeFor(phone)).expect(200)).body.data as Session;
-    expect(session).toMatchObject({ accessToken: expect.any(String), refreshToken: expect.any(String) });
-    expect(session.user).toMatchObject({ id: account.user.id, phone, role: "CUSTOMER", isPhoneVerified: true });
+    const session = (
+      await verifyCode(phone, whatsapp.lastCodeFor(phone)).expect(200)
+    ).body.data as Session;
+    expect(session).toMatchObject({
+      accessToken: expect.any(String),
+      refreshToken: expect.any(String),
+    });
+    expect(session.user).toMatchObject({
+      id: account.user.id,
+      phone,
+      role: "CUSTOMER",
+      isPhoneVerified: true,
+    });
     expect(session.user.lastLoginAt).toEqual(expect.any(String));
     // The same shape as password login.
-    const viaPassword = (await passwordLogin(phone).expect(200)).body.data as Session;
-    expect(Object.keys(session).sort()).toEqual(Object.keys(viaPassword).sort());
-    expect(Object.keys(session.user).sort()).toEqual(Object.keys(viaPassword.user).sort());
+    const viaPassword = (await passwordLogin(phone).expect(200)).body
+      .data as Session;
+    expect(Object.keys(session).sort()).toEqual(
+      Object.keys(viaPassword).sort(),
+    );
+    expect(Object.keys(session.user).sort()).toEqual(
+      Object.keys(viaPassword.user).sort(),
+    );
 
     // The session works and refreshes; the device was recorded.
-    await api().get("/api/v1/auth/me").set(bearer(session.accessToken)).expect(200);
-    await api().post("/api/v1/auth/refresh").send({ refreshToken: session.refreshToken }).expect(200);
-    expect(await db.collection("user_sessions").countDocuments({ deviceId: "device-otp" })).toBeGreaterThan(0);
+    await api()
+      .get("/api/v1/auth/me")
+      .set(bearer(session.accessToken))
+      .expect(200);
+    await api()
+      .post("/api/v1/auth/refresh")
+      .send({ refreshToken: session.refreshToken })
+      .expect(200);
+    expect(
+      await db
+        .collection("user_sessions")
+        .countDocuments({ deviceId: "device-otp" }),
+    ).toBeGreaterThan(0);
 
     // Single use: the record is gone and the code cannot be replayed.
-    expect(await db.collection("otp_verifications").countDocuments({ phone, purpose: "LOGIN" })).toBe(0);
-    await verifyCode(phone, whatsapp.lastCodeFor(phone)).expect(400, /OTP_NOT_ACTIVE/);
+    expect(
+      await db
+        .collection("otp_verifications")
+        .countDocuments({ phone, purpose: "LOGIN" }),
+    ).toBe(0);
+    await verifyCode(phone, whatsapp.lastCodeFor(phone)).expect(
+      400,
+      /OTP_NOT_ACTIVE/,
+    );
   });
 
   it("signs drivers in too, with their driver status", async () => {
@@ -191,7 +261,9 @@ describe("Login with a WhatsApp code (e2e)", () => {
   it("accepts the number in any local form", async () => {
     const { user } = await signUp();
     const local = user.phone.replace("+91", "");
-    expect((await requestCode(local).expect(200)).body.data.phone).toBe(user.phone);
+    expect((await requestCode(local).expect(200)).body.data.phone).toBe(
+      user.phone,
+    );
     await verifyCode(`0${local}`, whatsapp.lastCodeFor(user.phone)).expect(200);
   });
 
@@ -200,7 +272,9 @@ describe("Login with a WhatsApp code (e2e)", () => {
     await requestCode(unknown).expect(404, /ACCOUNT_NOT_FOUND/);
     await verifyCode(unknown, "123456").expect(404, /ACCOUNT_NOT_FOUND/);
     expect(whatsapp.countFor(unknown)).toBe(0);
-    expect(await db.collection("otp_send_quotas").countDocuments({ phone: unknown })).toBe(0);
+    expect(
+      await db.collection("otp_send_quotas").countDocuments({ phone: unknown }),
+    ).toBe(0);
   });
 
   it("keeps admins password-only: they look like unknown numbers", async () => {
@@ -220,18 +294,33 @@ describe("Login with a WhatsApp code (e2e)", () => {
 
   it("refuses blocked accounts, also when the block lands after the code was sent", async () => {
     const blocked = await signUp();
-    await db.collection("users").updateOne({ phone: blocked.user.phone }, { $set: { status: "BLOCKED" } });
+    await db
+      .collection("users")
+      .updateOne(
+        { phone: blocked.user.phone },
+        { $set: { status: "BLOCKED" } },
+      );
     const before = whatsapp.countFor(blocked.user.phone);
     await requestCode(blocked.user.phone).expect(403, /USER_BLOCKED/);
     expect(whatsapp.countFor(blocked.user.phone)).toBe(before);
 
     const later = await signUp();
     await requestCode(later.user.phone).expect(200);
-    await db.collection("users").updateOne({ phone: later.user.phone }, { $set: { status: "BLOCKED" } });
-    await verifyCode(later.user.phone, whatsapp.lastCodeFor(later.user.phone)).expect(403, /USER_BLOCKED/);
+    await db
+      .collection("users")
+      .updateOne({ phone: later.user.phone }, { $set: { status: "BLOCKED" } });
+    await verifyCode(
+      later.user.phone,
+      whatsapp.lastCodeFor(later.user.phone),
+    ).expect(403, /USER_BLOCKED/);
     // The code was not spent; unblocking lets the user finish.
-    await db.collection("users").updateOne({ phone: later.user.phone }, { $set: { status: "ACTIVE" } });
-    await verifyCode(later.user.phone, whatsapp.lastCodeFor(later.user.phone)).expect(200);
+    await db
+      .collection("users")
+      .updateOne({ phone: later.user.phone }, { $set: { status: "ACTIVE" } });
+    await verifyCode(
+      later.user.phone,
+      whatsapp.lastCodeFor(later.user.phone),
+    ).expect(200);
   });
 
   it("counts wrong codes, then locks the code until a new one is sent", async () => {
@@ -240,11 +329,17 @@ describe("Login with a WhatsApp code (e2e)", () => {
     await requestCode(user.phone).expect(200);
     const code = whatsapp.lastCodeFor(user.phone);
 
-    const first = await verifyCode(user.phone, wrongCode(code)).expect(400, /OTP_INVALID/);
+    const first = await verifyCode(user.phone, wrongCode(code)).expect(
+      400,
+      /OTP_INVALID/,
+    );
     expect(first.body.data).toEqual({ attemptsRemaining: MAX_ATTEMPTS - 1 });
     for (let attempt = 2; attempt < MAX_ATTEMPTS; attempt++)
       await verifyCode(user.phone, wrongCode(code)).expect(400, /OTP_INVALID/);
-    await verifyCode(user.phone, wrongCode(code)).expect(400, /OTP_TOO_MANY_ATTEMPTS/);
+    await verifyCode(user.phone, wrongCode(code)).expect(
+      400,
+      /OTP_TOO_MANY_ATTEMPTS/,
+    );
     await verifyCode(user.phone, code).expect(400, /OTP_TOO_MANY_ATTEMPTS/);
 
     // A locked code does not hold back a fresh one.
@@ -258,8 +353,14 @@ describe("Login with a WhatsApp code (e2e)", () => {
     await requestCode(user.phone).expect(200);
     await db
       .collection("otp_verifications")
-      .updateOne({ phone: user.phone, purpose: "LOGIN" }, { $set: { expiresAt: new Date(Date.now() - 1000) } });
-    await verifyCode(user.phone, whatsapp.lastCodeFor(user.phone)).expect(400, /OTP_EXPIRED/);
+      .updateOne(
+        { phone: user.phone, purpose: "LOGIN" },
+        { $set: { expiresAt: new Date(Date.now() - 1000) } },
+      );
+    await verifyCode(user.phone, whatsapp.lastCodeFor(user.phone)).expect(
+      400,
+      /OTP_EXPIRED/,
+    );
   });
 
   it("keeps the code already sent inside the cooldown; a resend after it kills the old code", async () => {
@@ -278,7 +379,8 @@ describe("Login with a WhatsApp code (e2e)", () => {
     expect(resent.codeSent).toBe(true);
     expect(resent.sendsRemaining).toBe(MAX_SENDS - 2);
     const second = whatsapp.lastCodeFor(user.phone);
-    if (first !== second) await verifyCode(user.phone, first).expect(400, /OTP_INVALID/);
+    if (first !== second)
+      await verifyCode(user.phone, first).expect(400, /OTP_INVALID/);
     await verifyCode(user.phone, second).expect(200);
   });
 
@@ -289,13 +391,24 @@ describe("Login with a WhatsApp code (e2e)", () => {
       .collection("otp_send_quotas")
       .updateOne(
         { phone: user.phone, purpose: "LOGIN" },
-        { $set: { sendCount: MAX_SENDS, lastSentAt: new Date(Date.now() - 10 * 60_000) } },
+        {
+          $set: {
+            sendCount: MAX_SENDS,
+            lastSentAt: new Date(Date.now() - 10 * 60_000),
+          },
+        },
       );
-    const limited = await requestCode(user.phone).expect(429, /OTP_SEND_LIMIT_REACHED/);
+    const limited = await requestCode(user.phone).expect(
+      429,
+      /OTP_SEND_LIMIT_REACHED/,
+    );
     expect(limited.body.data.retryAfterSeconds).toBeGreaterThan(0);
 
     // Forgot password still has its full budget, and password login is untouched.
-    await api().post("/api/v1/auth/password/forgot").send({ phone: user.phone }).expect(200);
+    await api()
+      .post("/api/v1/auth/password/forgot")
+      .send({ phone: user.phone })
+      .expect(200);
     await passwordLogin(user.phone).expect(200);
   });
 
@@ -303,11 +416,15 @@ describe("Login with a WhatsApp code (e2e)", () => {
     const { user } = await signUp();
 
     // A password-reset code cannot sign in…
-    await api().post("/api/v1/auth/password/forgot").send({ phone: user.phone }).expect(200);
+    await api()
+      .post("/api/v1/auth/password/forgot")
+      .send({ phone: user.phone })
+      .expect(200);
     const resetCode = whatsapp.lastCodeFor(user.phone);
     await requestCode(user.phone).expect(200);
     const loginCode = whatsapp.lastCodeFor(user.phone);
-    if (resetCode !== loginCode) await verifyCode(user.phone, resetCode).expect(400, /OTP_INVALID/);
+    if (resetCode !== loginCode)
+      await verifyCode(user.phone, resetCode).expect(400, /OTP_INVALID/);
 
     // …and a login code cannot reset the password.
     if (resetCode !== loginCode)
@@ -317,7 +434,10 @@ describe("Login with a WhatsApp code (e2e)", () => {
         .expect(400, /OTP_INVALID/);
     await verifyCode(user.phone, loginCode).expect(200);
     // The reset code is still the reset flow's own.
-    await api().post("/api/v1/auth/password/verify-otp").send({ phone: user.phone, otp: resetCode }).expect(200);
+    await api()
+      .post("/api/v1/auth/password/verify-otp")
+      .send({ phone: user.phone, otp: resetCode })
+      .expect(200);
 
     // A signup code for a number cannot sign anyone in, even once an account exists.
     const phone = nextPhone();
@@ -341,8 +461,12 @@ describe("Login with a WhatsApp code (e2e)", () => {
     const { user } = await signUp();
     await requestCode(user.phone).expect(200);
     const code = whatsapp.lastCodeFor(user.phone);
-    const results = await Promise.all(Array.from({ length: 5 }, () => verifyCode(user.phone, code)));
-    expect(results.filter((response) => response.status === 200)).toHaveLength(1);
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () => verifyCode(user.phone, code)),
+    );
+    expect(results.filter((response) => response.status === 200)).toHaveLength(
+      1,
+    );
     for (const response of results.filter((item) => item.status !== 200)) {
       expect(response.status).toBe(400);
       expect(response.body.code).toBe("OTP_NOT_ACTIVE");
@@ -351,22 +475,40 @@ describe("Login with a WhatsApp code (e2e)", () => {
 
   it("verifies the phone of an account created before signup OTP", async () => {
     const legacy = await signUp();
-    await db.collection("users").updateOne({ phone: legacy.user.phone }, { $set: { isPhoneVerified: false } });
-    expect((await passwordLogin(legacy.user.phone).expect(200)).body.data.user.isPhoneVerified).toBe(false);
+    await db
+      .collection("users")
+      .updateOne(
+        { phone: legacy.user.phone },
+        { $set: { isPhoneVerified: false } },
+      );
+    expect(
+      (await passwordLogin(legacy.user.phone).expect(200)).body.data.user
+        .isPhoneVerified,
+    ).toBe(false);
 
     const session = await otpLogin(legacy.user.phone);
     expect(session.user.isPhoneVerified).toBe(true);
-    expect((await db.collection("users").findOne({ phone: legacy.user.phone }))?.isPhoneVerified).toBe(true);
+    expect(
+      (await db.collection("users").findOne({ phone: legacy.user.phone }))
+        ?.isPhoneVerified,
+    ).toBe(true);
   });
 
   it("never claims a code was sent when WhatsApp delivery fails, and does not count it", async () => {
     const { user } = await signUp();
     whatsapp.failNext = true;
     await requestCode(user.phone).expect(503, /OTP_DELIVERY_FAILED/);
-    expect(await db.collection("otp_verifications").countDocuments({ phone: user.phone, purpose: "LOGIN" })).toBe(0);
+    expect(
+      await db
+        .collection("otp_verifications")
+        .countDocuments({ phone: user.phone, purpose: "LOGIN" }),
+    ).toBe(0);
     // No cooldown was started by the failed send.
     const retried = (await requestCode(user.phone).expect(200)).body.data;
-    expect(retried).toMatchObject({ codeSent: true, sendsRemaining: MAX_SENDS - 1 });
+    expect(retried).toMatchObject({
+      codeSent: true,
+      sendsRemaining: MAX_SENDS - 1,
+    });
   });
 
   it("validates input and refuses unknown fields", async () => {
@@ -384,7 +526,10 @@ describe("Login with a WhatsApp code (e2e)", () => {
   it("leaves password login exactly as it was", async () => {
     const { user } = await signUp();
     await passwordLogin(user.phone).expect(200);
-    await passwordLogin(user.phone, "Wrong#Pass1").expect(401, /AUTH_INVALID_CREDENTIALS/);
+    await passwordLogin(user.phone, "Wrong#Pass1").expect(
+      401,
+      /AUTH_INVALID_CREDENTIALS/,
+    );
     await passwordLogin(nextPhone()).expect(401, /AUTH_INVALID_CREDENTIALS/);
     // Signing in with a code changes nothing about the password.
     await otpLogin(user.phone);

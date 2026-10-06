@@ -53,12 +53,17 @@ export class ResilientRouteEstimator implements RouteEstimator {
     return this.now() < this.skipUntil;
   }
 
-  async estimate(origin: GeoCoordinates, destination: GeoCoordinates): Promise<RouteEstimate> {
+  async estimate(
+    origin: GeoCoordinates,
+    destination: GeoCoordinates,
+  ): Promise<RouteEstimate> {
     if (this.isDegraded) return this.fallback.estimate(origin, destination);
     const key = `${pointKey(origin)}>${pointKey(destination)}`;
     try {
-      const route = await this.cache.getOrLoad(key, this.options.cacheTtlMs, () =>
-        this.primary.estimate(origin, destination),
+      const route = await this.cache.getOrLoad(
+        key,
+        this.options.cacheTtlMs,
+        () => this.primary.estimate(origin, destination),
       );
       this.consecutiveFailures = 0;
       return route;
@@ -72,12 +77,18 @@ export class ResilientRouteEstimator implements RouteEstimator {
     const message = error instanceof Error ? error.message : String(error);
     // A genuinely unroutable pair says nothing about provider health.
     if (error instanceof NoRouteFoundError) {
-      this.logger.warn(`Route provider found no route; using straight-line estimate`);
+      this.logger.warn(
+        `Route provider found no route; using straight-line estimate`,
+      );
       return;
     }
-    const retryable = error instanceof RouteProviderError ? error.retryable : true;
+    const retryable =
+      error instanceof RouteProviderError ? error.retryable : true;
     this.consecutiveFailures += 1;
-    if (!retryable || this.consecutiveFailures >= this.options.failureThreshold) {
+    if (
+      !retryable ||
+      this.consecutiveFailures >= this.options.failureThreshold
+    ) {
       this.skipUntil = this.now() + this.options.cooldownMs;
       this.consecutiveFailures = 0;
       this.logger.error(
@@ -87,6 +98,8 @@ export class ResilientRouteEstimator implements RouteEstimator {
       );
       return;
     }
-    this.logger.warn(`Route provider failed (${message}); using straight-line estimate`);
+    this.logger.warn(
+      `Route provider failed (${message}); using straight-line estimate`,
+    );
   }
 }

@@ -31,12 +31,17 @@ export class RealtimeIoAdapter extends IoAdapter {
       ...options,
       serveClient: false,
       transports: ["websocket"],
-      cors: { origin: this.config.getOrThrow<string[]>("corsOrigins"), credentials: true },
+      cors: {
+        origin: this.config.getOrThrow<string[]>("corsOrigins"),
+        credentials: true,
+      },
       pingInterval: this.config.getOrThrow<number>("realtimePingIntervalMs"),
       pingTimeout: this.config.getOrThrow<number>("realtimePingTimeoutMs"),
       maxHttpBufferSize: 16 * 1024,
       connectionStateRecovery: {
-        maxDisconnectionDuration: this.config.getOrThrow<number>("realtimeRecoveryWindowMs"),
+        maxDisconnectionDuration: this.config.getOrThrow<number>(
+          "realtimeRecoveryWindowMs",
+        ),
         // Recovered sockets keep the identity set at their original handshake;
         // the token-expiry timer is re-armed on reconnect.
         skipMiddlewares: true,

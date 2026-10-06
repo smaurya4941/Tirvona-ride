@@ -30,7 +30,8 @@ export class EmergencyContact {
 }
 
 export type EmergencyContactDocument = HydratedDocument<EmergencyContact>;
-export const EmergencyContactSchema = SchemaFactory.createForClass(EmergencyContact);
+export const EmergencyContactSchema =
+  SchemaFactory.createForClass(EmergencyContact);
 
 EmergencyContactSchema.index({ userId: 1, createdAt: 1 });
 // The same number twice is a typo, not a second contact.
@@ -38,5 +39,9 @@ EmergencyContactSchema.index({ userId: 1, phone: 1 }, { unique: true });
 // At most one primary contact per user, enforced by the database.
 EmergencyContactSchema.index(
   { userId: 1 },
-  { unique: true, partialFilterExpression: { isPrimary: true }, name: "uniq_primary_emergency_contact" },
+  {
+    unique: true,
+    partialFilterExpression: { isPrimary: true },
+    name: "uniq_primary_emergency_contact",
+  },
 );

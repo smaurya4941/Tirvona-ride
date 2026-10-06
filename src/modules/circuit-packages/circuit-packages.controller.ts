@@ -1,4 +1,12 @@
-import { Controller, Get, Headers, Param, Query, Res, StreamableFile } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Query,
+  Res,
+  StreamableFile,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { Public } from "../../common/decorators/public.decorator";
@@ -20,22 +28,34 @@ export class CircuitPackagesController {
 
   @Get()
   @Roles(UserRole.CUSTOMER)
-  @ApiOperation({ summary: "Circuit packages customers can book (optionally one city)" })
-  async list(@Query() query: ListCircuitPackagesQueryDto): Promise<ApiSuccessBody<CircuitPackageCustomerView[]>> {
+  @ApiOperation({
+    summary: "Circuit packages customers can book (optionally one city)",
+  })
+  async list(
+    @Query() query: ListCircuitPackagesQueryDto,
+  ): Promise<ApiSuccessBody<CircuitPackageCustomerView[]>> {
     return ok(await this.packages.listForCustomers(query.city));
   }
 
   @Get(":id")
   @Roles(UserRole.CUSTOMER)
-  @ApiOperation({ summary: "One circuit package: stops, price, extra charges, vehicles, availability" })
-  async findOne(@Param("id", ParseObjectIdPipe) id: string): Promise<ApiSuccessBody<CircuitPackageCustomerView>> {
+  @ApiOperation({
+    summary:
+      "One circuit package: stops, price, extra charges, vehicles, availability",
+  })
+  async findOne(
+    @Param("id", ParseObjectIdPipe) id: string,
+  ): Promise<ApiSuccessBody<CircuitPackageCustomerView>> {
     return ok(await this.packages.getForCustomer(id));
   }
 
   /** Public like the other brand/marketing images: the app loads it with a plain image request. */
   @Get(":id/cover")
   @Public()
-  @ApiOperation({ summary: "Cover image. Immutable-cached when `v` matches the current version" })
+  @ApiOperation({
+    summary:
+      "Cover image. Immutable-cached when `v` matches the current version",
+  })
   async cover(
     @Param("id") id: string,
     @Query("v") requestedVersion: string | undefined,
@@ -47,13 +67,18 @@ export class CircuitPackagesController {
     response.setHeader("ETag", etag);
     response.setHeader(
       "Cache-Control",
-      requestedVersion === file.version ? "public, max-age=31536000, immutable" : "public, max-age=60",
+      requestedVersion === file.version
+        ? "public, max-age=31536000, immutable"
+        : "public, max-age=60",
     );
     response.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     if (ifNoneMatch === etag) {
       response.status(304);
       return undefined;
     }
-    return new StreamableFile(file.data, { type: file.contentType, length: file.data.length });
+    return new StreamableFile(file.data, {
+      type: file.contentType,
+      length: file.data.length,
+    });
   }
 }

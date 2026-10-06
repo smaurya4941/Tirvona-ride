@@ -6,9 +6,17 @@ import type { HydratedDocument } from "mongoose";
  * Every high-impact admin action: who did what to which record, when and
  * why. Append-only — nothing in the API updates or deletes these rows.
  */
-@Schema({ timestamps: { createdAt: true, updatedAt: false }, collection: "admin_audit_logs" })
+@Schema({
+  timestamps: { createdAt: true, updatedAt: false },
+  collection: "admin_audit_logs",
+})
 export class AdminAuditLog {
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "User", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "User",
+    immutable: true,
+  })
   adminId!: Types.ObjectId;
 
   /** Dotted verb, e.g. "driver.suspend", "promo.deactivate", "broadcast.send". */

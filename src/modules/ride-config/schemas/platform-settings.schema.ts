@@ -14,7 +14,11 @@ export const RIDE_MATCHING_SETTINGS_KEY = "ride-matching";
  */
 @Schema({ timestamps: true, collection: "platform_settings" })
 export class PlatformSettings {
-  @Prop({ required: true, immutable: true, default: RIDE_MATCHING_SETTINGS_KEY })
+  @Prop({
+    required: true,
+    immutable: true,
+    default: RIDE_MATCHING_SETTINGS_KEY,
+  })
   key!: string;
 
   @Prop({ required: true, min: 0.001 })
@@ -31,6 +35,7 @@ export class PlatformSettings {
 }
 
 export type PlatformSettingsDocument = HydratedDocument<PlatformSettings>;
-export const PlatformSettingsSchema = SchemaFactory.createForClass(PlatformSettings);
+export const PlatformSettingsSchema =
+  SchemaFactory.createForClass(PlatformSettings);
 
 PlatformSettingsSchema.index({ key: 1 }, { unique: true });

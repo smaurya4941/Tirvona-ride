@@ -1,6 +1,9 @@
 import type { ConfigService } from "@nestjs/config";
 import { FallbackGeocodingProvider } from "./fallback.provider";
-import { GeocodingProvider, GeocodingProviderError } from "./geocoding.provider";
+import {
+  GeocodingProvider,
+  GeocodingProviderError,
+} from "./geocoding.provider";
 import { PhotonProvider } from "./photon.provider";
 import { RequestSpacer } from "./request-spacer";
 
@@ -33,7 +36,10 @@ const noidaSearch = {
   limit: 5,
 };
 
-const photonFeature = (properties: Record<string, unknown>, coordinates: unknown = [77.3643, 28.6211]) => ({
+const photonFeature = (
+  properties: Record<string, unknown>,
+  coordinates: unknown = [77.3643, 28.6211],
+) => ({
   type: "Feature",
   properties: { countrycode: "IN", ...properties },
   geometry: { type: "Point", coordinates },
@@ -90,7 +96,10 @@ describe("PhotonProvider", () => {
             city: "Lahore",
             countrycode: "PK",
           }),
-          photonFeature({ osm_type: "N", osm_id: 8, name: "Broken" }, "not-coordinates"),
+          photonFeature(
+            { osm_type: "N", osm_id: 8, name: "Broken" },
+            "not-coordinates",
+          ),
         ],
       }),
     );
@@ -121,7 +130,9 @@ describe("PhotonProvider", () => {
     expect(params.get("lon")).toBe("77.37270");
     expect(params.get("lang")).toBe("en");
     expect(Number(params.get("limit"))).toBeGreaterThan(noidaSearch.limit);
-    expect((init.headers as Record<string, string>)["User-Agent"]).toContain("TirvonaRides");
+    expect((init.headers as Record<string, string>)["User-Agent"]).toContain(
+      "TirvonaRides",
+    );
   });
 
   it("names an unnamed address from its house number and street", async () => {
@@ -160,7 +171,9 @@ describe("PhotonProvider", () => {
         ],
       }),
     );
-    await expect(provider.reverse({ latitude: 28.618, longitude: 77.3726 })).resolves.toEqual({
+    await expect(
+      provider.reverse({ latitude: 28.618, longitude: 77.3726 }),
+    ).resolves.toEqual({
       id: "osm:W9",
       name: "Fortis Hospital",
       address: "Fortis Hospital, Sector 62, Noida",
@@ -169,7 +182,9 @@ describe("PhotonProvider", () => {
     });
     expect(new URL(fetchMock.mock.calls[0][0]).pathname).toBe("/reverse");
     fetchMock.mockResolvedValueOnce(jsonResponse({ features: [] }));
-    await expect(provider.reverse({ latitude: 0, longitude: 0 })).resolves.toBeNull();
+    await expect(
+      provider.reverse({ latitude: 0, longitude: 0 }),
+    ).resolves.toBeNull();
   });
 
   it("has no lookup endpoint, so resolve answers null without a call", async () => {
@@ -187,9 +202,13 @@ describe("PhotonProvider", () => {
       retryable: false,
     });
     fetchMock.mockResolvedValueOnce(new Response("<html>", { status: 200 }));
-    await expect(provider.autocomplete(noidaSearch)).rejects.toThrow("malformed JSON");
+    await expect(provider.autocomplete(noidaSearch)).rejects.toThrow(
+      "malformed JSON",
+    );
     fetchMock.mockRejectedValueOnce(new Error("ETIMEDOUT"));
-    await expect(provider.autocomplete(noidaSearch)).rejects.toBeInstanceOf(GeocodingProviderError);
+    await expect(provider.autocomplete(noidaSearch)).rejects.toBeInstanceOf(
+      GeocodingProviderError,
+    );
   });
 });
 
@@ -202,7 +221,9 @@ describe("RequestSpacer", () => {
     expect(Date.now() - started).toBeGreaterThanOrEqual(45);
     // The next free slot is ~50 ms out; a third immediate caller would wait ~100 ms.
     const pending = spacer.acquire();
-    await expect(spacer.acquire()).rejects.toThrow("Photon request budget exhausted");
+    await expect(spacer.acquire()).rejects.toThrow(
+      "Photon request budget exhausted",
+    );
     await pending;
   });
 
@@ -225,7 +246,10 @@ class StubProvider extends GeocodingProvider {
 
   autocomplete() {
     const name = this.answer.placeName;
-    return this.respond("autocomplete", name ? [{ id: "osm:N1", name, secondaryText: "", address: name }] : []);
+    return this.respond(
+      "autocomplete",
+      name ? [{ id: "osm:N1", name, secondaryText: "", address: name }] : [],
+    );
   }
 
   resolve() {
@@ -238,12 +262,16 @@ class StubProvider extends GeocodingProvider {
 
   private place() {
     const name = this.answer.placeName;
-    return name ? { id: "osm:N1", name, address: name, latitude: 1, longitude: 2 } : null;
+    return name
+      ? { id: "osm:N1", name, address: name, latitude: 1, longitude: 2 }
+      : null;
   }
 
   private respond<T>(operation: string, value: T): Promise<T> {
     this.calls.push(operation);
-    return this.answer.error ? Promise.reject(this.answer.error) : Promise.resolve(value);
+    return this.answer.error
+      ? Promise.reject(this.answer.error)
+      : Promise.resolve(value);
   }
 }
 
@@ -257,7 +285,10 @@ describe("FallbackGeocodingProvider", () => {
 
   it("answers from the primary without touching the secondary", async () => {
     const secondary = backup();
-    const provider = new FallbackGeocodingProvider(new StubProvider("photon", { placeName: "Primary" }), secondary);
+    const provider = new FallbackGeocodingProvider(
+      new StubProvider("photon", { placeName: "Primary" }),
+      secondary,
+    );
     expect(provider.name).toBe("photon+nominatim");
     expect((await provider.autocomplete(noidaSearch))[0].name).toBe("Primary");
     expect((await provider.resolve("osm:N1"))?.name).toBe("Primary");
@@ -274,7 +305,10 @@ describe("FallbackGeocodingProvider", () => {
 
   it("asks the secondary when the primary cannot resolve or name a spot, but not after an empty search", async () => {
     const secondary = backup();
-    const provider = new FallbackGeocodingProvider(new StubProvider("photon", {}), secondary);
+    const provider = new FallbackGeocodingProvider(
+      new StubProvider("photon", {}),
+      secondary,
+    );
     expect(await provider.autocomplete(noidaSearch)).toEqual([]);
     expect((await provider.resolve("osm:N1"))?.name).toBe("Backup");
     expect((await provider.reverse(point))?.name).toBe("Backup");
@@ -288,6 +322,8 @@ describe("FallbackGeocodingProvider", () => {
         error: new GeocodingProviderError("Nominatim 429", true),
       }),
     );
-    await expect(provider.autocomplete(noidaSearch)).rejects.toThrow("Nominatim 429");
+    await expect(provider.autocomplete(noidaSearch)).rejects.toThrow(
+      "Nominatim 429",
+    );
   });
 });

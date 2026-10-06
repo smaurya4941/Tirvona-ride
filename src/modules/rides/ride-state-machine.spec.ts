@@ -22,7 +22,9 @@ const HAPPY_PATH = [
 describe("ride state machine", () => {
   it("allows the full happy path in order", () => {
     for (let index = 0; index < HAPPY_PATH.length - 1; index += 1)
-      expect(canTransition(HAPPY_PATH[index], HAPPY_PATH[index + 1])).toBe(true);
+      expect(canTransition(HAPPY_PATH[index], HAPPY_PATH[index + 1])).toBe(
+        true,
+      );
   });
 
   it.each([
@@ -36,15 +38,20 @@ describe("ride state machine", () => {
     [RideStatus.NO_DRIVER_AVAILABLE, RideStatus.SEARCHING],
   ])("rejects %s → %s", (from, to) => {
     expect(canTransition(from, to)).toBe(false);
-    expect(() => assertTransition(from, to)).toThrow(IllegalRideTransitionError);
+    expect(() => assertTransition(from, to)).toThrow(
+      IllegalRideTransitionError,
+    );
   });
 
   it("lets a rejected assignment go back to searching", () => {
-    expect(canTransition(RideStatus.DRIVER_ASSIGNED, RideStatus.SEARCHING)).toBe(true);
+    expect(
+      canTransition(RideStatus.DRIVER_ASSIGNED, RideStatus.SEARCHING),
+    ).toBe(true);
   });
 
   it("has no way out of a terminal status", () => {
-    for (const status of TERMINAL_RIDE_STATUSES) expect(RIDE_TRANSITIONS[status]).toEqual([]);
+    for (const status of TERMINAL_RIDE_STATUSES)
+      expect(RIDE_TRANSITIONS[status]).toEqual([]);
   });
 
   it("partitions every status into active or terminal", () => {
@@ -54,9 +61,14 @@ describe("ride state machine", () => {
   });
 
   it("only offers cancellation where the state machine allows it", () => {
-    for (const status of [...CUSTOMER_CANCELLABLE_STATUSES, ...DRIVER_CANCELLABLE_STATUSES])
+    for (const status of [
+      ...CUSTOMER_CANCELLABLE_STATUSES,
+      ...DRIVER_CANCELLABLE_STATUSES,
+    ])
       expect(canTransition(status, RideStatus.CANCELLED)).toBe(true);
-    expect(CUSTOMER_CANCELLABLE_STATUSES).not.toContain(RideStatus.RIDE_STARTED);
+    expect(CUSTOMER_CANCELLABLE_STATUSES).not.toContain(
+      RideStatus.RIDE_STARTED,
+    );
   });
 
   // ── Phase 7: exhaustive coverage of the transition table ────────────────
@@ -74,28 +86,53 @@ describe("ride state machine", () => {
     `${RideStatus.DRIVER_ARRIVED}>${RideStatus.CANCELLED}`,
     `${RideStatus.RIDE_STARTED}>${RideStatus.COMPLETED}`,
   ]);
-  const ALL_PAIRS = Object.values(RideStatus).flatMap((from) => Object.values(RideStatus).map((to) => [from, to] as const));
+  const ALL_PAIRS = Object.values(RideStatus).flatMap((from) =>
+    Object.values(RideStatus).map((to) => [from, to] as const),
+  );
 
-  it.each(ALL_PAIRS)("%s → %s matches the locked transition table", (from, to) => {
-    expect(canTransition(from, to)).toBe(ALLOWED.has(`${from}>${to}`));
-  });
+  it.each(ALL_PAIRS)(
+    "%s → %s matches the locked transition table",
+    (from, to) => {
+      expect(canTransition(from, to)).toBe(ALLOWED.has(`${from}>${to}`));
+    },
+  );
 
   it.each([
-    ["complete a ride that was only requested", RideStatus.SEARCHING, RideStatus.COMPLETED],
+    [
+      "complete a ride that was only requested",
+      RideStatus.SEARCHING,
+      RideStatus.COMPLETED,
+    ],
     ["start a completed ride", RideStatus.COMPLETED, RideStatus.RIDE_STARTED],
     ["cancel a completed ride", RideStatus.COMPLETED, RideStatus.CANCELLED],
     ["start a cancelled ride", RideStatus.CANCELLED, RideStatus.RIDE_STARTED],
     ["complete a cancelled ride", RideStatus.CANCELLED, RideStatus.COMPLETED],
-    ["cancel an already cancelled ride", RideStatus.CANCELLED, RideStatus.CANCELLED],
-    ["cancel a ride in progress", RideStatus.RIDE_STARTED, RideStatus.CANCELLED],
-    ["revive an unmatched ride", RideStatus.NO_DRIVER_AVAILABLE, RideStatus.DRIVER_ASSIGNED],
+    [
+      "cancel an already cancelled ride",
+      RideStatus.CANCELLED,
+      RideStatus.CANCELLED,
+    ],
+    [
+      "cancel a ride in progress",
+      RideStatus.RIDE_STARTED,
+      RideStatus.CANCELLED,
+    ],
+    [
+      "revive an unmatched ride",
+      RideStatus.NO_DRIVER_AVAILABLE,
+      RideStatus.DRIVER_ASSIGNED,
+    ],
   ])("refuses to %s", (_label, from, to) => {
-    expect(() => assertTransition(from, to)).toThrow(`Illegal ride transition ${from} → ${to}`);
+    expect(() => assertTransition(from, to)).toThrow(
+      `Illegal ride transition ${from} → ${to}`,
+    );
   });
 
   it("never lets a driver cancel before accepting (they reject instead)", () => {
     expect(DRIVER_CANCELLABLE_STATUSES).not.toContain(RideStatus.SEARCHING);
-    expect(DRIVER_CANCELLABLE_STATUSES).not.toContain(RideStatus.DRIVER_ASSIGNED);
+    expect(DRIVER_CANCELLABLE_STATUSES).not.toContain(
+      RideStatus.DRIVER_ASSIGNED,
+    );
     expect(DRIVER_CANCELLABLE_STATUSES).not.toContain(RideStatus.RIDE_STARTED);
   });
 });

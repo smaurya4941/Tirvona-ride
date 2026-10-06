@@ -45,7 +45,13 @@ export interface DashboardReport {
   };
   totals: { customers: number; approvedDrivers: number };
   /** One row per day of the period; a 1-day period shows the last 7 days for context. */
-  trend: Array<{ date: string; requested: number; completed: number; cancelled: number; revenue: number }>;
+  trend: Array<{
+    date: string;
+    requested: number;
+    completed: number;
+    cancelled: number;
+    revenue: number;
+  }>;
 }
 
 export interface DriverListItem {
@@ -90,15 +96,29 @@ export class AdminService {
     private readonly reports: ReportsService,
   ) {}
 
-  async dashboard(query: { preset?: ReportPreset; from?: string; to?: string } = {}): Promise<DashboardReport> {
+  async dashboard(
+    query: { preset?: ReportPreset; from?: string; to?: string } = {},
+  ): Promise<DashboardReport> {
     const custom = Boolean(query.from || query.to);
-    const range = this.reports.range({ preset: custom ? undefined : (query.preset ?? ReportPreset.TODAY), from: query.from, to: query.to });
-    const trendRange = range.days.length > 1 ? range : this.reports.range({ preset: ReportPreset.LAST_7_DAYS });
+    const range = this.reports.range({
+      preset: custom ? undefined : (query.preset ?? ReportPreset.TODAY),
+      from: query.from,
+      to: query.to,
+    });
+    const trendRange =
+      range.days.length > 1
+        ? range
+        : this.reports.range({ preset: ReportPreset.LAST_7_DAYS });
     const [counts, rides, safety, support, today, trend] = await Promise.all([
       this.drivers.countByStatus(),
       this.rides.stats(),
       this.sos.summary(),
-      this.complaints.summary(startOfDayInTimeZone(new Date(), this.config.getOrThrow<string>("appTimeZone"))),
+      this.complaints.summary(
+        startOfDayInTimeZone(
+          new Date(),
+          this.config.getOrThrow<string>("appTimeZone"),
+        ),
+      ),
       this.reports.overview(range),
       this.reports.trend(trendRange),
     ]);
@@ -119,14 +139,20 @@ export class AdminService {
         platformCommission: today.money.platformCommission,
         newCustomers: today.customers.new,
       },
-      totals: { customers: today.customers.total, approvedDrivers: today.drivers.approved },
+      totals: {
+        customers: today.customers.total,
+        approvedDrivers: today.drivers.approved,
+      },
       trend,
       pendingDrivers: counts[DriverStatus.PENDING],
       underReviewDrivers: counts[DriverStatus.UNDER_REVIEW],
       approvedDrivers: counts[DriverStatus.APPROVED],
       rejectedDrivers: counts[DriverStatus.REJECTED],
       suspendedDrivers: counts[DriverStatus.SUSPENDED],
-      totalDrivers: Object.values(counts).reduce((sum, value) => sum + value, 0),
+      totalDrivers: Object.values(counts).reduce(
+        (sum, value) => sum + value,
+        0,
+      ),
     };
   }
 
@@ -186,7 +212,10 @@ export class AdminService {
     };
   }
 
-  async approveDriver(driverId: string, adminUserId: string): Promise<DriverSummary> {
+  async approveDriver(
+    driverId: string,
+    adminUserId: string,
+  ): Promise<DriverSummary> {
     const driver = await this.drivers.approve(driverId, adminUserId);
     this.domainEvents.emit("driver.reviewed", {
       driverId: driver._id.toString(),
@@ -207,7 +236,11 @@ export class AdminService {
     return this.drivers.toSummary(driver);
   }
 
-  async suspendDriver(driverId: string, adminUserId: string, reason: string): Promise<DriverSummary> {
+  async suspendDriver(
+    driverId: string,
+    adminUserId: string,
+    reason: string,
+  ): Promise<DriverSummary> {
     const driver = await this.drivers.suspend(driverId, adminUserId, reason);
     this.domainEvents.emit("driver.status_changed", {
       driverId: driver._id.toString(),

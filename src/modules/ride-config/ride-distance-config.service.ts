@@ -2,7 +2,10 @@ import { HttpStatus, Injectable, Logger } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
 import { Types } from "mongoose";
-import { ApiException, apiBadRequest } from "../../common/exceptions/api.exception";
+import {
+  ApiException,
+  apiBadRequest,
+} from "../../common/exceptions/api.exception";
 import { RideType } from "../ride-types/schemas/ride-type.schema";
 import { distanceLimitsProblem } from "./distance-policy";
 import type { DistanceLimits } from "./distance-policy";
@@ -10,7 +13,8 @@ import { MIGRATION_DEFAULTS } from "./ride-config.limits";
 import { RideDistanceConfig } from "./schemas/ride-distance-config.schema";
 import type { RideDistanceConfigDocument } from "./schemas/ride-distance-config.schema";
 
-const isDuplicateKey = (error: unknown): boolean => (error as { code?: number } | undefined)?.code === 11000;
+const isDuplicateKey = (error: unknown): boolean =>
+  (error as { code?: number } | undefined)?.code === 11000;
 
 export interface RideDistanceConfigView extends DistanceLimits {
   id: string;
@@ -31,7 +35,8 @@ export class RideDistanceConfigService {
   private readonly logger = new Logger(RideDistanceConfigService.name);
 
   constructor(
-    @InjectModel(RideDistanceConfig.name) private readonly configModel: Model<RideDistanceConfig>,
+    @InjectModel(RideDistanceConfig.name)
+    private readonly configModel: Model<RideDistanceConfig>,
     @InjectModel(RideType.name) private readonly rideTypeModel: Model<RideType>,
   ) {}
 
@@ -49,7 +54,10 @@ export class RideDistanceConfigService {
   }
 
   /** A stored row an admin (or a bad manual edit) left unusable counts as no configuration. */
-  assertUsable(rideType: string, config: RideDistanceConfigDocument | null): RideDistanceConfigDocument {
+  assertUsable(
+    rideType: string,
+    config: RideDistanceConfigDocument | null,
+  ): RideDistanceConfigDocument {
     if (!config)
       throw new ApiException(
         HttpStatus.SERVICE_UNAVAILABLE,
@@ -58,7 +66,9 @@ export class RideDistanceConfigService {
         { rideType },
       );
     if (distanceLimitsProblem(config) !== null) {
-      this.logger.error(`Ride distance configuration for ${rideType} is invalid: ${distanceLimitsProblem(config)}`);
+      this.logger.error(
+        `Ride distance configuration for ${rideType} is invalid: ${distanceLimitsProblem(config)}`,
+      );
       throw new ApiException(
         HttpStatus.SERVICE_UNAVAILABLE,
         "Trip distance limits for this ride type are misconfigured",
@@ -71,7 +81,10 @@ export class RideDistanceConfigService {
 
   /** The limits for one ride type, or a 503 when there are none. */
   async getRequired(rideType: string): Promise<RideDistanceConfigDocument> {
-    return this.assertUsable(rideType, await this.configModel.findOne({ rideType }).exec());
+    return this.assertUsable(
+      rideType,
+      await this.configModel.findOne({ rideType }).exec(),
+    );
   }
 
   async find(rideType: string): Promise<RideDistanceConfigDocument | null> {
@@ -79,8 +92,12 @@ export class RideDistanceConfigService {
   }
 
   /** One query for several ride types (the "estimate every ride type" quote). */
-  async findMany(rideTypes: string[]): Promise<Map<string, RideDistanceConfigDocument>> {
-    const rows = await this.configModel.find({ rideType: { $in: rideTypes } }).exec();
+  async findMany(
+    rideTypes: string[],
+  ): Promise<Map<string, RideDistanceConfigDocument>> {
+    const rows = await this.configModel
+      .find({ rideType: { $in: rideTypes } })
+      .exec();
     return new Map(rows.map((row) => [row.rideType, row]));
   }
 
@@ -103,13 +120,19 @@ export class RideDistanceConfigService {
     rideType: string,
     changes: Partial<DistanceLimits>,
     adminId: string,
-  ): Promise<{ before: RideDistanceConfigDocument | null; after: RideDistanceConfigDocument }> {
+  ): Promise<{
+    before: RideDistanceConfigDocument | null;
+    after: RideDistanceConfigDocument;
+  }> {
     const before = await this.find(rideType);
     const merged = {
       minDistanceMeters: changes.minDistanceMeters ?? before?.minDistanceMeters,
       maxDistanceKm: changes.maxDistanceKm ?? before?.maxDistanceKm,
     };
-    if (merged.minDistanceMeters === undefined || merged.maxDistanceKm === undefined)
+    if (
+      merged.minDistanceMeters === undefined ||
+      merged.maxDistanceKm === undefined
+    )
       throw apiBadRequest(
         "This ride type has no distance limits yet: provide both the minimum and the maximum",
         "RIDE_DISTANCE_CONFIG_INCOMPLETE",
@@ -117,12 +140,20 @@ export class RideDistanceConfigService {
     const problem = distanceLimitsProblem(merged);
     if (problem) throw apiBadRequest(problem, "VALIDATION_FAILED");
 
-    const rideTypeRow = await this.rideTypeModel.findOne({ code: rideType }).select("_id").lean().exec();
+    const rideTypeRow = await this.rideTypeModel
+      .findOne({ code: rideType })
+      .select("_id")
+      .lean()
+      .exec();
     const after = await this.configModel
       .findOneAndUpdate(
         { rideType },
         {
-          $set: { ...merged, updatedBy: new Types.ObjectId(adminId), ...(rideTypeRow ? { rideTypeId: rideTypeRow._id } : {}) },
+          $set: {
+            ...merged,
+            updatedBy: new Types.ObjectId(adminId),
+            ...(rideTypeRow ? { rideTypeId: rideTypeRow._id } : {}),
+          },
           $inc: { version: 1 },
           $setOnInsert: { rideType },
         },
@@ -138,7 +169,11 @@ export class RideDistanceConfigService {
    * became admin-controlled. Existing rows are never touched.
    */
   async migrateMissing(): Promise<void> {
-    const rideTypes = await this.rideTypeModel.find().select("code").lean().exec();
+    const rideTypes = await this.rideTypeModel
+      .find()
+      .select("code")
+      .lean()
+      .exec();
     for (const rideType of rideTypes) {
       try {
         const result = await this.configModel

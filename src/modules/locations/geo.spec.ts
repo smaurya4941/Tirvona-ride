@@ -12,12 +12,18 @@ describe("haversineMeters", () => {
 
   it("matches the arc length of one degree on the equator", () => {
     // 2πR / 360 with the IUGG mean radius = 111,195.08 m.
-    const meters = haversineMeters({ latitude: 0, longitude: 0 }, { latitude: 0, longitude: 1 });
+    const meters = haversineMeters(
+      { latitude: 0, longitude: 0 },
+      { latitude: 0, longitude: 1 },
+    );
     expect(meters).toBeCloseTo(111_195.08, 1);
   });
 
   it("matches one degree of latitude anywhere", () => {
-    const meters = haversineMeters({ latitude: 27, longitude: 77 }, { latitude: 28, longitude: 77 });
+    const meters = haversineMeters(
+      { latitude: 27, longitude: 77 },
+      { latitude: 28, longitude: 77 },
+    );
     expect(meters).toBeCloseTo(111_195.08, 1);
   });
 
@@ -38,14 +44,21 @@ describe("haversineMeters", () => {
 describe("HaversineRouteEstimator", () => {
   const estimator = (speed: number, factor = 1) =>
     new HaversineRouteEstimator(
-      new ConfigService({ routeAverageSpeedKmph: speed, routeDistanceFactor: factor }),
+      new ConfigService({
+        routeAverageSpeedKmph: speed,
+        routeDistanceFactor: factor,
+      }),
     );
 
   it("derives duration from the configured average speed", async () => {
     const estimate = await estimator(20).estimate(PREM_MANDIR, BANKE_BIHARI);
-    const expectedMeters = Math.round(haversineMeters(PREM_MANDIR, BANKE_BIHARI));
+    const expectedMeters = Math.round(
+      haversineMeters(PREM_MANDIR, BANKE_BIHARI),
+    );
     expect(estimate.distanceMeters).toBe(expectedMeters);
-    expect(estimate.durationSeconds).toBe(Math.round(expectedMeters / (20_000 / 3600)));
+    expect(estimate.durationSeconds).toBe(
+      Math.round(expectedMeters / (20_000 / 3600)),
+    );
     expect(estimate.provider).toBe("HAVERSINE");
   });
 

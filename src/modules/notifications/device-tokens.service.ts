@@ -3,8 +3,14 @@ import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
 import { Types } from "mongoose";
-import { DeviceToken, DeviceTokenDeactivation } from "./schemas/device-token.schema";
-import type { DevicePlatform, DeviceTokenDocument } from "./schemas/device-token.schema";
+import {
+  DeviceToken,
+  DeviceTokenDeactivation,
+} from "./schemas/device-token.schema";
+import type {
+  DevicePlatform,
+  DeviceTokenDocument,
+} from "./schemas/device-token.schema";
 
 export interface RegisterDeviceTokenInput {
   token: string;
@@ -22,7 +28,9 @@ export interface DeviceTokenView {
 }
 
 const isDuplicateKey = (error: unknown): boolean =>
-  typeof error === "object" && error !== null && (error as { code?: number }).code === 11000;
+  typeof error === "object" &&
+  error !== null &&
+  (error as { code?: number }).code === 11000;
 
 /**
  * FCM registration tokens. The caller is always the authenticated user —
@@ -41,18 +49,28 @@ export class DeviceTokensService {
   private readonly maxPerUser: number;
 
   constructor(
-    @InjectModel(DeviceToken.name) private readonly tokenModel: Model<DeviceToken>,
+    @InjectModel(DeviceToken.name)
+    private readonly tokenModel: Model<DeviceToken>,
     config: ConfigService,
   ) {
     this.maxPerUser = config.getOrThrow<number>("deviceTokensMaxPerUser");
   }
 
-  async register(userId: string, input: RegisterDeviceTokenInput): Promise<DeviceTokenView> {
+  async register(
+    userId: string,
+    input: RegisterDeviceTokenInput,
+  ): Promise<DeviceTokenView> {
     const owner = new Types.ObjectId(userId);
     const now = new Date();
-    const previous = await this.tokenModel.findOne({ token: input.token }).select("userId").lean().exec();
+    const previous = await this.tokenModel
+      .findOne({ token: input.token })
+      .select("userId")
+      .lean()
+      .exec();
     if (previous && !previous.userId.equals(owner))
-      this.logger.log(`Device token moved to user ${userId} (account switch on device ${input.deviceId})`);
+      this.logger.log(
+        `Device token moved to user ${userId} (account switch on device ${input.deviceId})`,
+      );
 
     let saved: DeviceTokenDocument | null;
     const upsert = () =>
@@ -85,8 +103,18 @@ export class DeviceTokensService {
     // Token refresh: the device's previous token (for any account) is dead.
     await this.tokenModel
       .updateMany(
-        { deviceId: input.deviceId, token: { $ne: input.token }, isActive: true },
-        { $set: { isActive: false, deactivatedAt: now, deactivationReason: DeviceTokenDeactivation.REPLACED } },
+        {
+          deviceId: input.deviceId,
+          token: { $ne: input.token },
+          isActive: true,
+        },
+        {
+          $set: {
+            isActive: false,
+            deactivatedAt: now,
+            deactivationReason: DeviceTokenDeactivation.REPLACED,
+          },
+        },
       )
       .exec();
     await this.enforceLimit(owner);
@@ -98,7 +126,13 @@ export class DeviceTokensService {
     const result = await this.tokenModel
       .updateOne(
         { token, userId: new Types.ObjectId(userId), isActive: true },
-        { $set: { isActive: false, deactivatedAt: new Date(), deactivationReason: DeviceTokenDeactivation.LOGOUT } },
+        {
+          $set: {
+            isActive: false,
+            deactivatedAt: new Date(),
+            deactivationReason: DeviceTokenDeactivation.LOGOUT,
+          },
+        },
       )
       .exec();
     return result.modifiedCount > 0;
@@ -109,14 +143,23 @@ export class DeviceTokensService {
     const result = await this.tokenModel
       .updateMany(
         { userId: new Types.ObjectId(userId), deviceId, isActive: true },
-        { $set: { isActive: false, deactivatedAt: new Date(), deactivationReason: DeviceTokenDeactivation.LOGOUT } },
+        {
+          $set: {
+            isActive: false,
+            deactivatedAt: new Date(),
+            deactivationReason: DeviceTokenDeactivation.LOGOUT,
+          },
+        },
       )
       .exec();
     return result.modifiedCount;
   }
 
   /** Every session ended (password reset, sign out everywhere): stop pushing to the other devices. */
-  async deactivateAllForUser(userId: string, exceptDeviceId?: string): Promise<number> {
+  async deactivateAllForUser(
+    userId: string,
+    exceptDeviceId?: string,
+  ): Promise<number> {
     const result = await this.tokenModel
       .updateMany(
         {
@@ -124,7 +167,13 @@ export class DeviceTokensService {
           isActive: true,
           ...(exceptDeviceId ? { deviceId: { $ne: exceptDeviceId } } : {}),
         },
-        { $set: { isActive: false, deactivatedAt: new Date(), deactivationReason: DeviceTokenDeactivation.LOGOUT } },
+        {
+          $set: {
+            isActive: false,
+            deactivatedAt: new Date(),
+            deactivationReason: DeviceTokenDeactivation.LOGOUT,
+          },
+        },
       )
       .exec();
     return result.modifiedCount;
@@ -137,7 +186,11 @@ export class DeviceTokensService {
       .updateMany(
         { token: { $in: tokens }, isActive: true },
         {
-          $set: { isActive: false, deactivatedAt: new Date(), deactivationReason: DeviceTokenDeactivation.UNREGISTERED },
+          $set: {
+            isActive: false,
+            deactivatedAt: new Date(),
+            deactivationReason: DeviceTokenDeactivation.UNREGISTERED,
+          },
         },
       )
       .exec();
@@ -145,12 +198,21 @@ export class DeviceTokensService {
 
   async touch(tokens: string[]): Promise<void> {
     if (!tokens.length) return;
-    await this.tokenModel.updateMany({ token: { $in: tokens } }, { $set: { lastUsedAt: new Date() } }).exec();
+    await this.tokenModel
+      .updateMany(
+        { token: { $in: tokens } },
+        { $set: { lastUsedAt: new Date() } },
+      )
+      .exec();
   }
 
   async activeTokens(userId: string | Types.ObjectId): Promise<string[]> {
     const rows = await this.tokenModel
-      .find({ userId: typeof userId === "string" ? new Types.ObjectId(userId) : userId, isActive: true })
+      .find({
+        userId:
+          typeof userId === "string" ? new Types.ObjectId(userId) : userId,
+        isActive: true,
+      })
       .select("token")
       .sort({ lastUsedAt: -1 })
       .limit(this.maxPerUser)
@@ -180,7 +242,13 @@ export class DeviceTokensService {
     await this.tokenModel
       .updateMany(
         { _id: { $in: stale.map((row) => row._id) } },
-        { $set: { isActive: false, deactivatedAt: new Date(), deactivationReason: DeviceTokenDeactivation.LIMIT } },
+        {
+          $set: {
+            isActive: false,
+            deactivatedAt: new Date(),
+            deactivationReason: DeviceTokenDeactivation.LIMIT,
+          },
+        },
       )
       .exec();
   }

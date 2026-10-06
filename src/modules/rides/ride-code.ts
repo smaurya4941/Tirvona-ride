@@ -6,6 +6,7 @@ const ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
 /** "TR" + 8 random characters ≈ 8.5 × 10^11 combinations. */
 export function generateRideCode(): string {
   let code = "TR";
-  for (let index = 0; index < 8; index += 1) code += ALPHABET[randomInt(ALPHABET.length)];
+  for (let index = 0; index < 8; index += 1)
+    code += ALPHABET[randomInt(ALPHABET.length)];
   return code;
 }

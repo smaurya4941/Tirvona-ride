@@ -1,11 +1,13 @@
 import { randomBytes } from "node:crypto";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Logger } from "@nestjs/common";
 import type { INestApplication } from "@nestjs/common";
+import { getConnectionToken } from "@nestjs/mongoose";
 import { Test } from "@nestjs/testing";
 import { MongoMemoryServer } from "mongodb-memory-server";
+import type { Connection } from "mongoose";
 import request from "supertest";
 import type { App } from "supertest/types";
 
@@ -21,7 +23,9 @@ const PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
   "base64",
 );
-const LICENSE_EXPIRY = new Date(Date.UTC(new Date().getUTCFullYear() + 5, 0, 1)).toISOString();
+const LICENSE_EXPIRY = new Date(
+  Date.UTC(new Date().getUTCFullYear() + 5, 0, 1),
+).toISOString();
 
 const PHONES = {
   customer: "+919800000001",
@@ -52,12 +56,22 @@ describe("Phase 1 — done tests (e2e)", () => {
       .expect(202);
     const verified = await api()
       .post("/api/v1/auth/verify-otp")
-      .send({ phone, otp: otps.get(phone), verificationId: registered.body.data.verificationId })
+      .send({
+        phone,
+        otp: otps.get(phone),
+        verificationId: registered.body.data.verificationId,
+      })
       .expect(200);
     return verified.body.data;
   }
 
-  async function login(phone: string): Promise<{ accessToken: string; refreshToken: string; user: Record<string, unknown> }> {
+  async function login(
+    phone: string,
+  ): Promise<{
+    accessToken: string;
+    refreshToken: string;
+    user: Record<string, unknown>;
+  }> {
     const response = await api()
       .post("/api/v1/auth/login")
       .send({ phone, password: PASSWORD })
@@ -66,27 +80,45 @@ describe("Phase 1 — done tests (e2e)", () => {
   }
 
   async function me(token: string) {
-    return (await api().get("/api/v1/auth/me").set(bearer(token)).expect(200)).body.data;
+    return (await api().get("/api/v1/auth/me").set(bearer(token)).expect(200))
+      .body.data;
   }
 
   async function completeOnboarding(token: string, registrationNumber: string) {
     await api()
       .patch("/api/v1/drivers/me")
       .set(bearer(token))
-      .send({ licenseNumber: `DL${registrationNumber}`, licenseExpiry: LICENSE_EXPIRY, address: "Vrindavan, UP" })
+      .send({
+        licenseNumber: `DL${registrationNumber}`,
+        licenseExpiry: LICENSE_EXPIRY,
+        address: "Vrindavan, UP",
+      })
       .expect(200);
     const vehicle = await api()
       .post("/api/v1/vehicles")
       .set(bearer(token))
-      .send({ vehicleType: "BIKE", registrationNumber, make: "Honda", model: "Shine", color: "Black" })
+      .send({
+        vehicleType: "BIKE",
+        registrationNumber,
+        make: "Honda",
+        model: "Shine",
+        color: "Black",
+      })
       .expect(201);
     const documents: Record<string, string> = {};
-    for (const documentType of ["DRIVING_LICENSE", "AADHAAR", "PROFILE_PHOTO"]) {
+    for (const documentType of [
+      "DRIVING_LICENSE",
+      "AADHAAR",
+      "PROFILE_PHOTO",
+    ]) {
       const uploaded = await api()
         .post("/api/v1/drivers/me/documents")
         .set(bearer(token))
         .field("documentType", documentType)
-        .attach("file", PNG, { filename: `${documentType.toLowerCase()}.png`, contentType: "image/png" })
+        .attach("file", PNG, {
+          filename: `${documentType.toLowerCase()}.png`,
+          contentType: "image/png",
+        })
         .expect(201);
       documents[documentType] = uploaded.body.data.id;
     }
@@ -95,10 +127,14 @@ describe("Phase 1 — done tests (e2e)", () => {
 
   beforeAll(async () => {
     // Capture dev OTPs from LogWhatsAppGateway's line: "[DEV OTP] >>> 123456 <<< for <phone> (...)".
-    jest.spyOn(Logger.prototype, "log").mockImplementation((message: unknown) => {
-      const match = /\[DEV OTP\] >>> (\d{6}) <<< for (\+\d+)/.exec(String(message));
-      if (match) otps.set(match[2], match[1]);
-    });
+    jest
+      .spyOn(Logger.prototype, "log")
+      .mockImplementation((message: unknown) => {
+        const match = /\[DEV OTP\] >>> (\d{6}) <<< for (\+\d+)/.exec(
+          String(message),
+        );
+        if (match) otps.set(match[2], match[1]);
+      });
 
     mongo = await MongoMemoryServer.create();
     workDir = await mkdtemp(join(tmpdir(), "tirvona-ride-e2e-"));
@@ -128,7 +164,9 @@ describe("Phase 1 — done tests (e2e)", () => {
     // Imported after chdir so UPLOAD_ROOT resolves inside workDir.
     const { AppModule } = await import("../src/app.module");
     const { configureApp } = await import("../src/app.setup");
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
     app = moduleRef.createNestApplication({ logger: false });
     configureApp(app);
     await app.init();
@@ -168,7 +206,11 @@ describe("Phase 1 — done tests (e2e)", () => {
       expect(customerTokens.refreshToken).toEqual(expect.any(String));
 
       const user = await me(customerTokens.accessToken);
-      expect(user).toMatchObject({ role: "CUSTOMER", status: "ACTIVE", isPhoneVerified: true });
+      expect(user).toMatchObject({
+        role: "CUSTOMER",
+        status: "ACTIVE",
+        isPhoneVerified: true,
+      });
       expect(user.driver).toBeUndefined();
       expect(user.passwordHash).toBeUndefined();
     });
@@ -176,16 +218,29 @@ describe("Phase 1 — done tests (e2e)", () => {
     it("rejects self-registration as ADMIN (§14)", async () => {
       await api()
         .post("/api/v1/auth/register")
-        .send({ firstName: "Eve", phone: "+919800000099", password: PASSWORD, role: "ADMIN" })
+        .send({
+          firstName: "Eve",
+          phone: "+919800000099",
+          password: PASSWORD,
+          role: "ADMIN",
+        })
         .expect(400);
     });
 
     it("rejects a duplicate phone with PHONE_ALREADY_REGISTERED", async () => {
       const response = await api()
         .post("/api/v1/auth/register")
-        .send({ firstName: "Dup", phone: PHONES.customer, password: PASSWORD, role: "CUSTOMER" })
+        .send({
+          firstName: "Dup",
+          phone: PHONES.customer,
+          password: PASSWORD,
+          role: "CUSTOMER",
+        })
         .expect(409);
-      expect(response.body).toMatchObject({ success: false, code: "PHONE_ALREADY_REGISTERED" });
+      expect(response.body).toMatchObject({
+        success: false,
+        code: "PHONE_ALREADY_REGISTERED",
+      });
     });
 
     it("answers a wrong password with the generic AUTH_INVALID_CREDENTIALS", async () => {
@@ -204,7 +259,12 @@ describe("Phase 1 — done tests (e2e)", () => {
     it("rejects an incorrect OTP", async () => {
       const registered = await api()
         .post("/api/v1/auth/register")
-        .send({ firstName: "Wrong", phone: "+919822222222", password: PASSWORD, role: "CUSTOMER" })
+        .send({
+          firstName: "Wrong",
+          phone: "+919822222222",
+          password: PASSWORD,
+          role: "CUSTOMER",
+        })
         .expect(202);
       const response = await api()
         .post("/api/v1/auth/verify-otp")
@@ -222,9 +282,14 @@ describe("Phase 1 — done tests (e2e)", () => {
     it("starts PENDING and cannot submit incomplete KYC", async () => {
       await registerAndVerify("DRIVER", PHONES.driverA, "Rahul");
       driverAToken = (await login(PHONES.driverA)).accessToken;
-      expect((await me(driverAToken)).driver).toEqual({ driverStatus: "PENDING" });
+      expect((await me(driverAToken)).driver).toEqual({
+        driverStatus: "PENDING",
+      });
 
-      const profile = await api().get("/api/v1/drivers/me").set(bearer(driverAToken)).expect(200);
+      const profile = await api()
+        .get("/api/v1/drivers/me")
+        .set(bearer(driverAToken))
+        .expect(200);
       driverAProfileId = profile.body.data.id;
       expect(profile.body.data).toMatchObject({
         driverStatus: "PENDING",
@@ -234,55 +299,102 @@ describe("Phase 1 — done tests (e2e)", () => {
         totalRides: 0,
       });
 
-      const early = await api().post("/api/v1/drivers/me/submit-kyc").set(bearer(driverAToken)).expect(400);
+      const early = await api()
+        .post("/api/v1/drivers/me/submit-kyc")
+        .set(bearer(driverAToken))
+        .expect(400);
       expect(early.body).toMatchObject({
         code: "DRIVER_KYC_INCOMPLETE",
         data: { missingLicense: true, missingVehicle: true },
       });
     });
 
-    it("rejects non-document uploads and cleans up rejected temp files", async () => {
+    it("rejects non-document uploads and stores nothing for rejected ones", async () => {
+      const db = app.get<Connection>(getConnectionToken());
+      const filesBefore = await db.collection("tirvonaFiles.files").countDocuments();
       const wrongType = await api()
         .post("/api/v1/drivers/me/documents")
         .set(bearer(driverAToken))
         .field("documentType", "PAN")
-        .attach("file", Buffer.from("#!/bin/sh"), { filename: "run.sh", contentType: "text/x-shellscript" })
+        .attach("file", Buffer.from("#!/bin/sh"), {
+          filename: "run.sh",
+          contentType: "text/x-shellscript",
+        })
         .expect(400);
       expect(wrongType.body.code).toBe("DOCUMENT_INVALID_TYPE");
 
-      // Valid file, invalid DTO: multer has already written it to tmp.
+      // A script renamed to .png is refused by its bytes, not its name.
+      const disguised = await api()
+        .post("/api/v1/drivers/me/documents")
+        .set(bearer(driverAToken))
+        .field("documentType", "PAN")
+        .attach("file", Buffer.from("<html><script>alert(1)</script></html>"), {
+          filename: "pan.png",
+          contentType: "image/png",
+        })
+        .expect(400);
+      expect(disguised.body.code).toBe("DOCUMENT_INVALID_TYPE");
+
+      // Valid file, invalid DTO.
       await api()
         .post("/api/v1/drivers/me/documents")
         .set(bearer(driverAToken))
         .field("documentType", "PASSPORT")
-        .attach("file", PNG, { filename: "passport.png", contentType: "image/png" })
+        .attach("file", PNG, {
+          filename: "passport.png",
+          contentType: "image/png",
+        })
         .expect(400);
-      const leftovers = await readdir(join(workDir, "uploads", "tmp")).catch(() => []);
-      expect(leftovers).toEqual([]);
+      // Nothing reached storage, and nothing was written to the server disk.
+      expect(await db.collection("tirvonaFiles.files").countDocuments()).toBe(filesBefore);
     });
 
     it("completes profile, vehicle and documents, then submits → UNDER_REVIEW", async () => {
-      const { vehicleId, documents } = await completeOnboarding(driverAToken, "UP32AB1234");
+      const { vehicleId, documents } = await completeOnboarding(
+        driverAToken,
+        "UP32AB1234",
+      );
       driverAVehicleId = vehicleId;
       driverADocumentId = documents.DRIVING_LICENSE;
 
-      // Files land in uploads/drivers/{driverProfileId}/ (spec §6).
-      const stored = await readdir(join(workDir, "uploads", "drivers", driverAProfileId));
+      // Files land in GridFS, tagged with the owning driver; none on disk.
+      const db = app.get<Connection>(getConnectionToken());
+      const stored = await db
+        .collection("tirvonaFiles.files")
+        .find({ "metadata.module": "drivers", "metadata.ownerId": driverAProfileId })
+        .toArray();
       expect(stored).toHaveLength(3);
+      expect(stored[0].metadata?.contentType).toBe("image/png");
 
       // Regression: string ids must be cast to ObjectId in reference filters.
-      const own = await api().get(`/api/v1/vehicles/${driverAVehicleId}`).set(bearer(driverAToken)).expect(200);
-      expect(own.body.data).toMatchObject({ registrationNumber: "UP32AB1234", model: "Shine", isActive: true });
-      const mine = await api().get("/api/v1/vehicles/my").set(bearer(driverAToken)).expect(200);
+      const own = await api()
+        .get(`/api/v1/vehicles/${driverAVehicleId}`)
+        .set(bearer(driverAToken))
+        .expect(200);
+      expect(own.body.data).toMatchObject({
+        registrationNumber: "UP32AB1234",
+        model: "Shine",
+        isActive: true,
+      });
+      const mine = await api()
+        .get("/api/v1/vehicles/my")
+        .set(bearer(driverAToken))
+        .expect(200);
       expect(mine.body.data).toHaveLength(1);
 
-      const submitted = await api().post("/api/v1/drivers/me/submit-kyc").set(bearer(driverAToken)).expect(200);
+      const submitted = await api()
+        .post("/api/v1/drivers/me/submit-kyc")
+        .set(bearer(driverAToken))
+        .expect(200);
       expect(submitted.body.data.driverStatus).toBe("UNDER_REVIEW");
       expect((await me(driverAToken)).driver.driverStatus).toBe("UNDER_REVIEW");
     });
 
     it("locks the application while under review", async () => {
-      const again = await api().post("/api/v1/drivers/me/submit-kyc").set(bearer(driverAToken)).expect(409);
+      const again = await api()
+        .post("/api/v1/drivers/me/submit-kyc")
+        .set(bearer(driverAToken))
+        .expect(409);
       expect(again.body.code).toBe("DRIVER_ALREADY_SUBMITTED");
 
       const upload = await api()
@@ -316,8 +428,15 @@ describe("Phase 1 — done tests (e2e)", () => {
     it("lists the driver under review and shows full KYC detail", async () => {
       adminToken = (await login(PHONES.admin)).accessToken;
 
-      const dashboard = await api().get("/api/v1/admin/dashboard").set(bearer(adminToken)).expect(200);
-      expect(dashboard.body.data).toMatchObject({ underReviewDrivers: 1, pendingDrivers: 1, approvedDrivers: 0 });
+      const dashboard = await api()
+        .get("/api/v1/admin/dashboard")
+        .set(bearer(adminToken))
+        .expect(200);
+      expect(dashboard.body.data).toMatchObject({
+        underReviewDrivers: 1,
+        pendingDrivers: 1,
+        approvedDrivers: 0,
+      });
 
       const list = await api()
         .get("/api/v1/admin/drivers")
@@ -332,14 +451,22 @@ describe("Phase 1 — done tests (e2e)", () => {
         user: { phone: PHONES.driverA, firstName: "Rahul" },
       });
 
-      const detail = await api().get(`/api/v1/admin/drivers/${driverAProfileId}`).set(bearer(adminToken)).expect(200);
+      const detail = await api()
+        .get(`/api/v1/admin/drivers/${driverAProfileId}`)
+        .set(bearer(adminToken))
+        .expect(200);
       expect(detail.body.data.documents).toHaveLength(3);
       expect(detail.body.data.vehicles).toHaveLength(1);
-      expect(detail.body.data.vehicles[0].vehicle).toMatchObject({ registrationNumber: "UP32AB1234", model: "Shine" });
+      expect(detail.body.data.vehicles[0].vehicle).toMatchObject({
+        registrationNumber: "UP32AB1234",
+        model: "Shine",
+      });
       expect(JSON.stringify(detail.body.data)).not.toContain("filePath");
 
       const file = await api()
-        .get(`/api/v1/admin/drivers/${driverAProfileId}/documents/${driverADocumentId}/file`)
+        .get(
+          `/api/v1/admin/drivers/${driverAProfileId}/documents/${driverADocumentId}/file`,
+        )
         .set(bearer(adminToken))
         .expect(200);
       expect(file.headers["content-type"]).toBe("image/png");
@@ -350,7 +477,10 @@ describe("Phase 1 — done tests (e2e)", () => {
         .patch(`/api/v1/admin/drivers/${driverAProfileId}/approve`)
         .set(bearer(adminToken))
         .expect(200);
-      expect(approved.body.data).toMatchObject({ driverStatus: "APPROVED", approvedAt: expect.any(String) });
+      expect(approved.body.data).toMatchObject({
+        driverStatus: "APPROVED",
+        approvedAt: expect.any(String),
+      });
 
       const again = await api()
         .patch(`/api/v1/admin/drivers/${driverAProfileId}/approve`)
@@ -361,8 +491,13 @@ describe("Phase 1 — done tests (e2e)", () => {
 
     it("rejects with a reason the driver can see, and allows resubmission", async () => {
       await completeOnboarding(driverBToken, "UP85CD5678");
-      await api().post("/api/v1/drivers/me/submit-kyc").set(bearer(driverBToken)).expect(200);
-      const driverBId = (await api().get("/api/v1/drivers/me").set(bearer(driverBToken))).body.data.id;
+      await api()
+        .post("/api/v1/drivers/me/submit-kyc")
+        .set(bearer(driverBToken))
+        .expect(200);
+      const driverBId = (
+        await api().get("/api/v1/drivers/me").set(bearer(driverBToken))
+      ).body.data.id;
 
       await api()
         .patch(`/api/v1/admin/drivers/${driverBId}/reject`)
@@ -378,9 +513,15 @@ describe("Phase 1 — done tests (e2e)", () => {
         .post("/api/v1/drivers/me/documents")
         .set(bearer(driverBToken))
         .field("documentType", "DRIVING_LICENSE")
-        .attach("file", PNG, { filename: "dl-clear.png", contentType: "image/png" })
+        .attach("file", PNG, {
+          filename: "dl-clear.png",
+          contentType: "image/png",
+        })
         .expect(201);
-      const resubmitted = await api().post("/api/v1/drivers/me/submit-kyc").set(bearer(driverBToken)).expect(200);
+      const resubmitted = await api()
+        .post("/api/v1/drivers/me/submit-kyc")
+        .set(bearer(driverBToken))
+        .expect(200);
       expect(resubmitted.body.data.driverStatus).toBe("UNDER_REVIEW");
     });
   });
@@ -388,8 +529,13 @@ describe("Phase 1 — done tests (e2e)", () => {
   describe("Test D — driver after approval", () => {
     it("logs in and /auth/me reports APPROVED", async () => {
       const session = await login(PHONES.driverA);
-      expect(session.user).toMatchObject({ role: "DRIVER", driver: { driverStatus: "APPROVED" } });
-      expect((await me(session.accessToken)).driver.driverStatus).toBe("APPROVED");
+      expect(session.user).toMatchObject({
+        role: "DRIVER",
+        driver: { driverStatus: "APPROVED" },
+      });
+      expect((await me(session.accessToken)).driver.driverStatus).toBe(
+        "APPROVED",
+      );
     });
   });
 
@@ -405,8 +551,14 @@ describe("Phase 1 — done tests (e2e)", () => {
     });
 
     it("403s customers and drivers on admin endpoints", async () => {
-      await api().get("/api/v1/admin/dashboard").set(bearer(customerTokens.accessToken)).expect(403);
-      await api().get("/api/v1/admin/drivers").set(bearer(driverAToken)).expect(403);
+      await api()
+        .get("/api/v1/admin/dashboard")
+        .set(bearer(customerTokens.accessToken))
+        .expect(403);
+      await api()
+        .get("/api/v1/admin/drivers")
+        .set(bearer(driverAToken))
+        .expect(403);
       await api()
         .patch(`/api/v1/admin/drivers/${driverAProfileId}/approve`)
         .set(bearer(driverAToken))
@@ -414,18 +566,30 @@ describe("Phase 1 — done tests (e2e)", () => {
     });
 
     it("403s customers on driver endpoints", async () => {
-      await api().get("/api/v1/drivers/me").set(bearer(customerTokens.accessToken)).expect(403);
-      await api().get("/api/v1/vehicles/my").set(bearer(customerTokens.accessToken)).expect(403);
+      await api()
+        .get("/api/v1/drivers/me")
+        .set(bearer(customerTokens.accessToken))
+        .expect(403);
+      await api()
+        .get("/api/v1/vehicles/my")
+        .set(bearer(customerTokens.accessToken))
+        .expect(403);
     });
 
     it("hides driver A's vehicle and documents from driver B", async () => {
-      const vehicle = await api().get(`/api/v1/vehicles/${driverAVehicleId}`).set(bearer(driverBToken)).expect(404);
+      const vehicle = await api()
+        .get(`/api/v1/vehicles/${driverAVehicleId}`)
+        .set(bearer(driverBToken))
+        .expect(404);
       expect(vehicle.body.code).toBe("VEHICLE_NOT_FOUND");
       await api()
         .get(`/api/v1/drivers/me/documents/${driverADocumentId}/file`)
         .set(bearer(driverBToken))
         .expect(404);
-      await api().delete(`/api/v1/drivers/me/documents/${driverADocumentId}`).set(bearer(driverBToken)).expect(404);
+      await api()
+        .delete(`/api/v1/drivers/me/documents/${driverADocumentId}`)
+        .set(bearer(driverBToken))
+        .expect(404);
     });
 
     it("rotates refresh tokens and refuses a reused or logged-out one", async () => {
@@ -442,8 +606,14 @@ describe("Phase 1 — done tests (e2e)", () => {
         .expect(401);
       expect(reused.body.code).toBe("AUTH_REFRESH_TOKEN_INVALID");
 
-      await api().post("/api/v1/auth/logout").send({ refreshToken: next }).expect(200);
-      await api().post("/api/v1/auth/refresh").send({ refreshToken: next }).expect(401);
+      await api()
+        .post("/api/v1/auth/logout")
+        .send({ refreshToken: next })
+        .expect(200);
+      await api()
+        .post("/api/v1/auth/refresh")
+        .send({ refreshToken: next })
+        .expect(401);
     });
   });
 });

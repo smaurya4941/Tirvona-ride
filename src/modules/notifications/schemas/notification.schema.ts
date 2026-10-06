@@ -83,6 +83,13 @@ NotificationSchema.index({ userId: 1, createdAt: -1 });
 NotificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 });
 NotificationSchema.index(
   { dedupeKey: 1 },
-  { unique: true, partialFilterExpression: { dedupeKey: { $type: "string" } }, name: "uniq_notification_dedupe" },
+  {
+    unique: true,
+    partialFilterExpression: { dedupeKey: { $type: "string" } },
+    name: "uniq_notification_dedupe",
+  },
 );
-NotificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: NOTIFICATION_RETENTION_SECONDS });
+NotificationSchema.index(
+  { createdAt: 1 },
+  { expireAfterSeconds: NOTIFICATION_RETENTION_SECONDS },
+);

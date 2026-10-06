@@ -14,7 +14,10 @@ const EARTH_RADIUS_METERS = 6_371_008.8;
 const toRadians = (degrees: number): number => (degrees * Math.PI) / 180;
 
 /** Great-circle ("as the crow flies") distance between two points, in metres. */
-export function haversineMeters(from: GeoCoordinates, to: GeoCoordinates): number {
+export function haversineMeters(
+  from: GeoCoordinates,
+  to: GeoCoordinates,
+): number {
   const deltaLatitude = toRadians(to.latitude - from.latitude);
   const deltaLongitude = toRadians(to.longitude - from.longitude);
   const a =
@@ -25,7 +28,10 @@ export function haversineMeters(from: GeoCoordinates, to: GeoCoordinates): numbe
   return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(a)));
 }
 
-export const toGeoJsonPoint = ({ latitude, longitude }: GeoCoordinates): GeoJsonPoint => ({
+export const toGeoJsonPoint = ({
+  latitude,
+  longitude,
+}: GeoCoordinates): GeoJsonPoint => ({
   type: "Point",
   coordinates: [longitude, latitude],
 });

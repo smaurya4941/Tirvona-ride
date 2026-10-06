@@ -11,7 +11,11 @@ export class RideRoomDto {
 
 export type Validated<T> = { ok: true; value: T } | { ok: false; ack: Ack };
 
-export const failure = (code: string, message: string, details?: unknown): Ack => ({
+export const failure = (
+  code: string,
+  message: string,
+  details?: unknown,
+): Ack => ({
   ok: false,
   code,
   message,
@@ -28,9 +32,18 @@ export async function validatePayload<T extends object>(
   body: unknown,
 ): Promise<Validated<T>> {
   if (body === null || typeof body !== "object" || Array.isArray(body))
-    return { ok: false, ack: failure(RealtimeErrorCode.VALIDATION_FAILED, "Payload must be an object") };
+    return {
+      ok: false,
+      ack: failure(
+        RealtimeErrorCode.VALIDATION_FAILED,
+        "Payload must be an object",
+      ),
+    };
   const value = plainToInstance(type, body);
-  const errors = await validate(value, { whitelist: true, forbidNonWhitelisted: true });
+  const errors = await validate(value, {
+    whitelist: true,
+    forbidNonWhitelisted: true,
+  });
   if (errors.length === 0) return { ok: true, value };
   return {
     ok: false,
@@ -44,7 +57,10 @@ export async function validatePayload<T extends object>(
 
 /** Fixed-window counter per key (socket id) for cheap per-connection limits. */
 export class WindowRateLimiter {
-  private readonly windows = new Map<string, { startedAt: number; count: number }>();
+  private readonly windows = new Map<
+    string,
+    { startedAt: number; count: number }
+  >();
 
   constructor(
     private readonly limit: number,

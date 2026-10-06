@@ -4,9 +4,15 @@ import type { OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
-import { ApiException, apiBadRequest } from "../../common/exceptions/api.exception";
+import {
+  ApiException,
+  apiBadRequest,
+} from "../../common/exceptions/api.exception";
 import { maskPhone } from "../../common/phone/phone-number";
-import { WhatsAppDeliveryError, WhatsAppGateway } from "../whatsapp/whatsapp.gateway";
+import {
+  WhatsAppDeliveryError,
+  WhatsAppGateway,
+} from "../whatsapp/whatsapp.gateway";
 import { OtpSendQuota } from "./schemas/otp-send-quota.schema";
 import { OtpPurpose, OtpVerification } from "./schemas/otp-verification.schema";
 
@@ -31,9 +37,11 @@ interface QuotaReservation {
   sendsRemaining: number;
 }
 
-const isDuplicateKey = (error: unknown): boolean => (error as { code?: number } | undefined)?.code === 11000;
+const isDuplicateKey = (error: unknown): boolean =>
+  (error as { code?: number } | undefined)?.code === 11000;
 
-const secondsUntil = (date: Date, now: number): number => Math.max(0, Math.ceil((date.getTime() - now) / 1000));
+const secondsUntil = (date: Date, now: number): number =>
+  Math.max(0, Math.ceil((date.getTime() - now) / 1000));
 
 /**
  * Signup (and legacy phone) verification codes: generation, per-number
@@ -62,14 +70,17 @@ export class OtpService implements OnModuleInit {
   private readonly hashSecret: string;
 
   constructor(
-    @InjectModel(OtpVerification.name) private readonly otpModel: Model<OtpVerification>,
-    @InjectModel(OtpSendQuota.name) private readonly quotaModel: Model<OtpSendQuota>,
+    @InjectModel(OtpVerification.name)
+    private readonly otpModel: Model<OtpVerification>,
+    @InjectModel(OtpSendQuota.name)
+    private readonly quotaModel: Model<OtpSendQuota>,
     private readonly whatsapp: WhatsAppGateway,
     config: ConfigService,
   ) {
     this.ttlMs = config.getOrThrow<number>("otpTtlSeconds") * 1000;
     this.maxAttempts = config.getOrThrow<number>("otpMaxAttempts");
-    this.cooldownMs = config.getOrThrow<number>("otpResendCooldownSeconds") * 1000;
+    this.cooldownMs =
+      config.getOrThrow<number>("otpResendCooldownSeconds") * 1000;
     this.maxSendsPerWindow = config.getOrThrow<number>("otpMaxSendsPerWindow");
     this.windowMs = config.getOrThrow<number>("otpSendWindowMinutes") * 60_000;
     this.hashSecret = config.getOrThrow<string>("otpHashSecret");
@@ -82,10 +93,16 @@ export class OtpService implements OnModuleInit {
    */
   async onModuleInit(): Promise<void> {
     try {
-      await this.otpModel.deleteMany({ $or: [{ expiresAt: { $lte: new Date() } }, { verified: true }] }).exec();
+      await this.otpModel
+        .deleteMany({
+          $or: [{ expiresAt: { $lte: new Date() } }, { verified: true }],
+        })
+        .exec();
       await this.otpModel.createIndexes();
     } catch (error) {
-      this.logger.warn(`Could not prepare otp_verifications indexes: ${(error as Error).message}`);
+      this.logger.warn(
+        `Could not prepare otp_verifications indexes: ${(error as Error).message}`,
+      );
     }
   }
 
@@ -97,14 +114,22 @@ export class OtpService implements OnModuleInit {
    */
   async issue(phone: string, purpose: OtpPurpose): Promise<OtpChallenge> {
     const reservation = await this.reserveSend(phone, purpose);
-    const code = randomInt(0, 10 ** OTP_LENGTH).toString().padStart(OTP_LENGTH, "0");
+    const code = randomInt(0, 10 ** OTP_LENGTH)
+      .toString()
+      .padStart(OTP_LENGTH, "0");
     const otpHash = this.hash(phone, purpose, code);
     const expiresAt = new Date(reservation.sentAt.getTime() + this.ttlMs);
 
     // Overwrites any earlier code for this number and purpose.
     let record: { _id: unknown };
     try {
-      record = await this.writeCode(phone, purpose, otpHash, expiresAt, reservation.sentAt);
+      record = await this.writeCode(
+        phone,
+        purpose,
+        otpHash,
+        expiresAt,
+        reservation.sentAt,
+      );
     } catch (error) {
       await this.releaseSend(phone, purpose, reservation);
       throw error;
@@ -118,7 +143,9 @@ export class OtpService implements OnModuleInit {
       throw this.deliveryError(error, phone, purpose);
     }
 
-    this.logger.log(`OTP issued for ${maskPhone(phone)} (${purpose}) via ${this.whatsapp.provider}`);
+    this.logger.log(
+      `OTP issued for ${maskPhone(phone)} (${purpose}) via ${this.whatsapp.provider}`,
+    );
     return {
       channel: "WHATSAPP",
       codeLength: OTP_LENGTH,
@@ -133,28 +160,44 @@ export class OtpService implements OnModuleInit {
    * The code currently waiting for this number, if one is still usable —
    * lets a re-submitted form reuse it inside the cooldown instead of failing.
    */
-  async activeChallenge(phone: string, purpose: OtpPurpose): Promise<OtpChallenge | null> {
+  async activeChallenge(
+    phone: string,
+    purpose: OtpPurpose,
+  ): Promise<OtpChallenge | null> {
     const now = Date.now();
     const [record, quota] = await Promise.all([
       this.otpModel.findOne({ phone, purpose }).lean().exec(),
       this.quotaModel.findOne({ phone, purpose }).lean().exec(),
     ]);
-    if (!record || record.verified || record.expiresAt.getTime() <= now || record.attempts >= this.maxAttempts)
+    if (
+      !record ||
+      record.verified ||
+      record.expiresAt.getTime() <= now ||
+      record.attempts >= this.maxAttempts
+    )
       return null;
     const windowOpen = quota && quota.expiresAt.getTime() > now;
-    const resendAt = new Date((quota?.lastSentAt?.getTime() ?? 0) + this.cooldownMs);
+    const resendAt = new Date(
+      (quota?.lastSentAt?.getTime() ?? 0) + this.cooldownMs,
+    );
     return {
       channel: "WHATSAPP",
       codeLength: OTP_LENGTH,
       expiresAt: record.expiresAt,
       resendAvailableInSeconds: secondsUntil(resendAt, now),
-      sendsRemaining: windowOpen ? Math.max(0, this.maxSendsPerWindow - quota.sendCount) : this.maxSendsPerWindow,
+      sendsRemaining: windowOpen
+        ? Math.max(0, this.maxSendsPerWindow - quota.sendCount)
+        : this.maxSendsPerWindow,
       codeSent: false,
     };
   }
 
   /** Checks a code and, when it matches, consumes it (single use). */
-  async verify(phone: string, purpose: OtpPurpose, code: string): Promise<void> {
+  async verify(
+    phone: string,
+    purpose: OtpPurpose,
+    code: string,
+  ): Promise<void> {
     const notActive = apiBadRequest(
       "This code is no longer active. Request a new one.",
       "OTP_NOT_ACTIVE",
@@ -167,33 +210,55 @@ export class OtpService implements OnModuleInit {
     const record = await this.otpModel.findOne({ phone, purpose }).exec();
     if (!record || record.verified) throw notActive;
     if (record.expiresAt.getTime() <= Date.now())
-      throw apiBadRequest("This code has expired. Request a new one.", "OTP_EXPIRED");
+      throw apiBadRequest(
+        "This code has expired. Request a new one.",
+        "OTP_EXPIRED",
+      );
     if (record.attempts >= this.maxAttempts) throw tooMany;
 
     // Count the attempt first, conditional on this exact code still being
     // the active one — a resend or a parallel guess in between loses.
     const counted = await this.otpModel
       .findOneAndUpdate(
-        { _id: record._id, otpHash: record.otpHash, verified: false, attempts: { $lt: this.maxAttempts } },
+        {
+          _id: record._id,
+          otpHash: record.otpHash,
+          verified: false,
+          attempts: { $lt: this.maxAttempts },
+        },
         { $inc: { attempts: 1 } },
         { returnDocument: "after" },
       )
       .exec();
     if (!counted) {
       const latest = await this.otpModel.findById(record._id).lean().exec();
-      throw latest && latest.otpHash === record.otpHash && latest.attempts >= this.maxAttempts ? tooMany : notActive;
+      throw latest &&
+        latest.otpHash === record.otpHash &&
+        latest.attempts >= this.maxAttempts
+        ? tooMany
+        : notActive;
     }
 
     if (!this.matches(record.otpHash, phone, purpose, code)) {
-      const attemptsRemaining = Math.max(0, this.maxAttempts - counted.attempts);
-      this.logger.warn(`Incorrect OTP for ${maskPhone(phone)} (${purpose}), ${attemptsRemaining} attempts left`);
+      const attemptsRemaining = Math.max(
+        0,
+        this.maxAttempts - counted.attempts,
+      );
+      this.logger.warn(
+        `Incorrect OTP for ${maskPhone(phone)} (${purpose}), ${attemptsRemaining} attempts left`,
+      );
       if (attemptsRemaining === 0) throw tooMany;
-      throw apiBadRequest("Incorrect verification code", "OTP_INVALID", { attemptsRemaining });
+      throw apiBadRequest("Incorrect verification code", "OTP_INVALID", {
+        attemptsRemaining,
+      });
     }
 
     // Claim, then delete: exactly one request can win a correct code.
     const claimed = await this.otpModel
-      .updateOne({ _id: record._id, otpHash: record.otpHash, verified: false }, { $set: { verified: true } })
+      .updateOne(
+        { _id: record._id, otpHash: record.otpHash, verified: false },
+        { $set: { verified: true } },
+      )
       .exec();
     if (claimed.modifiedCount !== 1) throw notActive;
     await this.otpModel.deleteOne({ _id: record._id }).exec();
@@ -207,13 +272,22 @@ export class OtpService implements OnModuleInit {
   // ── internals ────────────────────────────────────────────────────────
 
   private hash(phone: string, purpose: OtpPurpose, code: string): string {
-    return createHmac("sha256", this.hashSecret).update(`${purpose}:${phone}:${code}`).digest("hex");
+    return createHmac("sha256", this.hashSecret)
+      .update(`${purpose}:${phone}:${code}`)
+      .digest("hex");
   }
 
-  private matches(storedHash: string, phone: string, purpose: OtpPurpose, code: string): boolean {
+  private matches(
+    storedHash: string,
+    phone: string,
+    purpose: OtpPurpose,
+    code: string,
+  ): boolean {
     const expected = Buffer.from(storedHash, "hex");
     const actual = Buffer.from(this.hash(phone, purpose, code), "hex");
-    return expected.length === actual.length && timingSafeEqual(expected, actual);
+    return (
+      expected.length === actual.length && timingSafeEqual(expected, actual)
+    );
   }
 
   private async writeCode(
@@ -227,7 +301,15 @@ export class OtpService implements OnModuleInit {
       this.otpModel
         .findOneAndUpdate(
           { phone, purpose },
-          { $set: { otpHash, expiresAt, createdAt, attempts: 0, verified: false } },
+          {
+            $set: {
+              otpHash,
+              expiresAt,
+              createdAt,
+              attempts: 0,
+              verified: false,
+            },
+          },
           { upsert: true, returnDocument: "after" },
         )
         .lean()
@@ -247,14 +329,24 @@ export class OtpService implements OnModuleInit {
    * resend cooldown and the per-window cap. Conditional updates make two
    * simultaneous requests for one number unable to both pass.
    */
-  private async reserveSend(phone: string, purpose: OtpPurpose): Promise<QuotaReservation> {
+  private async reserveSend(
+    phone: string,
+    purpose: OtpPurpose,
+  ): Promise<QuotaReservation> {
     const now = new Date();
-    const quota = await this.quotaModel.findOne({ phone, purpose }).lean().exec();
+    const quota = await this.quotaModel
+      .findOne({ phone, purpose })
+      .lean()
+      .exec();
 
     if (quota && quota.expiresAt.getTime() > now.getTime()) {
-      const resendAt = new Date((quota.lastSentAt?.getTime() ?? 0) + this.cooldownMs);
-      if (resendAt.getTime() > now.getTime()) throw this.tooSoon(secondsUntil(resendAt, now.getTime()));
-      if (quota.sendCount >= this.maxSendsPerWindow) throw this.limitReached(secondsUntil(quota.expiresAt, now.getTime()));
+      const resendAt = new Date(
+        (quota.lastSentAt?.getTime() ?? 0) + this.cooldownMs,
+      );
+      if (resendAt.getTime() > now.getTime())
+        throw this.tooSoon(secondsUntil(resendAt, now.getTime()));
+      if (quota.sendCount >= this.maxSendsPerWindow)
+        throw this.limitReached(secondsUntil(quota.expiresAt, now.getTime()));
 
       const taken = await this.quotaModel
         .updateOne(
@@ -267,7 +359,8 @@ export class OtpService implements OnModuleInit {
           { $inc: { sendCount: 1 }, $set: { lastSentAt: now } },
         )
         .exec();
-      if (taken.modifiedCount !== 1) throw this.tooSoon(Math.ceil(this.cooldownMs / 1000));
+      if (taken.modifiedCount !== 1)
+        throw this.tooSoon(Math.ceil(this.cooldownMs / 1000));
       return {
         sentAt: now,
         previousLastSentAt: quota.lastSentAt,
@@ -285,38 +378,67 @@ export class OtpService implements OnModuleInit {
     try {
       if (quota) {
         const reset = await this.quotaModel
-          .updateOne({ _id: quota._id, expiresAt: quota.expiresAt }, { $set: window })
+          .updateOne(
+            { _id: quota._id, expiresAt: quota.expiresAt },
+            { $set: window },
+          )
           .exec();
-        if (reset.modifiedCount !== 1) throw this.tooSoon(Math.ceil(this.cooldownMs / 1000));
+        if (reset.modifiedCount !== 1)
+          throw this.tooSoon(Math.ceil(this.cooldownMs / 1000));
       } else {
         await this.quotaModel.create({ phone, purpose, ...window });
       }
     } catch (error) {
-      if (isDuplicateKey(error)) throw this.tooSoon(Math.ceil(this.cooldownMs / 1000));
+      if (isDuplicateKey(error))
+        throw this.tooSoon(Math.ceil(this.cooldownMs / 1000));
       throw error;
     }
-    return { sentAt: now, previousLastSentAt: quota?.lastSentAt, sendsRemaining: this.maxSendsPerWindow - 1 };
+    return {
+      sentAt: now,
+      previousLastSentAt: quota?.lastSentAt,
+      sendsRemaining: this.maxSendsPerWindow - 1,
+    };
   }
 
   /** A send that never reached WhatsApp does not count against the number. */
-  private async releaseSend(phone: string, purpose: OtpPurpose, reservation: QuotaReservation): Promise<void> {
+  private async releaseSend(
+    phone: string,
+    purpose: OtpPurpose,
+    reservation: QuotaReservation,
+  ): Promise<void> {
     try {
       await this.quotaModel
         .updateOne(
-          { phone, purpose, lastSentAt: reservation.sentAt, sendCount: { $gt: 0 } },
+          {
+            phone,
+            purpose,
+            lastSentAt: reservation.sentAt,
+            sendCount: { $gt: 0 },
+          },
           reservation.previousLastSentAt
-            ? { $inc: { sendCount: -1 }, $set: { lastSentAt: reservation.previousLastSentAt } }
+            ? {
+                $inc: { sendCount: -1 },
+                $set: { lastSentAt: reservation.previousLastSentAt },
+              }
             : { $inc: { sendCount: -1 }, $unset: { lastSentAt: 1 } },
         )
         .exec();
     } catch (error) {
-      this.logger.warn(`Could not release OTP send quota for ${maskPhone(phone)}: ${(error as Error).message}`);
+      this.logger.warn(
+        `Could not release OTP send quota for ${maskPhone(phone)}: ${(error as Error).message}`,
+      );
     }
   }
 
-  private deliveryError(error: unknown, phone: string, purpose: OtpPurpose): ApiException {
+  private deliveryError(
+    error: unknown,
+    phone: string,
+    purpose: OtpPurpose,
+  ): ApiException {
     if (!(error instanceof WhatsAppDeliveryError)) {
-      this.logger.error(`OTP delivery crashed for ${maskPhone(phone)} (${purpose}): ${(error as Error)?.message}`);
+      this.logger.error(
+        `OTP delivery crashed for ${maskPhone(phone)} (${purpose}): ${(error as Error)?.message}`,
+      );
       return new ApiException(
         HttpStatus.SERVICE_UNAVAILABLE,
         "We couldn't send the verification code. Please try again in a moment.",

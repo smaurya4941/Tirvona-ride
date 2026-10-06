@@ -3,14 +3,22 @@ import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model, QueryFilter } from "mongoose";
 import { Types } from "mongoose";
-import { ApiException, apiBadRequest, apiNotFound } from "../../common/exceptions/api.exception";
+import {
+  ApiException,
+  apiBadRequest,
+  apiNotFound,
+} from "../../common/exceptions/api.exception";
 import { toPaise, toRupees } from "../../common/utils/money";
 import { DomainEventsService } from "../../infrastructure/events/domain-events.service";
 import { EarningsService } from "../earnings/earnings.service";
 import { RidePaymentStateService } from "../rides/ride-payment-state.service";
 import { RidePaymentStatus } from "../rides/ride-payment-status";
 import { User } from "../users/schemas/user.schema";
-import type { AdminRefundsQueryDto, CreateRefundDto, ReviewRefundDto } from "./dto/refund.dto";
+import type {
+  AdminRefundsQueryDto,
+  CreateRefundDto,
+  ReviewRefundDto,
+} from "./dto/refund.dto";
 import {
   PAYMENT_APP_TAG,
   PaymentEventSource,
@@ -28,8 +36,15 @@ import {
   RefundStatus,
   RefundTarget,
 } from "./interfaces/refund-status";
-import type { AdminRefundListItem, CustomerRefundView, RefundView } from "./interfaces/payment-views";
-import { RazorpayGateway, RazorpayGatewayError } from "./razorpay/razorpay.gateway";
+import type {
+  AdminRefundListItem,
+  CustomerRefundView,
+  RefundView,
+} from "./interfaces/payment-views";
+import {
+  RazorpayGateway,
+  RazorpayGatewayError,
+} from "./razorpay/razorpay.gateway";
 import type { RazorpayRefund } from "./razorpay/razorpay.types";
 import { Payment } from "./schemas/payment.schema";
 import type { PaymentDocument, PaymentEvent } from "./schemas/payment.schema";
@@ -53,13 +68,22 @@ const RAZORPAY_STATUS: Record<RazorpayRefund["status"], RefundStatus> = {
 
 const isDuplicateKey = (error: unknown, index?: string): boolean => {
   const mongoError = error as { code?: number; message?: string } | undefined;
-  return mongoError?.code === 11000 && (!index || (mongoError.message ?? "").includes(index));
+  return (
+    mongoError?.code === 11000 &&
+    (!index || (mongoError.message ?? "").includes(index))
+  );
 };
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const nameOf = (user?: { firstName?: string; lastName?: string } | null): string =>
-  [user?.firstName, user?.lastName].filter(Boolean).join(" ");
-const noteOf = (notes: RazorpayRefund["notes"], key: string): string | undefined =>
-  notes && !Array.isArray(notes) && typeof notes[key] === "string" ? notes[key] : undefined;
+const nameOf = (
+  user?: { firstName?: string; lastName?: string } | null,
+): string => [user?.firstName, user?.lastName].filter(Boolean).join(" ");
+const noteOf = (
+  notes: RazorpayRefund["notes"],
+  key: string,
+): string | undefined =>
+  notes && !Array.isArray(notes) && typeof notes[key] === "string"
+    ? notes[key]
+    : undefined;
 
 /** Customer-facing wording for a refund reason (never the admin's note). */
 const REASON_LABELS: Record<RefundReason, string> = {
@@ -94,7 +118,8 @@ export class RefundsService {
 
   constructor(
     @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
-    @InjectModel(PaymentRefund.name) private readonly refundModel: Model<PaymentRefund>,
+    @InjectModel(PaymentRefund.name)
+    private readonly refundModel: Model<PaymentRefund>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly gateway: RazorpayGateway,
     private readonly rides: RidePaymentStateService,
@@ -102,7 +127,8 @@ export class RefundsService {
     private readonly events: DomainEventsService,
     config: ConfigService,
   ) {
-    this.refundWindowMs = config.getOrThrow<number>("paymentRefundWindowDays") * 86_400_000;
+    this.refundWindowMs =
+      config.getOrThrow<number>("paymentRefundWindowDays") * 86_400_000;
   }
 
   // ── Admin: request a refund ───────────────────────────────────────────
@@ -114,11 +140,21 @@ export class RefundsService {
    * at Razorpay by our id); an outright rejection marks it FAILED and frees
    * the amount.
    */
-  async request(adminUserId: string, paymentId: string, dto: CreateRefundDto): Promise<RefundView> {
-    const replay = await this.refundModel.findOne({ idempotencyKey: dto.idempotencyKey }).exec();
+  async request(
+    adminUserId: string,
+    paymentId: string,
+    dto: CreateRefundDto,
+  ): Promise<RefundView> {
+    const replay = await this.refundModel
+      .findOne({ idempotencyKey: dto.idempotencyKey })
+      .exec();
     if (replay) {
       if (!replay.paymentId.equals(paymentId))
-        throw new ApiException(HttpStatus.CONFLICT, "This request id was used for another payment", "REFUND_IDEMPOTENCY_CONFLICT");
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          "This request id was used for another payment",
+          "REFUND_IDEMPOTENCY_CONFLICT",
+        );
       return this.toView(replay);
     }
 
@@ -126,7 +162,10 @@ export class RefundsService {
     if (!payment) throw apiNotFound("Payment not found", "PAYMENT_NOT_FOUND");
     this.assertRefundable(payment, dto);
     const target = dto.target ?? RefundTarget.PAYMENT;
-    const razorpayPaymentId = target === RefundTarget.PAYMENT ? payment.razorpayPaymentId! : dto.razorpayPaymentId!;
+    const razorpayPaymentId =
+      target === RefundTarget.PAYMENT
+        ? payment.razorpayPaymentId!
+        : dto.razorpayPaymentId!;
 
     const locked = await this.lock(payment);
     let refund: PaymentRefundDocument;
@@ -134,24 +173,41 @@ export class RefundsService {
       const capturedPaise =
         target === RefundTarget.PAYMENT
           ? payment.amountPaise
-          : payment.duplicateCaptures.find((duplicate) => duplicate.razorpayPaymentId === razorpayPaymentId)!.amountPaise;
+          : payment.duplicateCaptures.find(
+              (duplicate) => duplicate.razorpayPaymentId === razorpayPaymentId,
+            )!.amountPaise;
       const reserved = await this.reservedPaise(locked._id, razorpayPaymentId);
       const refundable = capturedPaise - reserved;
       if (refundable < MIN_REFUND_PAISE)
-        throw new ApiException(HttpStatus.CONFLICT, "Nothing left to refund on this payment", "REFUND_NOTHING_LEFT", {
-          refunded: toRupees(reserved),
-        });
-      const amountPaise = dto.amount === undefined ? refundable : toPaise(dto.amount);
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          "Nothing left to refund on this payment",
+          "REFUND_NOTHING_LEFT",
+          {
+            refunded: toRupees(reserved),
+          },
+        );
+      const amountPaise =
+        dto.amount === undefined ? refundable : toPaise(dto.amount);
       if (amountPaise < MIN_REFUND_PAISE || amountPaise > refundable)
         throw apiBadRequest(
           `Refund between ₹${toRupees(MIN_REFUND_PAISE)} and ₹${toRupees(refundable)}`,
           "REFUND_AMOUNT_INVALID",
         );
       // A duplicate capture was never revenue: it is returned whole.
-      if (target === RefundTarget.DUPLICATE_CAPTURE && amountPaise !== refundable)
-        throw apiBadRequest("A duplicate payment is refunded in full", "REFUND_AMOUNT_INVALID");
+      if (
+        target === RefundTarget.DUPLICATE_CAPTURE &&
+        amountPaise !== refundable
+      )
+        throw apiBadRequest(
+          "A duplicate payment is refunded in full",
+          "REFUND_AMOUNT_INVALID",
+        );
 
-      const reason = target === RefundTarget.DUPLICATE_CAPTURE ? RefundReason.DUPLICATE_PAYMENT : dto.reason;
+      const reason =
+        target === RefundTarget.DUPLICATE_CAPTURE
+          ? RefundReason.DUPLICATE_PAYMENT
+          : dto.reason;
       try {
         refund = await this.refundModel.create({
           paymentId: locked._id,
@@ -177,7 +233,9 @@ export class RefundsService {
         });
       } catch (error) {
         if (!isDuplicateKey(error, "uniq_refund_idempotency_key")) throw error;
-        const winner = await this.refundModel.findOne({ idempotencyKey: dto.idempotencyKey }).exec();
+        const winner = await this.refundModel
+          .findOne({ idempotencyKey: dto.idempotencyKey })
+          .exec();
         if (!winner) throw error;
         return this.toView(winner);
       }
@@ -202,7 +260,9 @@ export class RefundsService {
   }
 
   /** Sends a REQUESTED refund to Razorpay and applies the answer. */
-  private async submit(refund: PaymentRefundDocument): Promise<PaymentRefundDocument> {
+  private async submit(
+    refund: PaymentRefundDocument,
+  ): Promise<PaymentRefundDocument> {
     let gatewayRefund: RazorpayRefund;
     try {
       gatewayRefund = await this.gateway.createRefund({
@@ -225,12 +285,19 @@ export class RefundsService {
           failureReason: error.message.slice(0, 300),
           source: PaymentEventSource.ADMIN,
         });
-        throw new ApiException(HttpStatus.BAD_GATEWAY, `Razorpay refused the refund: ${error.message}`, "REFUND_REJECTED", {
-          refundId: failed._id.toString(),
-        });
+        throw new ApiException(
+          HttpStatus.BAD_GATEWAY,
+          `Razorpay refused the refund: ${error.message}`,
+          "REFUND_REJECTED",
+          {
+            refundId: failed._id.toString(),
+          },
+        );
       }
       // Unknown outcome: keep it REQUESTED; reconciliation settles it.
-      this.logger.warn(`Refund ${refund._id.toString()} sent but unconfirmed: ${(error as Error).message}`);
+      this.logger.warn(
+        `Refund ${refund._id.toString()} sent but unconfirmed: ${(error as Error).message}`,
+      );
       await this.pushEvent(refund.paymentId, {
         type: "REFUND_UNCONFIRMED",
         source: PaymentEventSource.SYSTEM,
@@ -239,7 +306,11 @@ export class RefundsService {
       });
       return (await this.refundModel.findById(refund._id).exec()) ?? refund;
     }
-    return this.applyGatewayRefund(refund, gatewayRefund, PaymentEventSource.ADMIN);
+    return this.applyGatewayRefund(
+      refund,
+      gatewayRefund,
+      PaymentEventSource.ADMIN,
+    );
   }
 
   // ── Gateway → Tirvona ─────────────────────────────────────────────────
@@ -251,13 +322,21 @@ export class RefundsService {
    * EXTERNAL and flagged for review. Returns null when the refund is not
    * for a Tirvona Ride payment (another app on the same account).
    */
-  async syncFromGateway(gatewayRefund: RazorpayRefund, source: PaymentEventSource): Promise<PaymentRefundDocument | null> {
-    let refund = await this.refundModel.findOne({ razorpayRefundId: gatewayRefund.id }).exec();
+  async syncFromGateway(
+    gatewayRefund: RazorpayRefund,
+    source: PaymentEventSource,
+  ): Promise<PaymentRefundDocument | null> {
+    let refund = await this.refundModel
+      .findOne({ razorpayRefundId: gatewayRefund.id })
+      .exec();
     if (!refund) {
       const ours = noteOf(gatewayRefund.notes, "tirvonaRefundId");
       if (ours && Types.ObjectId.isValid(ours))
         refund = await this.refundModel
-          .findOne({ _id: new Types.ObjectId(ours), razorpayPaymentId: gatewayRefund.payment_id })
+          .findOne({
+            _id: new Types.ObjectId(ours),
+            razorpayPaymentId: gatewayRefund.payment_id,
+          })
           .exec();
     }
     if (!refund) refund = await this.recordExternal(gatewayRefund, source);
@@ -270,20 +349,36 @@ export class RefundsService {
    * Razorpay and applies them; REQUESTED refunds Razorpay never registered
    * are failed after a grace period. Never throws for gateway trouble.
    */
-  async syncPayment(paymentId: Types.ObjectId, source: PaymentEventSource): Promise<void> {
+  async syncPayment(
+    paymentId: Types.ObjectId,
+    source: PaymentEventSource,
+  ): Promise<void> {
     const payment = await this.paymentModel.findById(paymentId).exec();
-    if (!payment || payment.gateway !== PaymentGateway.RAZORPAY || !this.gateway.isConfigured) return;
-    const razorpayIds = [payment.razorpayPaymentId, ...payment.duplicateCaptures.map((duplicate) => duplicate.razorpayPaymentId)]
-      .filter((id): id is string => Boolean(id));
+    if (
+      !payment ||
+      payment.gateway !== PaymentGateway.RAZORPAY ||
+      !this.gateway.isConfigured
+    )
+      return;
+    const razorpayIds = [
+      payment.razorpayPaymentId,
+      ...payment.duplicateCaptures.map(
+        (duplicate) => duplicate.razorpayPaymentId,
+      ),
+    ].filter((id): id is string => Boolean(id));
     const seen = new Set<string>();
     try {
       for (const razorpayPaymentId of razorpayIds)
-        for (const gatewayRefund of await this.gateway.fetchPaymentRefunds(razorpayPaymentId)) {
+        for (const gatewayRefund of await this.gateway.fetchPaymentRefunds(
+          razorpayPaymentId,
+        )) {
           const synced = await this.syncFromGateway(gatewayRefund, source);
           if (synced) seen.add(synced._id.toString());
         }
     } catch (error) {
-      this.logger.warn(`Refund sync for payment ${paymentId.toString()} deferred: ${(error as Error).message}`);
+      this.logger.warn(
+        `Refund sync for payment ${paymentId.toString()} deferred: ${(error as Error).message}`,
+      );
       return;
     }
     const abandoned = await this.refundModel
@@ -297,7 +392,8 @@ export class RefundsService {
     for (const refund of abandoned)
       if (!seen.has(refund._id.toString()))
         await this.transition(refund, RefundStatus.FAILED, {
-          failureReason: "Razorpay did not register this refund. No money was returned; request it again.",
+          failureReason:
+            "Razorpay did not register this refund. No money was returned; request it again.",
           source,
         });
     await this.recomputeTotals(paymentId);
@@ -309,30 +405,47 @@ export class RefundsService {
     gatewayRefund: RazorpayRefund,
     source: PaymentEventSource,
   ): Promise<PaymentRefundDocument> {
-    if (gatewayRefund.amount !== refund.amountPaise || gatewayRefund.currency !== refund.currency)
+    if (
+      gatewayRefund.amount !== refund.amountPaise ||
+      gatewayRefund.currency !== refund.currency
+    )
       this.logger.error(
         `Refund ${refund._id.toString()}: Razorpay ${gatewayRefund.id} is ${gatewayRefund.amount} ${gatewayRefund.currency}, ` +
           `expected ${refund.amountPaise} ${refund.currency} — Razorpay's amount is recorded`,
       );
-    const reference = gatewayRefund.acquirer_data?.arn || gatewayRefund.acquirer_data?.rrn || gatewayRefund.acquirer_data?.utr;
+    const reference =
+      gatewayRefund.acquirer_data?.arn ||
+      gatewayRefund.acquirer_data?.rrn ||
+      gatewayRefund.acquirer_data?.utr;
     const facts: Record<string, unknown> = {
       razorpayRefundId: gatewayRefund.id,
       amountPaise: gatewayRefund.amount,
       lastCheckedAt: new Date(),
-      ...(gatewayRefund.speed_processed ? { speedProcessed: gatewayRefund.speed_processed } : {}),
+      ...(gatewayRefund.speed_processed
+        ? { speedProcessed: gatewayRefund.speed_processed }
+        : {}),
       ...(reference ? { acquirerReference: reference } : {}),
     };
     try {
-      await this.refundModel.updateOne({ _id: refund._id }, { $set: facts }).exec();
+      await this.refundModel
+        .updateOne({ _id: refund._id }, { $set: facts })
+        .exec();
     } catch (error) {
       if (!isDuplicateKey(error, "uniq_razorpay_refund_id")) throw error;
       // Another record already owns this Razorpay refund: that one is the truth.
-      const owner = await this.refundModel.findOne({ razorpayRefundId: gatewayRefund.id }).exec();
-      this.logger.error(`Refund ${refund._id.toString()} collides with ${owner?._id.toString()} on ${gatewayRefund.id}`);
+      const owner = await this.refundModel
+        .findOne({ razorpayRefundId: gatewayRefund.id })
+        .exec();
+      this.logger.error(
+        `Refund ${refund._id.toString()} collides with ${owner?._id.toString()} on ${gatewayRefund.id}`,
+      );
       return owner ?? refund;
     }
-    const current = (await this.refundModel.findById(refund._id).exec()) ?? refund;
-    return this.transition(current, RAZORPAY_STATUS[gatewayRefund.status], { source });
+    const current =
+      (await this.refundModel.findById(refund._id).exec()) ?? refund;
+    return this.transition(current, RAZORPAY_STATUS[gatewayRefund.status], {
+      source,
+    });
   }
 
   // ── State transitions ─────────────────────────────────────────────────
@@ -351,7 +464,11 @@ export class RefundsService {
       [RefundStatus.REQUESTED]: [],
       [RefundStatus.PENDING]: [RefundStatus.REQUESTED],
       // A refund failed by timeout can still turn out processed.
-      [RefundStatus.PROCESSED]: [RefundStatus.REQUESTED, RefundStatus.PENDING, RefundStatus.FAILED],
+      [RefundStatus.PROCESSED]: [
+        RefundStatus.REQUESTED,
+        RefundStatus.PENDING,
+        RefundStatus.FAILED,
+      ],
       [RefundStatus.FAILED]: [RefundStatus.REQUESTED, RefundStatus.PENDING],
     };
     const now = new Date();
@@ -362,12 +479,19 @@ export class RefundsService {
       set.failureReason = options.failureReason ?? "Refund failed at Razorpay";
     }
     const moved = await this.refundModel
-      .findOneAndUpdate({ _id: refund._id, status: { $in: allowedFrom[to] } }, { $set: set }, { returnDocument: "after" })
+      .findOneAndUpdate(
+        { _id: refund._id, status: { $in: allowedFrom[to] } },
+        { $set: set },
+        { returnDocument: "after" },
+      )
       .exec();
-    const current = moved ?? (await this.refundModel.findById(refund._id).exec()) ?? refund;
+    const current =
+      moved ?? (await this.refundModel.findById(refund._id).exec()) ?? refund;
 
     if (moved) {
-      this.logger.log(`Refund ${refund._id.toString()} ${refund.status} → ${to} via ${options.source}`);
+      this.logger.log(
+        `Refund ${refund._id.toString()} ${refund.status} → ${to} via ${options.source}`,
+      );
       await this.pushEvent(current.paymentId, {
         type: `REFUND_${to}`,
         source: options.source,
@@ -376,7 +500,10 @@ export class RefundsService {
         razorpayPaymentId: current.razorpayPaymentId,
         refundId: current._id,
         amountPaise: current.amountPaise,
-        detail: [current.razorpayRefundId, current.failureReason].filter(Boolean).join(" · ") || undefined,
+        detail:
+          [current.razorpayRefundId, current.failureReason]
+            .filter(Boolean)
+            .join(" · ") || undefined,
       });
     }
     await this.afterChange(current, Boolean(moved));
@@ -384,16 +511,26 @@ export class RefundsService {
   }
 
   /** Totals, ride status, ledger and notifications — all safe to repeat. */
-  private async afterChange(refund: PaymentRefundDocument, changed: boolean): Promise<void> {
+  private async afterChange(
+    refund: PaymentRefundDocument,
+    changed: boolean,
+  ): Promise<void> {
     const totals = await this.recomputeTotals(refund.paymentId);
-    if (totals && refund.target === RefundTarget.PAYMENT && totals.processedPaise > 0)
+    if (
+      totals &&
+      refund.target === RefundTarget.PAYMENT &&
+      totals.processedPaise > 0
+    )
       await this.rides.apply({
         rideId: refund.rideId,
         from: [RidePaymentStatus.SUCCESS, RidePaymentStatus.PARTIALLY_REFUNDED],
-        to: totals.full ? RidePaymentStatus.REFUNDED : RidePaymentStatus.PARTIALLY_REFUNDED,
+        to: totals.full
+          ? RidePaymentStatus.REFUNDED
+          : RidePaymentStatus.PARTIALLY_REFUNDED,
         payment: { refundedAmount: toRupees(totals.processedPaise) },
       });
-    if (refund.status === RefundStatus.PROCESSED) await this.applyLedger(refund);
+    if (refund.status === RefundStatus.PROCESSED)
+      await this.applyLedger(refund);
     if (refund.status !== RefundStatus.REQUESTED)
       this.events.emit("payment.refund_updated", {
         refundId: refund._id.toString(),
@@ -411,8 +548,16 @@ export class RefundsService {
 
   /** A processed refund of the ride payment claws back the driver's share — once. */
   async applyLedger(refund: PaymentRefundDocument): Promise<void> {
-    if (refund.status !== RefundStatus.PROCESSED || refund.ledgerState !== RefundLedgerState.PENDING) return;
-    if (refund.target !== RefundTarget.PAYMENT || refund.driverImpact === RefundDriverImpact.NONE || refund.needsReview) {
+    if (
+      refund.status !== RefundStatus.PROCESSED ||
+      refund.ledgerState !== RefundLedgerState.PENDING
+    )
+      return;
+    if (
+      refund.target !== RefundTarget.PAYMENT ||
+      refund.driverImpact === RefundDriverImpact.NONE ||
+      refund.needsReview
+    ) {
       if (!refund.needsReview)
         await this.refundModel
           .updateOne(
@@ -422,7 +567,11 @@ export class RefundsService {
           .exec();
       return;
     }
-    const payment = await this.paymentModel.findById(refund.paymentId).select("amountPaise").lean().exec();
+    const payment = await this.paymentModel
+      .findById(refund.paymentId)
+      .select("amountPaise")
+      .lean()
+      .exec();
     if (!payment) return;
     try {
       const outcome = await this.earnings.recordRefundClawback({
@@ -439,7 +588,10 @@ export class RefundsService {
           {
             $set:
               outcome.status === "RECORDED"
-                ? { ledgerState: RefundLedgerState.RECORDED, adjustmentId: outcome.adjustment._id }
+                ? {
+                    ledgerState: RefundLedgerState.RECORDED,
+                    adjustmentId: outcome.adjustment._id,
+                  }
                 : { ledgerState: RefundLedgerState.NOT_APPLICABLE },
           },
         )
@@ -476,20 +628,32 @@ export class RefundsService {
    * write loses and recomputes, so the last write always reflects every
    * refund change that happened before it.
    */
-  async recomputeTotals(paymentId: Types.ObjectId): Promise<{ processedPaise: number; full: boolean } | null> {
+  async recomputeTotals(
+    paymentId: Types.ObjectId,
+  ): Promise<{ processedPaise: number; full: boolean } | null> {
     for (let attempt = 0; attempt < MAX_TOTALS_ATTEMPTS; attempt += 1) {
       const payment = await this.paymentModel.findById(paymentId).exec();
       if (!payment) return null;
-      const refunds = await this.refundModel.find({ paymentId }).sort({ createdAt: 1, _id: 1 }).exec();
-      const own = refunds.filter((refund) => refund.target === RefundTarget.PAYMENT);
+      const refunds = await this.refundModel
+        .find({ paymentId })
+        .sort({ createdAt: 1, _id: 1 })
+        .exec();
+      const own = refunds.filter(
+        (refund) => refund.target === RefundTarget.PAYMENT,
+      );
       const sum = (rows: PaymentRefundDocument[], statuses: RefundStatus[]) =>
-        rows.filter((row) => statuses.includes(row.status)).reduce((total, row) => total + row.amountPaise, 0);
+        rows
+          .filter((row) => statuses.includes(row.status))
+          .reduce((total, row) => total + row.amountPaise, 0);
       const processed = sum(own, [RefundStatus.PROCESSED]);
       const pending = sum(own, [RefundStatus.REQUESTED, RefundStatus.PENDING]);
       const full = processed >= payment.amountPaise;
       const latestProcessed = [...own]
         .filter((row) => row.status === RefundStatus.PROCESSED)
-        .sort((a, b) => (a.processedAt?.getTime() ?? 0) - (b.processedAt?.getTime() ?? 0))
+        .sort(
+          (a, b) =>
+            (a.processedAt?.getTime() ?? 0) - (b.processedAt?.getTime() ?? 0),
+        )
         .pop();
       const latest = own[own.length - 1];
       const state = full
@@ -510,11 +674,16 @@ export class RefundsService {
         set.refundAmountPaise = processed;
         if (latestProcessed) {
           set.refundedAt = latestProcessed.processedAt;
-          if (latestProcessed.razorpayRefundId) set.refundId = latestProcessed.razorpayRefundId;
+          if (latestProcessed.razorpayRefundId)
+            set.refundId = latestProcessed.razorpayRefundId;
         }
         // Only a settled payment's status follows its refunds.
         if (SETTLED_PAYMENT_STATUSES.includes(payment.status))
-          set.status = full ? PaymentStatus.REFUNDED : processed > 0 ? PaymentStatus.PARTIALLY_REFUNDED : PaymentStatus.CAPTURED;
+          set.status = full
+            ? PaymentStatus.REFUNDED
+            : processed > 0
+              ? PaymentStatus.PARTIALLY_REFUNDED
+              : PaymentStatus.CAPTURED;
       } else {
         // No refund records (e.g. refunds synced before this ledger existed):
         // leave the stored status and amounts alone.
@@ -523,7 +692,9 @@ export class RefundsService {
       }
       payment.duplicateCaptures.forEach((duplicate, index) => {
         const mine = refunds.filter(
-          (row) => row.target === RefundTarget.DUPLICATE_CAPTURE && row.razorpayPaymentId === duplicate.razorpayPaymentId,
+          (row) =>
+            row.target === RefundTarget.DUPLICATE_CAPTURE &&
+            row.razorpayPaymentId === duplicate.razorpayPaymentId,
         );
         const done = sum(mine, [RefundStatus.PROCESSED]);
         const onWay = sum(mine, [RefundStatus.REQUESTED, RefundStatus.PENDING]);
@@ -543,7 +714,11 @@ export class RefundsService {
       const written = await this.paymentModel
         .updateOne(
           { _id: paymentId, refundSeq: payment.refundSeq ?? 0 },
-          { $set: set, ...(Object.keys(unset).length ? { $unset: unset } : {}), $inc: { refundSeq: 1 } },
+          {
+            $set: set,
+            ...(Object.keys(unset).length ? { $unset: unset } : {}),
+            $inc: { refundSeq: 1 },
+          },
         )
         .exec();
       if (written.matchedCount) return { processedPaise: processed, full };
@@ -552,30 +727,50 @@ export class RefundsService {
         const legacy = await this.paymentModel
           .updateOne(
             { _id: paymentId, refundSeq: { $exists: false } },
-            { $set: { ...set, refundSeq: 1 }, ...(Object.keys(unset).length ? { $unset: unset } : {}) },
+            {
+              $set: { ...set, refundSeq: 1 },
+              ...(Object.keys(unset).length ? { $unset: unset } : {}),
+            },
           )
           .exec();
         if (legacy.matchedCount) return { processedPaise: processed, full };
       }
     }
-    this.logger.warn(`Refund totals of payment ${paymentId.toString()} contended; the reconciler will settle them`);
+    this.logger.warn(
+      `Refund totals of payment ${paymentId.toString()} contended; the reconciler will settle them`,
+    );
     return null;
   }
 
   // ── Admin: review a dashboard refund ──────────────────────────────────
 
   /** Decide the driver impact of a refund made outside Tirvona. */
-  async review(adminUserId: string, refundId: string, dto: ReviewRefundDto): Promise<RefundView> {
+  async review(
+    adminUserId: string,
+    refundId: string,
+    dto: ReviewRefundDto,
+  ): Promise<RefundView> {
     const refund = await this.refundModel
       .findOneAndUpdate(
         { _id: new Types.ObjectId(refundId), needsReview: true },
-        { $set: { needsReview: false, driverImpact: dto.driverImpact, note: dto.note.trim() } },
+        {
+          $set: {
+            needsReview: false,
+            driverImpact: dto.driverImpact,
+            note: dto.note.trim(),
+          },
+        },
         { returnDocument: "after" },
       )
       .exec();
     if (!refund) {
-      if (!(await this.refundModel.exists({ _id: refundId }).exec())) throw apiNotFound("Refund not found", "REFUND_NOT_FOUND");
-      throw new ApiException(HttpStatus.CONFLICT, "This refund has already been reviewed", "REFUND_ALREADY_REVIEWED");
+      if (!(await this.refundModel.exists({ _id: refundId }).exec()))
+        throw apiNotFound("Refund not found", "REFUND_NOT_FOUND");
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        "This refund has already been reviewed",
+        "REFUND_ALREADY_REVIEWED",
+      );
     }
     await this.pushEvent(refund.paymentId, {
       type: "REFUND_REVIEWED",
@@ -585,20 +780,29 @@ export class RefundsService {
       detail: `Driver impact ${dto.driverImpact}: ${dto.note.trim()}`,
     });
     await this.applyLedger(refund);
-    return this.toView((await this.refundModel.findById(refund._id).exec()) ?? refund);
+    return this.toView(
+      (await this.refundModel.findById(refund._id).exec()) ?? refund,
+    );
   }
 
   // ── Reads ─────────────────────────────────────────────────────────────
 
   async forPayment(paymentId: Types.ObjectId): Promise<RefundView[]> {
-    const refunds = await this.refundModel.find({ paymentId }).sort({ createdAt: 1, _id: 1 }).exec();
+    const refunds = await this.refundModel
+      .find({ paymentId })
+      .sort({ createdAt: 1, _id: 1 })
+      .exec();
     return this.toViews(refunds);
   }
 
   /** What the customer sees on the receipt: amounts, status, bank reference. */
   async forCustomer(paymentId: Types.ObjectId): Promise<CustomerRefundView[]> {
     const refunds = await this.refundModel
-      .find({ paymentId, target: RefundTarget.PAYMENT, status: { $ne: RefundStatus.REQUESTED } })
+      .find({
+        paymentId,
+        target: RefundTarget.PAYMENT,
+        status: { $ne: RefundStatus.REQUESTED },
+      })
       .sort({ createdAt: 1, _id: 1 })
       .exec();
     return refunds
@@ -641,11 +845,18 @@ export class RefundsService {
       .select("firstName lastName phone")
       .lean()
       .exec();
-    const customerById = new Map(customers.map((customer) => [customer._id.toString(), customer]));
+    const customerById = new Map(
+      customers.map((customer) => [customer._id.toString(), customer]),
+    );
     return {
       items: views.map((view, index) => {
         const customer = customerById.get(refunds[index].customerId.toString());
-        return { ...view, customer: customer ? { name: nameOf(customer) || "Customer", phone: customer.phone } : null };
+        return {
+          ...view,
+          customer: customer
+            ? { name: nameOf(customer) || "Customer", phone: customer.phone }
+            : null,
+        };
       }),
       page: query.page,
       limit: query.limit,
@@ -655,22 +866,48 @@ export class RefundsService {
   }
 
   /** Refund totals for the admin payments summary (paise). */
-  async summary(since: Date): Promise<{ refundedToday: number; refundedTotal: number; pending: number; failed: number; review: number }> {
+  async summary(
+    since: Date,
+  ): Promise<{
+    refundedToday: number;
+    refundedTotal: number;
+    pending: number;
+    failed: number;
+    review: number;
+  }> {
     const [processed, pending, failed, review] = await Promise.all([
       this.refundModel
         .aggregate<{ _id: null; today: number; total: number }>([
-          { $match: { status: RefundStatus.PROCESSED, target: RefundTarget.PAYMENT } },
+          {
+            $match: {
+              status: RefundStatus.PROCESSED,
+              target: RefundTarget.PAYMENT,
+            },
+          },
           {
             $group: {
               _id: null,
               total: { $sum: "$amountPaise" },
-              today: { $sum: { $cond: [{ $gte: ["$processedAt", since] }, "$amountPaise", 0] } },
+              today: {
+                $sum: {
+                  $cond: [{ $gte: ["$processedAt", since] }, "$amountPaise", 0],
+                },
+              },
             },
           },
         ])
         .exec(),
-      this.refundModel.countDocuments({ status: { $in: [RefundStatus.REQUESTED, RefundStatus.PENDING] } }).exec(),
-      this.refundModel.countDocuments({ status: RefundStatus.FAILED, failedAt: { $gte: new Date(Date.now() - 30 * 86_400_000) } }).exec(),
+      this.refundModel
+        .countDocuments({
+          status: { $in: [RefundStatus.REQUESTED, RefundStatus.PENDING] },
+        })
+        .exec(),
+      this.refundModel
+        .countDocuments({
+          status: RefundStatus.FAILED,
+          failedAt: { $gte: new Date(Date.now() - 30 * 86_400_000) },
+        })
+        .exec(),
       this.refundModel.countDocuments({ needsReview: true }).exec(),
     ]);
     return {
@@ -685,12 +922,18 @@ export class RefundsService {
   // ── Reconciler hooks ──────────────────────────────────────────────────
 
   /** Refunds whose Razorpay outcome we are still waiting for. */
-  async findUnsettled(olderThan: Date, limit: number): Promise<PaymentRefundDocument[]> {
+  async findUnsettled(
+    olderThan: Date,
+    limit: number,
+  ): Promise<PaymentRefundDocument[]> {
     return this.refundModel
       .find({
         status: { $in: [RefundStatus.REQUESTED, RefundStatus.PENDING] },
         createdAt: { $lte: olderThan },
-        $or: [{ lastCheckedAt: { $exists: false } }, { lastCheckedAt: { $lte: olderThan } }],
+        $or: [
+          { lastCheckedAt: { $exists: false } },
+          { lastCheckedAt: { $lte: olderThan } },
+        ],
       })
       .sort({ createdAt: 1 })
       .limit(limit)
@@ -700,19 +943,37 @@ export class RefundsService {
   /** Processed refunds whose driver clawback is still to be written. */
   async findLedgerPending(limit: number): Promise<PaymentRefundDocument[]> {
     return this.refundModel
-      .find({ status: RefundStatus.PROCESSED, ledgerState: RefundLedgerState.PENDING, needsReview: { $ne: true } })
+      .find({
+        status: RefundStatus.PROCESSED,
+        ledgerState: RefundLedgerState.PENDING,
+        needsReview: { $ne: true },
+      })
       .limit(limit)
       .exec();
   }
 
   /** One unsettled refund: ask Razorpay directly, or re-list the payment's refunds. */
-  async resolve(refund: PaymentRefundDocument, source: PaymentEventSource): Promise<void> {
-    await this.refundModel.updateOne({ _id: refund._id }, { $set: { lastCheckedAt: new Date() } }).exec();
+  async resolve(
+    refund: PaymentRefundDocument,
+    source: PaymentEventSource,
+  ): Promise<void> {
+    await this.refundModel
+      .updateOne({ _id: refund._id }, { $set: { lastCheckedAt: new Date() } })
+      .exec();
     if (refund.razorpayRefundId) {
       try {
-        await this.applyGatewayRefund(refund, await this.gateway.fetchRefund(refund.razorpayPaymentId, refund.razorpayRefundId), source);
+        await this.applyGatewayRefund(
+          refund,
+          await this.gateway.fetchRefund(
+            refund.razorpayPaymentId,
+            refund.razorpayRefundId,
+          ),
+          source,
+        );
       } catch (error) {
-        this.logger.warn(`Refund ${refund._id.toString()} check deferred: ${(error as Error).message}`);
+        this.logger.warn(
+          `Refund ${refund._id.toString()} check deferred: ${(error as Error).message}`,
+        );
       }
       return;
     }
@@ -721,7 +982,10 @@ export class RefundsService {
 
   // ── Internals ─────────────────────────────────────────────────────────
 
-  private assertRefundable(payment: PaymentDocument, dto: CreateRefundDto): void {
+  private assertRefundable(
+    payment: PaymentDocument,
+    dto: CreateRefundDto,
+  ): void {
     if (payment.gateway !== PaymentGateway.RAZORPAY)
       throw new ApiException(
         HttpStatus.CONFLICT,
@@ -729,18 +993,41 @@ export class RefundsService {
         "REFUND_NOT_SUPPORTED",
       );
     if (!this.gateway.isConfigured)
-      throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "Razorpay is not configured", "PAYMENT_GATEWAY_NOT_CONFIGURED");
+      throw new ApiException(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "Razorpay is not configured",
+        "PAYMENT_GATEWAY_NOT_CONFIGURED",
+      );
     const target = dto.target ?? RefundTarget.PAYMENT;
     if (target === RefundTarget.DUPLICATE_CAPTURE) {
-      if (!dto.razorpayPaymentId || !payment.duplicateCaptures.some((d) => d.razorpayPaymentId === dto.razorpayPaymentId))
-        throw apiBadRequest("That Razorpay payment is not a duplicate of this ride", "REFUND_TARGET_INVALID");
+      if (
+        !dto.razorpayPaymentId ||
+        !payment.duplicateCaptures.some(
+          (d) => d.razorpayPaymentId === dto.razorpayPaymentId,
+        )
+      )
+        throw apiBadRequest(
+          "That Razorpay payment is not a duplicate of this ride",
+          "REFUND_TARGET_INVALID",
+        );
       return;
     }
-    if (!SETTLED_PAYMENT_STATUSES.includes(payment.status) || !payment.razorpayPaymentId)
-      throw new ApiException(HttpStatus.CONFLICT, "Only a captured payment can be refunded", "REFUND_NOT_ALLOWED", {
-        status: payment.status,
-      });
-    if (payment.paidAt && Date.now() - payment.paidAt.getTime() > this.refundWindowMs)
+    if (
+      !SETTLED_PAYMENT_STATUSES.includes(payment.status) ||
+      !payment.razorpayPaymentId
+    )
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        "Only a captured payment can be refunded",
+        "REFUND_NOT_ALLOWED",
+        {
+          status: payment.status,
+        },
+      );
+    if (
+      payment.paidAt &&
+      Date.now() - payment.paidAt.getTime() > this.refundWindowMs
+    )
       throw new ApiException(
         HttpStatus.CONFLICT,
         "This payment is too old to refund through Razorpay; settle it with the customer directly",
@@ -749,14 +1036,23 @@ export class RefundsService {
   }
 
   /** Requested + pending + processed refunds of one Razorpay payment (paise). */
-  private async reservedPaise(paymentId: Types.ObjectId, razorpayPaymentId: string): Promise<number> {
+  private async reservedPaise(
+    paymentId: Types.ObjectId,
+    razorpayPaymentId: string,
+  ): Promise<number> {
     const [row] = await this.refundModel
       .aggregate<{ total: number }>([
         {
           $match: {
             paymentId,
             razorpayPaymentId,
-            status: { $in: [RefundStatus.REQUESTED, RefundStatus.PENDING, RefundStatus.PROCESSED] },
+            status: {
+              $in: [
+                RefundStatus.REQUESTED,
+                RefundStatus.PENDING,
+                RefundStatus.PROCESSED,
+              ],
+            },
           },
         },
         { $group: { _id: null, total: { $sum: "$amountPaise" } } },
@@ -771,24 +1067,41 @@ export class RefundsService {
       const now = new Date();
       const locked = await this.paymentModel
         .findOneAndUpdate(
-          { _id: payment._id, $or: [{ refundLockUntil: { $exists: false } }, { refundLockUntil: { $lte: now } }] },
-          { $set: { refundLockUntil: new Date(now.getTime() + REFUND_LOCK_MS) } },
+          {
+            _id: payment._id,
+            $or: [
+              { refundLockUntil: { $exists: false } },
+              { refundLockUntil: { $lte: now } },
+            ],
+          },
+          {
+            $set: { refundLockUntil: new Date(now.getTime() + REFUND_LOCK_MS) },
+          },
           { returnDocument: "after" },
         )
         .exec();
       if (locked) return locked;
       if (Date.now() > waitUntil)
-        throw new ApiException(HttpStatus.CONFLICT, "Another refund of this payment is being processed. Try again.", "REFUND_IN_PROGRESS");
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          "Another refund of this payment is being processed. Try again.",
+          "REFUND_IN_PROGRESS",
+        );
       await sleep(200);
     }
   }
 
   private async unlock(paymentId: Types.ObjectId): Promise<void> {
-    await this.paymentModel.updateOne({ _id: paymentId }, { $unset: { refundLockUntil: 1 } }).exec();
+    await this.paymentModel
+      .updateOne({ _id: paymentId }, { $unset: { refundLockUntil: 1 } })
+      .exec();
   }
 
   /** A refund Razorpay knows about but we don't: made in the dashboard. */
-  private async recordExternal(gatewayRefund: RazorpayRefund, source: PaymentEventSource): Promise<PaymentRefundDocument | null> {
+  private async recordExternal(
+    gatewayRefund: RazorpayRefund,
+    source: PaymentEventSource,
+  ): Promise<PaymentRefundDocument | null> {
     const payment = await this.paymentModel
       .findOne({
         gateway: PaymentGateway.RAZORPAY,
@@ -799,7 +1112,10 @@ export class RefundsService {
       })
       .exec();
     if (!payment) return null;
-    const target = payment.razorpayPaymentId === gatewayRefund.payment_id ? RefundTarget.PAYMENT : RefundTarget.DUPLICATE_CAPTURE;
+    const target =
+      payment.razorpayPaymentId === gatewayRefund.payment_id
+        ? RefundTarget.PAYMENT
+        : RefundTarget.DUPLICATE_CAPTURE;
     try {
       const refund = await this.refundModel.create({
         paymentId: payment._id,
@@ -812,11 +1128,17 @@ export class RefundsService {
         razorpayRefundId: gatewayRefund.id,
         amountPaise: gatewayRefund.amount,
         currency: gatewayRefund.currency,
-        reason: target === RefundTarget.DUPLICATE_CAPTURE ? RefundReason.DUPLICATE_PAYMENT : RefundReason.EXTERNAL,
+        reason:
+          target === RefundTarget.DUPLICATE_CAPTURE
+            ? RefundReason.DUPLICATE_PAYMENT
+            : RefundReason.EXTERNAL,
         note: "Made in the Razorpay dashboard",
         driverImpact: RefundDriverImpact.NONE,
         status: RefundStatus.REQUESTED,
-        source: source === PaymentEventSource.WEBHOOK ? RefundSource.WEBHOOK : RefundSource.RECONCILE,
+        source:
+          source === PaymentEventSource.WEBHOOK
+            ? RefundSource.WEBHOOK
+            : RefundSource.RECONCILE,
         ledgerState: RefundLedgerState.PENDING,
         // Someone must decide whether the driver shares this refund.
         needsReview: target === RefundTarget.PAYMENT,
@@ -835,33 +1157,70 @@ export class RefundsService {
       return refund;
     } catch (error) {
       if (!isDuplicateKey(error, "uniq_razorpay_refund_id")) throw error;
-      return this.refundModel.findOne({ razorpayRefundId: gatewayRefund.id }).exec();
+      return this.refundModel
+        .findOne({ razorpayRefundId: gatewayRefund.id })
+        .exec();
     }
   }
 
-  private async pushEvent(paymentId: Types.ObjectId, event: Omit<PaymentEvent, "at"> & { at?: Date }): Promise<void> {
+  private async pushEvent(
+    paymentId: Types.ObjectId,
+    event: Omit<PaymentEvent, "at"> & { at?: Date },
+  ): Promise<void> {
     await this.paymentModel
       .updateOne(
         { _id: paymentId },
-        { $push: { events: { $each: [{ ...event, at: event.at ?? new Date() }], $slice: -MAX_EVENTS } } },
+        {
+          $push: {
+            events: {
+              $each: [{ ...event, at: event.at ?? new Date() }],
+              $slice: -MAX_EVENTS,
+            },
+          },
+        },
       )
       .exec();
   }
 
-  private async toViews(refunds: PaymentRefundDocument[]): Promise<RefundView[]> {
+  private async toViews(
+    refunds: PaymentRefundDocument[],
+  ): Promise<RefundView[]> {
     const admins = await this.userModel
-      .find({ _id: { $in: refunds.map((refund) => refund.requestedBy).filter(Boolean) } })
+      .find({
+        _id: {
+          $in: refunds.map((refund) => refund.requestedBy).filter(Boolean),
+        },
+      })
       .select("firstName lastName")
       .lean()
       .exec();
-    const adminName = new Map(admins.map((admin) => [admin._id.toString(), nameOf(admin) || "Admin"]));
+    const adminName = new Map(
+      admins.map((admin) => [admin._id.toString(), nameOf(admin) || "Admin"]),
+    );
     const adjustments = new Map<string, { amount: number; status: string }>();
-    const paymentIds = [...new Set(refunds.filter((r) => r.adjustmentId).map((r) => r.paymentId.toString()))];
+    const paymentIds = [
+      ...new Set(
+        refunds
+          .filter((r) => r.adjustmentId)
+          .map((r) => r.paymentId.toString()),
+      ),
+    ];
     for (const paymentId of paymentIds)
-      for (const adjustment of await this.earnings.adjustmentsForPayment(new Types.ObjectId(paymentId)))
-        adjustments.set(adjustment.id, { amount: adjustment.amount, status: adjustment.status });
+      for (const adjustment of await this.earnings.adjustmentsForPayment(
+        new Types.ObjectId(paymentId),
+      ))
+        adjustments.set(adjustment.id, {
+          amount: adjustment.amount,
+          status: adjustment.status,
+        });
     return refunds.map((refund) =>
-      this.toView(refund, refund.requestedBy ? adminName.get(refund.requestedBy.toString()) : undefined, adjustments),
+      this.toView(
+        refund,
+        refund.requestedBy
+          ? adminName.get(refund.requestedBy.toString())
+          : undefined,
+        adjustments,
+      ),
     );
   }
 
@@ -870,7 +1229,9 @@ export class RefundsService {
     requestedByName?: string,
     adjustments?: Map<string, { amount: number; status: string }>,
   ): RefundView {
-    const adjustment = refund.adjustmentId ? adjustments?.get(refund.adjustmentId.toString()) : undefined;
+    const adjustment = refund.adjustmentId
+      ? adjustments?.get(refund.adjustmentId.toString())
+      : undefined;
     return {
       id: refund._id.toString(),
       paymentId: refund.paymentId.toString(),
@@ -889,10 +1250,19 @@ export class RefundsService {
       acquirerReference: refund.acquirerReference,
       speedProcessed: refund.speedProcessed,
       source: refund.source,
-      requestedBy: refund.requestedBy ? { id: refund.requestedBy.toString(), name: requestedByName ?? "Admin" } : undefined,
+      requestedBy: refund.requestedBy
+        ? {
+            id: refund.requestedBy.toString(),
+            name: requestedByName ?? "Admin",
+          }
+        : undefined,
       ledgerState: refund.ledgerState,
       adjustment: refund.adjustmentId
-        ? { id: refund.adjustmentId.toString(), amount: adjustment?.amount, status: adjustment?.status }
+        ? {
+            id: refund.adjustmentId.toString(),
+            amount: adjustment?.amount,
+            status: adjustment?.status,
+          }
         : undefined,
       needsReview: refund.needsReview,
       createdAt: refund.createdAt!,

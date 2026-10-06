@@ -36,7 +36,10 @@ export class PeakPricingSlot {
   @Prop({ required: true, default: true })
   appliesToAll!: boolean;
 
-  @Prop({ type: [{ type: String, match: RIDE_TYPE_CODE_PATTERN }], default: [] })
+  @Prop({
+    type: [{ type: String, match: RIDE_TYPE_CODE_PATTERN }],
+    default: [],
+  })
   rideTypes!: string[];
 
   /** Disabled slots are kept (audit, re-enable) but never price a trip. */
@@ -58,7 +61,8 @@ export class PeakPricingSlot {
 }
 
 export type PeakPricingSlotDocument = HydratedDocument<PeakPricingSlot>;
-export const PeakPricingSlotSchema = SchemaFactory.createForClass(PeakPricingSlot);
+export const PeakPricingSlotSchema =
+  SchemaFactory.createForClass(PeakPricingSlot);
 
 PeakPricingSlotSchema.index({ nameKey: 1 }, { unique: true });
 PeakPricingSlotSchema.index({ isActive: 1 });

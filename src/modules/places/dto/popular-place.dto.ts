@@ -1,5 +1,16 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
-import { IsBoolean, IsInt, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, Length, Max, Min } from "class-validator";
+import {
+  IsBoolean,
+  IsInt,
+  IsLatitude,
+  IsLongitude,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Length,
+  Max,
+  Min,
+} from "class-validator";
 
 /** Admin: add a popular destination. */
 export class CreatePopularPlaceDto {
@@ -8,12 +19,18 @@ export class CreatePopularPlaceDto {
   @Length(2, 80)
   name!: string;
 
-  @ApiProperty({ example: "Sector 32, Noida", description: "Second line of the list row" })
+  @ApiProperty({
+    example: "Sector 32, Noida",
+    description: "Second line of the list row",
+  })
   @IsString()
   @Length(2, 120)
   secondaryText!: string;
 
-  @ApiProperty({ example: "Noida", description: "Area label that groups places in the admin list" })
+  @ApiProperty({
+    example: "Noida",
+    description: "Area label that groups places in the admin list",
+  })
   @IsString()
   @Length(2, 60)
   city!: string;
@@ -33,7 +50,10 @@ export class CreatePopularPlaceDto {
   @IsBoolean()
   active?: boolean;
 
-  @ApiPropertyOptional({ default: 100, description: "Lower first when the rider's position is unknown" })
+  @ApiPropertyOptional({
+    default: 100,
+    description: "Lower first when the rider's position is unknown",
+  })
   @IsOptional()
   @IsInt()
   @Min(0)

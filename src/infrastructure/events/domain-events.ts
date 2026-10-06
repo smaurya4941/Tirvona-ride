@@ -1,5 +1,8 @@
 import type { RidePaymentStatus } from "../../modules/rides/ride-payment-status";
-import type { RideActorType, RideStatus } from "../../modules/rides/ride-state-machine";
+import type {
+  RideActorType,
+  RideStatus,
+} from "../../modules/rides/ride-state-machine";
 
 /**
  * What a ride looked like right after a committed change — only the fields
@@ -168,4 +171,6 @@ export interface DomainEventMap {
 }
 
 export type DomainEventName = keyof DomainEventMap;
-export type DomainEventHandler<K extends DomainEventName> = (event: DomainEventMap[K]) => Promise<void> | void;
+export type DomainEventHandler<K extends DomainEventName> = (
+  event: DomainEventMap[K],
+) => Promise<void> | void;

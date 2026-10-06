@@ -18,15 +18,21 @@ export class AdminLiveController {
 
   @Get("drivers")
   @Header("Cache-Control", "no-store")
-  @ApiOperation({ summary: "Every online approved driver with their latest position" })
+  @ApiOperation({
+    summary: "Every online approved driver with their latest position",
+  })
   async drivers(): Promise<ApiSuccessBody<LiveDriversReport>> {
     return ok(await this.live.onlineDrivers());
   }
 
   @Get("drivers/:id")
   @Header("Cache-Control", "no-store")
-  @ApiOperation({ summary: "One driver's latest position, status and current ride" })
-  async driver(@Param("id", ParseObjectIdPipe) id: string): Promise<ApiSuccessBody<LiveDriverView>> {
+  @ApiOperation({
+    summary: "One driver's latest position, status and current ride",
+  })
+  async driver(
+    @Param("id", ParseObjectIdPipe) id: string,
+  ): Promise<ApiSuccessBody<LiveDriverView>> {
     return ok(await this.live.driver(id));
   }
 }

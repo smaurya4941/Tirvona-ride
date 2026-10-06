@@ -1,7 +1,10 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Transform } from "class-transformer";
 import { IsString, Length, Matches } from "class-validator";
-import { E164_PATTERN, normalizePhone } from "../../../common/phone/phone-number";
+import {
+  E164_PATTERN,
+  normalizePhone,
+} from "../../../common/phone/phone-number";
 import { DeviceInfoDto } from "./device.dto";
 
 export class LoginDto extends DeviceInfoDto {

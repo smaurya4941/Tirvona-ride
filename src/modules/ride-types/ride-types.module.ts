@@ -5,7 +5,11 @@ import { RideTypesService } from "./ride-types.service";
 import { RideType, RideTypeSchema } from "./schemas/ride-type.schema";
 
 @Module({
-  imports: [MongooseModule.forFeature([{ name: RideType.name, schema: RideTypeSchema }])],
+  imports: [
+    MongooseModule.forFeature([
+      { name: RideType.name, schema: RideTypeSchema },
+    ]),
+  ],
   controllers: [RideTypesController],
   providers: [RideTypesService],
   exports: [RideTypesService],

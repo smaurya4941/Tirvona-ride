@@ -32,8 +32,17 @@ import {
   ResolvePlaceQueryDto,
   ReverseGeocodeQueryDto,
 } from "./dto/places-query.dto";
-import { OtherSavedPlaceDto, SavePlaceDto, UpdateOtherSavedPlaceDto } from "./dto/saved-place.dto";
-import type { AutocompleteResult, PlaceSuggestion, ResolvedPlace, ReverseGeocodedPlace } from "./places.types";
+import {
+  OtherSavedPlaceDto,
+  SavePlaceDto,
+  UpdateOtherSavedPlaceDto,
+} from "./dto/saved-place.dto";
+import type {
+  AutocompleteResult,
+  PlaceSuggestion,
+  ResolvedPlace,
+  ReverseGeocodedPlace,
+} from "./places.types";
 import { PlacesService } from "./places.service";
 import { PopularPlacesService } from "./popular-places.service";
 import { SavedPlacesService } from "./saved-places.service";
@@ -42,9 +51,15 @@ import { SavedPlaceKind } from "./schemas/saved-place.schema";
 import type { FixedSavedPlaceKind } from "./schemas/saved-place.schema";
 
 /** :kind of the Home/Work routes — "other" places have their own routes. */
-const FixedKindParam = { HOME: SavedPlaceKind.HOME, WORK: SavedPlaceKind.WORK } as const;
+const FixedKindParam = {
+  HOME: SavedPlaceKind.HOME,
+  WORK: SavedPlaceKind.WORK,
+} as const;
 
-const nearFrom = (query: { latitude?: number; longitude?: number }): GeoCoordinates | undefined =>
+const nearFrom = (query: {
+  latitude?: number;
+  longitude?: number;
+}): GeoCoordinates | undefined =>
   query.latitude !== undefined && query.longitude !== undefined
     ? { latitude: query.latitude, longitude: query.longitude }
     : undefined;
@@ -63,8 +78,13 @@ export class PlacesController {
   @Get("autocomplete")
   // The app debounces keystrokes; this still allows brisk typing.
   @Throttle({ default: { limit: 90, ttl: 60_000 } })
-  @ApiOperation({ summary: "Search places as the rider types (curated Braj landmarks first when the rider is in Braj)" })
-  async autocomplete(@Query() query: AutocompleteQueryDto): Promise<ApiSuccessBody<AutocompleteResult>> {
+  @ApiOperation({
+    summary:
+      "Search places as the rider types (curated Braj landmarks first when the rider is in Braj)",
+  })
+  async autocomplete(
+    @Query() query: AutocompleteQueryDto,
+  ): Promise<ApiSuccessBody<AutocompleteResult>> {
     return ok(
       await this.places.autocomplete({
         query: query.q,
@@ -77,28 +97,46 @@ export class PlacesController {
 
   @Get("resolve")
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
-  @ApiOperation({ summary: "Coordinates and booking address for a tapped suggestion" })
-  async resolve(@Query() query: ResolvePlaceQueryDto): Promise<ApiSuccessBody<ResolvedPlace>> {
+  @ApiOperation({
+    summary: "Coordinates and booking address for a tapped suggestion",
+  })
+  async resolve(
+    @Query() query: ResolvePlaceQueryDto,
+  ): Promise<ApiSuccessBody<ResolvedPlace>> {
     return ok(await this.places.resolve(query.id, query.sessionToken));
   }
 
   @Get("reverse")
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @ApiOperation({
-    summary: "Name the place at a coordinate (current location, a pin on the map)",
-    description: "Always answers: when no provider can name the spot, `approximate` is true and the address is a coordinate label.",
+    summary:
+      "Name the place at a coordinate (current location, a pin on the map)",
+    description:
+      "Always answers: when no provider can name the spot, `approximate` is true and the address is a coordinate label.",
   })
-  async reverse(@Query() query: ReverseGeocodeQueryDto): Promise<ApiSuccessBody<ReverseGeocodedPlace>> {
-    return ok(await this.places.reverse({ latitude: query.latitude, longitude: query.longitude }));
+  async reverse(
+    @Query() query: ReverseGeocodeQueryDto,
+  ): Promise<ApiSuccessBody<ReverseGeocodedPlace>> {
+    return ok(
+      await this.places.reverse({
+        latitude: query.latitude,
+        longitude: query.longitude,
+      }),
+    );
   }
 
   @Get("popular")
   @ApiOperation({
     summary: "Admin-curated popular destinations near the rider, nearest first",
-    description: "Empty when the rider is farther than PLACES_FEATURED_RADIUS_KM from every active place.",
+    description:
+      "Empty when the rider is farther than PLACES_FEATURED_RADIUS_KM from every active place.",
   })
-  async popular(@Query() query: PopularPlacesQueryDto): Promise<ApiSuccessBody<PlaceSuggestion[]>> {
-    return ok(await this.popularPlaces.forRider(nearFrom(query), query.limit ?? 8));
+  async popular(
+    @Query() query: PopularPlacesQueryDto,
+  ): Promise<ApiSuccessBody<PlaceSuggestion[]>> {
+    return ok(
+      await this.popularPlaces.forRider(nearFrom(query), query.limit ?? 8),
+    );
   }
 
   /**
@@ -107,7 +145,10 @@ export class PlacesController {
    */
   @Get("popular/:id/image")
   @Public()
-  @ApiOperation({ summary: "Photo of a popular place. Immutable-cached when `v` matches the current version" })
+  @ApiOperation({
+    summary:
+      "Photo of a popular place. Immutable-cached when `v` matches the current version",
+  })
   async popularImage(
     @Param("id") id: string,
     @Query("v") requestedVersion: string | undefined,
@@ -119,22 +160,32 @@ export class PlacesController {
     response.setHeader("ETag", etag);
     response.setHeader(
       "Cache-Control",
-      requestedVersion === file.version ? "public, max-age=31536000, immutable" : "public, max-age=60",
+      requestedVersion === file.version
+        ? "public, max-age=31536000, immutable"
+        : "public, max-age=60",
     );
     response.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
     if (ifNoneMatch === etag) {
       response.status(304);
       return undefined;
     }
-    return new StreamableFile(file.data, { type: file.contentType, length: file.data.length });
+    return new StreamableFile(file.data, {
+      type: file.contentType,
+      length: file.data.length,
+    });
   }
 
   // ── Saved places (Home, Work and the rider's own) ──────────────────────
 
   @Get("saved")
   @Roles(UserRole.CUSTOMER)
-  @ApiOperation({ summary: "The rider's saved Home and Work (null = not set) and their other saved places" })
-  async saved(@CurrentUser() user: AuthenticatedUser): Promise<ApiSuccessBody<SavedPlacesView>> {
+  @ApiOperation({
+    summary:
+      "The rider's saved Home and Work (null = not set) and their other saved places",
+  })
+  async saved(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ApiSuccessBody<SavedPlacesView>> {
     return ok(await this.savedPlaces.forUser(user.userId));
   }
 
@@ -162,7 +213,10 @@ export class PlacesController {
 
   @Post("saved/others")
   @Roles(UserRole.CUSTOMER)
-  @ApiOperation({ summary: "Save a labelled place of the rider's own (\"Gym\", \"Mom's house\")" })
+  @ApiOperation({
+    summary:
+      'Save a labelled place of the rider\'s own ("Gym", "Mom\'s house")',
+  })
   async addOther(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: OtherSavedPlaceDto,

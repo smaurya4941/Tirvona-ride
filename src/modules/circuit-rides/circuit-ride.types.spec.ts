@@ -1,13 +1,23 @@
-import { CircuitStopStatus, STOP_COMMANDS, activeStop, allStopsDone, isStopDone } from "./circuit-ride.types";
+import {
+  CircuitStopStatus,
+  STOP_COMMANDS,
+  activeStop,
+  allStopsDone,
+  isStopDone,
+} from "./circuit-ride.types";
 
-const stops = (...statuses: CircuitStopStatus[]) => statuses.map((status, index) => ({ order: index + 1, status }));
+const stops = (...statuses: CircuitStopStatus[]) =>
+  statuses.map((status, index) => ({ order: index + 1, status }));
 
 describe("circuit stop progression", () => {
-  const { UPCOMING, ARRIVING, ARRIVED, WAITING, COMPLETED, SKIPPED } = CircuitStopStatus;
+  const { UPCOMING, ARRIVING, ARRIVED, WAITING, COMPLETED, SKIPPED } =
+    CircuitStopStatus;
 
   it("the active stop is the first one not done, whatever order they are stored in", () => {
     expect(activeStop(stops(COMPLETED, ARRIVING, UPCOMING))?.order).toBe(2);
-    expect(activeStop([...stops(COMPLETED, ARRIVING, UPCOMING)].reverse())?.order).toBe(2);
+    expect(
+      activeStop([...stops(COMPLETED, ARRIVING, UPCOMING)].reverse())?.order,
+    ).toBe(2);
     expect(activeStop(stops(COMPLETED, SKIPPED, ARRIVING))?.order).toBe(3);
     expect(activeStop(stops(COMPLETED, COMPLETED))).toBeUndefined();
   });
@@ -24,9 +34,21 @@ describe("circuit stop progression", () => {
   });
 
   it("a stop can only be completed after the driver arrived, never straight from the road", () => {
-    expect((STOP_COMMANDS.COMPLETE.from as readonly CircuitStopStatus[]).includes(ARRIVING)).toBe(false);
-    expect((STOP_COMMANDS.COMPLETE.from as readonly CircuitStopStatus[]).includes(ARRIVED)).toBe(true);
-    expect((STOP_COMMANDS.COMPLETE.from as readonly CircuitStopStatus[]).includes(WAITING)).toBe(true);
+    expect(
+      (STOP_COMMANDS.COMPLETE.from as readonly CircuitStopStatus[]).includes(
+        ARRIVING,
+      ),
+    ).toBe(false);
+    expect(
+      (STOP_COMMANDS.COMPLETE.from as readonly CircuitStopStatus[]).includes(
+        ARRIVED,
+      ),
+    ).toBe(true);
+    expect(
+      (STOP_COMMANDS.COMPLETE.from as readonly CircuitStopStatus[]).includes(
+        WAITING,
+      ),
+    ).toBe(true);
     expect(STOP_COMMANDS.ARRIVE.from).toEqual([ARRIVING]);
   });
 });

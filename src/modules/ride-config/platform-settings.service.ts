@@ -2,13 +2,20 @@ import { HttpStatus, Injectable, Logger } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
 import { Types } from "mongoose";
-import { ApiException, apiBadRequest } from "../../common/exceptions/api.exception";
+import {
+  ApiException,
+  apiBadRequest,
+} from "../../common/exceptions/api.exception";
 import { radiiProblem } from "./distance-policy";
 import { MIGRATION_DEFAULTS } from "./ride-config.limits";
-import { PlatformSettings, RIDE_MATCHING_SETTINGS_KEY } from "./schemas/platform-settings.schema";
+import {
+  PlatformSettings,
+  RIDE_MATCHING_SETTINGS_KEY,
+} from "./schemas/platform-settings.schema";
 import type { PlatformSettingsDocument } from "./schemas/platform-settings.schema";
 
-const isDuplicateKey = (error: unknown): boolean => (error as { code?: number } | undefined)?.code === 11000;
+const isDuplicateKey = (error: unknown): boolean =>
+  (error as { code?: number } | undefined)?.code === 11000;
 
 export interface PlatformSettingsView {
   matchingRadiusKm: number;
@@ -32,7 +39,10 @@ export interface RadiiChanges {
 export class PlatformSettingsService {
   private readonly logger = new Logger(PlatformSettingsService.name);
 
-  constructor(@InjectModel(PlatformSettings.name) private readonly settingsModel: Model<PlatformSettings>) {}
+  constructor(
+    @InjectModel(PlatformSettings.name)
+    private readonly settingsModel: Model<PlatformSettings>,
+  ) {}
 
   toView(settings: PlatformSettingsDocument): PlatformSettingsView {
     return {
@@ -45,7 +55,9 @@ export class PlatformSettingsService {
   }
 
   async find(): Promise<PlatformSettingsDocument | null> {
-    return this.settingsModel.findOne({ key: RIDE_MATCHING_SETTINGS_KEY }).exec();
+    return this.settingsModel
+      .findOne({ key: RIDE_MATCHING_SETTINGS_KEY })
+      .exec();
   }
 
   async getRequired(): Promise<PlatformSettingsDocument> {
@@ -58,7 +70,9 @@ export class PlatformSettingsService {
       );
     const problem = radiiProblem(settings);
     if (problem) {
-      this.logger.error(`Platform ride/matching settings are invalid: ${problem}`);
+      this.logger.error(
+        `Platform ride/matching settings are invalid: ${problem}`,
+      );
       throw new ApiException(
         HttpStatus.SERVICE_UNAVAILABLE,
         "Ride matching settings are misconfigured",
@@ -82,11 +96,15 @@ export class PlatformSettingsService {
   async update(
     changes: RadiiChanges,
     adminId: string,
-  ): Promise<{ before: PlatformSettingsDocument | null; after: PlatformSettingsDocument }> {
+  ): Promise<{
+    before: PlatformSettingsDocument | null;
+    after: PlatformSettingsDocument;
+  }> {
     const before = await this.find();
     const merged = {
       matchingRadiusKm: changes.matchingRadiusKm ?? before?.matchingRadiusKm,
-      nearbyDriversRadiusKm: changes.nearbyDriversRadiusKm ?? before?.nearbyDriversRadiusKm,
+      nearbyDriversRadiusKm:
+        changes.nearbyDriversRadiusKm ?? before?.nearbyDriversRadiusKm,
     };
     const problem = radiiProblem(merged);
     if (problem) throw apiBadRequest(problem, "VALIDATION_FAILED");

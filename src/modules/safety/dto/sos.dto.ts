@@ -1,9 +1,21 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Transform, Type } from "class-transformer";
-import { IsEnum, IsInt, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import {
+  IsEnum,
+  IsInt,
+  IsLatitude,
+  IsLongitude,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from "class-validator";
 import { SosStatus } from "../sos-lifecycle";
 
-const optionalText = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() || undefined : value);
+const optionalText = ({ value }: { value: unknown }) =>
+  typeof value === "string" ? value.trim() || undefined : value;
 
 export class TriggerSosDto {
   /** Omitted when the phone could not get a fix in time; the server falls back. */
@@ -24,14 +36,18 @@ export class TriggerSosDto {
   @Max(100_000)
   accuracyMeters?: number;
 
-  @ApiPropertyOptional({ description: "Reverse-geocoded address, if the phone has one" })
+  @ApiPropertyOptional({
+    description: "Reverse-geocoded address, if the phone has one",
+  })
   @IsOptional()
   @Transform(optionalText)
   @IsString()
   @MaxLength(300)
   address?: string;
 
-  @ApiPropertyOptional({ description: "Optional short message for the safety team" })
+  @ApiPropertyOptional({
+    description: "Optional short message for the safety team",
+  })
   @IsOptional()
   @Transform(optionalText)
   @IsString()
@@ -69,11 +85,20 @@ export class ListSosQueryDto {
 }
 
 export class UpdateSosDto {
-  @ApiProperty({ enum: [SosStatus.ACKNOWLEDGED, SosStatus.IN_PROGRESS, SosStatus.RESOLVED, SosStatus.CANCELLED] })
+  @ApiProperty({
+    enum: [
+      SosStatus.ACKNOWLEDGED,
+      SosStatus.IN_PROGRESS,
+      SosStatus.RESOLVED,
+      SosStatus.CANCELLED,
+    ],
+  })
   @IsEnum(SosStatus)
   status!: SosStatus;
 
-  @ApiPropertyOptional({ description: "What was done (required to resolve or cancel)" })
+  @ApiPropertyOptional({
+    description: "What was done (required to resolve or cancel)",
+  })
   @IsOptional()
   @Transform(optionalText)
   @IsString()

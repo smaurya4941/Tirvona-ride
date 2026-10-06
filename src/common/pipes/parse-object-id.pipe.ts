@@ -7,7 +7,11 @@ import { apiBadRequest } from "../exceptions/api.exception";
 @Injectable()
 export class ParseObjectIdPipe implements PipeTransform<string, string> {
   transform(value: string): string {
-    if (typeof value !== "string" || !/^[0-9a-f]{24}$/i.test(value) || !isValidObjectId(value))
+    if (
+      typeof value !== "string" ||
+      !/^[0-9a-f]{24}$/i.test(value) ||
+      !isValidObjectId(value)
+    )
       throw apiBadRequest("Invalid id", "VALIDATION_FAILED");
     return value;
   }

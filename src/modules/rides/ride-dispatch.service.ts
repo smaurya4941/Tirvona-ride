@@ -16,7 +16,8 @@ const SYSTEM: RideActor = { type: RideActorType.SYSTEM };
 const CANDIDATES_PER_ATTEMPT = 5;
 const SWEEP_BATCH = 50;
 
-export type AssignmentEndReason = "DRIVER_REJECTED" | "ASSIGNMENT_TIMEOUT" | "DRIVER_OFFLINE";
+export type AssignmentEndReason =
+  "DRIVER_REJECTED" | "ASSIGNMENT_TIMEOUT" | "DRIVER_OFFLINE";
 
 const isDuplicateKey = (error: unknown): boolean =>
   (error as { code?: number } | undefined)?.code === 11000;
@@ -45,7 +46,8 @@ export class RideDispatchService implements OnModuleDestroy {
     private readonly transitions: RideTransitionService,
     config: ConfigService,
   ) {
-    this.assignmentTimeoutMs = config.getOrThrow<number>("rideAssignmentTimeoutSeconds") * 1000;
+    this.assignmentTimeoutMs =
+      config.getOrThrow<number>("rideAssignmentTimeoutSeconds") * 1000;
     this.reactive = config.getOrThrow<boolean>("matchingReactiveDispatch");
   }
 
@@ -60,7 +62,11 @@ export class RideDispatchService implements OnModuleDestroy {
   // periodic sweep stays as the safety net for restarts and missed timers.
 
   /** Applies the ride's overdue search/assignment timeout at `at`. */
-  scheduleDeadline(rideId: Types.ObjectId, kind: "search" | "assignment", at: Date): void {
+  scheduleDeadline(
+    rideId: Types.ObjectId,
+    kind: "search" | "assignment",
+    at: Date,
+  ): void {
     if (!this.reactive) return;
     const key = `${rideId.toString()}:${kind}`;
     const existing = this.timers.get(key);
@@ -99,7 +105,8 @@ export class RideDispatchService implements OnModuleDestroy {
   async dispatch(rideId: Types.ObjectId): Promise<RideDocument | null> {
     const ride = await this.rideModel.findById(rideId).exec();
     if (!ride || ride.status !== RideStatus.SEARCHING) return ride;
-    if (ride.searchExpiresAt.getTime() <= Date.now()) return this.expireSearch(ride._id);
+    if (ride.searchExpiresAt.getTime() <= Date.now())
+      return this.expireSearch(ride._id);
 
     const candidates = await this.matching.findCandidates({
       pickup: ride.pickup,
@@ -110,7 +117,8 @@ export class RideDispatchService implements OnModuleDestroy {
     });
 
     for (const candidate of candidates) {
-      if (!(await this.matching.reserve(candidate.driverId, ride._id))) continue;
+      if (!(await this.matching.reserve(candidate.driverId, ride._id)))
+        continue;
 
       try {
         const now = new Date();
@@ -124,7 +132,9 @@ export class RideDispatchService implements OnModuleDestroy {
             vehicle: await this.vehicleSnapshot(candidate.activeVehicleId),
             driverDistanceMeters: Math.round(candidate.distanceMeters),
             assignedAt: now,
-            assignmentExpiresAt: new Date(now.getTime() + this.assignmentTimeoutMs),
+            assignmentExpiresAt: new Date(
+              now.getTime() + this.assignmentTimeoutMs,
+            ),
           },
           inc: { dispatchCount: 1 },
           actor: SYSTEM,
@@ -135,7 +145,11 @@ export class RideDispatchService implements OnModuleDestroy {
         });
         if (assigned) {
           if (assigned.assignmentExpiresAt)
-            this.scheduleDeadline(assigned._id, "assignment", assigned.assignmentExpiresAt);
+            this.scheduleDeadline(
+              assigned._id,
+              "assignment",
+              assigned.assignmentExpiresAt,
+            );
           return assigned;
         }
       } catch (error) {
@@ -145,7 +159,9 @@ export class RideDispatchService implements OnModuleDestroy {
           await this.matching.release(candidate.driverId, ride._id);
           throw error;
         }
-        this.logger.warn(`Driver ${candidate.driverId.toString()} already holds an active ride`);
+        this.logger.warn(
+          `Driver ${candidate.driverId.toString()} already holds an active ride`,
+        );
       }
 
       // The ride moved on (e.g. customer cancelled) between read and write.
@@ -176,7 +192,14 @@ export class RideDispatchService implements OnModuleDestroy {
       from: RideStatus.DRIVER_ASSIGNED,
       to: RideStatus.SEARCHING,
       where,
-      unset: ["driverId", "driverUserId", "vehicle", "driverDistanceMeters", "assignedAt", "assignmentExpiresAt"],
+      unset: [
+        "driverId",
+        "driverUserId",
+        "vehicle",
+        "driverDistanceMeters",
+        "assignedAt",
+        "assignmentExpiresAt",
+      ],
       addToSet: { rejectedDriverIds: driverId },
       actor,
       reason: note ? `${reason}: ${note}` : reason,
@@ -207,7 +230,10 @@ export class RideDispatchService implements OnModuleDestroy {
    */
   async settle(ride: RideDocument): Promise<RideDocument> {
     const now = Date.now();
-    if (ride.status === RideStatus.SEARCHING && ride.searchExpiresAt.getTime() <= now)
+    if (
+      ride.status === RideStatus.SEARCHING &&
+      ride.searchExpiresAt.getTime() <= now
+    )
       return (await this.expireSearch(ride._id)) ?? ride;
     if (
       ride.status === RideStatus.DRIVER_ASSIGNED &&
@@ -216,7 +242,12 @@ export class RideDispatchService implements OnModuleDestroy {
       ride.assignmentExpiresAt.getTime() <= now
     )
       return (
-        (await this.endAssignment(ride._id, ride.driverId, "ASSIGNMENT_TIMEOUT", SYSTEM)) ??
+        (await this.endAssignment(
+          ride._id,
+          ride.driverId,
+          "ASSIGNMENT_TIMEOUT",
+          SYSTEM,
+        )) ??
         (await this.rideModel.findById(ride._id).exec()) ??
         ride
       );
@@ -228,13 +259,21 @@ export class RideDispatchService implements OnModuleDestroy {
     const now = new Date();
 
     const staleAssignments = await this.rideModel
-      .find({ status: RideStatus.DRIVER_ASSIGNED, assignmentExpiresAt: { $lte: now } })
+      .find({
+        status: RideStatus.DRIVER_ASSIGNED,
+        assignmentExpiresAt: { $lte: now },
+      })
       .limit(SWEEP_BATCH)
       .exec();
     for (const ride of staleAssignments)
       if (ride.driverId)
         await this.safely(() =>
-          this.endAssignment(ride._id, ride.driverId!, "ASSIGNMENT_TIMEOUT", SYSTEM),
+          this.endAssignment(
+            ride._id,
+            ride.driverId!,
+            "ASSIGNMENT_TIMEOUT",
+            SYSTEM,
+          ),
         );
 
     const expiredSearches = await this.rideModel
@@ -242,22 +281,29 @@ export class RideDispatchService implements OnModuleDestroy {
       .select("_id")
       .limit(SWEEP_BATCH)
       .exec();
-    for (const ride of expiredSearches) await this.safely(() => this.expireSearch(ride._id));
+    for (const ride of expiredSearches)
+      await this.safely(() => this.expireSearch(ride._id));
 
     await this.dispatchOpenSearches();
   }
 
   private async dispatchOpenSearches(): Promise<void> {
     const openSearches = await this.rideModel
-      .find({ status: RideStatus.SEARCHING, searchExpiresAt: { $gt: new Date() } })
+      .find({
+        status: RideStatus.SEARCHING,
+        searchExpiresAt: { $gt: new Date() },
+      })
       .sort({ requestedAt: 1 })
       .select("_id")
       .limit(SWEEP_BATCH)
       .exec();
-    for (const ride of openSearches) await this.safely(() => this.dispatch(ride._id));
+    for (const ride of openSearches)
+      await this.safely(() => this.dispatch(ride._id));
   }
 
-  private async vehicleSnapshot(vehicleId?: Types.ObjectId): Promise<RideVehicle | undefined> {
+  private async vehicleSnapshot(
+    vehicleId?: Types.ObjectId,
+  ): Promise<RideVehicle | undefined> {
     if (!vehicleId) return undefined;
     const vehicle = await this.vehicleModel.findById(vehicleId).exec();
     if (!vehicle) return undefined;

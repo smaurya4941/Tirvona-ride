@@ -7,7 +7,10 @@ import type { ApiSuccessBody } from "../../common/http/api-response";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
 import { DriverAvailabilityService } from "./driver-availability.service";
-import type { DriverDashboard, DriverDutyStatus } from "./driver-availability.service";
+import type {
+  DriverDashboard,
+  DriverDutyStatus,
+} from "./driver-availability.service";
 import { DriverLocationFixDto } from "../locations/dto/driver-location-fix.dto";
 import { UpdateAvailabilityDto } from "./dto/driver-duty.dto";
 
@@ -33,7 +36,10 @@ export class DriverAvailabilityController {
   }
 
   @Patch("location")
-  @ApiOperation({ summary: "Location fallback when the socket is down (prefer the driver.location socket message)" })
+  @ApiOperation({
+    summary:
+      "Location fallback when the socket is down (prefer the driver.location socket message)",
+  })
   async updateLocation(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: DriverLocationFixDto,
@@ -43,7 +49,9 @@ export class DriverAvailabilityController {
 
   @Get("dashboard")
   @ApiOperation({ summary: "Duty status, today's rides and the current ride" })
-  async dashboard(@CurrentUser() user: AuthenticatedUser): Promise<ApiSuccessBody<DriverDashboard>> {
+  async dashboard(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ApiSuccessBody<DriverDashboard>> {
     return ok(await this.availability.dashboard(user.userId));
   }
 }

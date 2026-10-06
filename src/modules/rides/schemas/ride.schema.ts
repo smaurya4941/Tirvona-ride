@@ -6,7 +6,10 @@ import { RidePaymentStatus } from "../ride-payment-status";
 import { RideActorType, RideStatus } from "../ride-state-machine";
 import { PromoDiscountType } from "../../promotions/promo-rules";
 import { RideKind } from "../../circuit-rides/circuit-ride.types";
-import { RideCircuit, RideCircuitSchema } from "../../circuit-rides/schemas/ride-circuit.schema";
+import {
+  RideCircuit,
+  RideCircuitSchema,
+} from "../../circuit-rides/schemas/ride-circuit.schema";
 
 @Schema({ _id: false })
 export class RideLocation {
@@ -44,7 +47,8 @@ export class RideDistancePolicy {
   @Prop({ required: true, min: 1 })
   configVersion!: number;
 }
-const RideDistancePolicySchema = SchemaFactory.createForClass(RideDistancePolicy);
+const RideDistancePolicySchema =
+  SchemaFactory.createForClass(RideDistancePolicy);
 
 /**
  * The bill as priced at completion, frozen: the trip measured, the tariff
@@ -320,7 +324,8 @@ export class RidePaymentSummary {
   @Prop({ min: 0 })
   refundedAmount?: number;
 }
-const RidePaymentSummarySchema = SchemaFactory.createForClass(RidePaymentSummary);
+const RidePaymentSummarySchema =
+  SchemaFactory.createForClass(RidePaymentSummary);
 
 @Schema({ timestamps: true, collection: "rides" })
 export class Ride {
@@ -496,7 +501,11 @@ export class Ride {
    * Money state, independent of `status`. Written only by
    * RidePaymentStateService (and PENDING by the completion transition).
    */
-  @Prop({ required: true, enum: RidePaymentStatus, default: RidePaymentStatus.NOT_REQUIRED })
+  @Prop({
+    required: true,
+    enum: RidePaymentStatus,
+    default: RidePaymentStatus.NOT_REQUIRED,
+  })
   paymentStatus!: RidePaymentStatus;
 
   @Prop({ type: RidePaymentSummarySchema })
@@ -516,23 +525,40 @@ RideSchema.index({ paymentStatus: 1, completedAt: -1 });
 RideSchema.index({ requestedAt: -1 });
 RideSchema.index({ status: 1, completedAt: -1 });
 RideSchema.index({ status: 1, cancelledAt: -1 });
-RideSchema.index({ zoneId: 1, requestedAt: -1 }, { partialFilterExpression: { zoneId: { $exists: true } } });
-RideSchema.index({ "promo.promoId": 1 }, { partialFilterExpression: { "promo.promoId": { $exists: true } } });
+RideSchema.index(
+  { zoneId: 1, requestedAt: -1 },
+  { partialFilterExpression: { zoneId: { $exists: true } } },
+);
+RideSchema.index(
+  { "promo.promoId": 1 },
+  { partialFilterExpression: { "promo.promoId": { $exists: true } } },
+);
 // Sweeper scans.
 RideSchema.index({ status: 1, assignmentExpiresAt: 1 });
 RideSchema.index({ status: 1, searchExpiresAt: 1 });
 // Circuit lists (admin bookings, live circuits) and per-package analytics.
 RideSchema.index({ kind: 1, requestedAt: -1 });
-RideSchema.index({ "circuit.packageId": 1, requestedAt: -1 }, { partialFilterExpression: { "circuit.packageId": { $exists: true } } });
+RideSchema.index(
+  { "circuit.packageId": 1, requestedAt: -1 },
+  { partialFilterExpression: { "circuit.packageId": { $exists: true } } },
+);
 // A repeated "Confirm & Book" (same Idempotency-Key) never creates a second circuit.
 RideSchema.index(
   { customerId: 1, "circuit.bookingKey": 1 },
-  { unique: true, partialFilterExpression: { "circuit.bookingKey": { $type: "string" } }, name: "uniq_circuit_booking_key" },
+  {
+    unique: true,
+    partialFilterExpression: { "circuit.bookingKey": { $type: "string" } },
+    name: "uniq_circuit_booking_key",
+  },
 );
 // One active ride per customer, enforced by the database under concurrency.
 RideSchema.index(
   { customerId: 1 },
-  { unique: true, partialFilterExpression: { isActive: true }, name: "uniq_active_ride_per_customer" },
+  {
+    unique: true,
+    partialFilterExpression: { isActive: true },
+    name: "uniq_active_ride_per_customer",
+  },
 );
 // One active ride per driver. `$exists` keeps unassigned SEARCHING rides out.
 RideSchema.index(

@@ -48,10 +48,18 @@ export class Broadcast {
   @Prop({ required: true, enum: BroadcastAudience })
   audience!: BroadcastAudience;
 
-  @Prop({ required: true, enum: BroadcastDeepLink, default: BroadcastDeepLink.NONE })
+  @Prop({
+    required: true,
+    enum: BroadcastDeepLink,
+    default: BroadcastDeepLink.NONE,
+  })
   deepLink!: BroadcastDeepLink;
 
-  @Prop({ required: true, enum: BroadcastStatus, default: BroadcastStatus.DRAFT })
+  @Prop({
+    required: true,
+    enum: BroadcastStatus,
+    default: BroadcastStatus.DRAFT,
+  })
   status!: BroadcastStatus;
 
   @Prop()

@@ -8,7 +8,7 @@ import {
   apiConflict,
   apiNotFound,
 } from "../../common/exceptions/api.exception";
-import { removeFile, storeUpload } from "../../common/http/file-upload";
+import { StorageService } from "../storage/storage.service";
 import { DocumentStatus } from "../../common/types/document-status.enum";
 import { Vehicle } from "../vehicles/schemas/vehicle.schema";
 import { UpdateDriverProfileDto } from "./dto/update-driver-profile.dto";
@@ -74,6 +74,7 @@ export class DriversService {
     private readonly documentModel: Model<DriverDocument>,
     @InjectModel(Vehicle.name)
     private readonly vehicleModel: Model<Vehicle>,
+    private readonly storage: StorageService,
   ) {}
 
   toSummary(driver: DriverProfileDocument): DriverSummary {
@@ -108,18 +109,22 @@ export class DriversService {
   }
 
   async findByUserId(userId: string): Promise<DriverProfileDocument | null> {
-    return this.driverModel.findOne({ userId: new Types.ObjectId(userId) }).exec();
+    return this.driverModel
+      .findOne({ userId: new Types.ObjectId(userId) })
+      .exec();
   }
 
   async getByUserId(userId: string): Promise<DriverProfileDocument> {
     const driver = await this.findByUserId(userId);
-    if (!driver) throw apiNotFound("Driver profile not found", "DRIVER_NOT_FOUND");
+    if (!driver)
+      throw apiNotFound("Driver profile not found", "DRIVER_NOT_FOUND");
     return driver;
   }
 
   async getById(driverId: string): Promise<DriverProfileDocument> {
     const driver = await this.driverModel.findById(driverId).exec();
-    if (!driver) throw apiNotFound("Driver profile not found", "DRIVER_NOT_FOUND");
+    if (!driver)
+      throw apiNotFound("Driver profile not found", "DRIVER_NOT_FOUND");
     return driver;
   }
 
@@ -131,7 +136,11 @@ export class DriversService {
     if (AFTER_APPROVAL_STATUSES.includes(driver.driverStatus)) {
       // Licence and date of birth were verified: they change through a
       // reviewed change request. The address is the driver's own to keep current.
-      if (dto.licenseNumber !== undefined || dto.licenseExpiry !== undefined || dto.dateOfBirth !== undefined)
+      if (
+        dto.licenseNumber !== undefined ||
+        dto.licenseExpiry !== undefined ||
+        dto.dateOfBirth !== undefined
+      )
         throw apiBadRequest(
           "Licence details and date of birth are verified: submit a change request for review",
           "DRIVER_CHANGE_REVIEW_REQUIRED",
@@ -142,7 +151,8 @@ export class DriversService {
     }
     this.assertEditable(driver);
 
-    if (dto.licenseNumber !== undefined) driver.licenseNumber = dto.licenseNumber;
+    if (dto.licenseNumber !== undefined)
+      driver.licenseNumber = dto.licenseNumber;
     if (dto.licenseExpiry !== undefined)
       driver.licenseExpiry = new Date(dto.licenseExpiry);
     if (dto.dateOfBirth !== undefined)
@@ -160,7 +170,7 @@ export class DriversService {
     const driver = await this.getByUserId(userId);
     this.assertEditable(driver);
 
-    const filePath = await storeUpload(file, "drivers", driver._id.toString());
+    const filePath = await this.storage.put(file, { segment: "drivers", ownerId: driver._id.toString() });
     try {
       // Resubmitting a document type replaces the previous file+record
       // rather than accumulating duplicates.
@@ -176,7 +186,7 @@ export class DriversService {
         existing.verifiedBy = undefined;
         existing.verifiedAt = undefined;
         await existing.save();
-        await removeFile(previousPath);
+        await this.storage.remove(previousPath);
         return existing;
       }
 
@@ -188,7 +198,7 @@ export class DriversService {
         status: DocumentStatus.PENDING,
       });
     } catch (error) {
-      await removeFile(filePath);
+      await this.storage.remove(filePath);
       throw error;
     }
   }
@@ -214,7 +224,7 @@ export class DriversService {
       );
 
     await document.deleteOne();
-    await removeFile(document.filePath);
+    await this.storage.remove(document.filePath);
   }
 
   async getDocumentForOwner(
@@ -262,7 +272,12 @@ export class DriversService {
     const missing = REQUIRED_DOCUMENT_TYPES.filter(
       (type) => !uploadedTypes.has(type),
     );
-    if (!driver.licenseNumber || !driver.licenseExpiry || missing.length > 0 || !hasVehicle)
+    if (
+      !driver.licenseNumber ||
+      !driver.licenseExpiry ||
+      missing.length > 0 ||
+      !hasVehicle
+    )
       throw apiBadRequest(
         "Complete your license details, vehicle and required documents before submitting",
         "DRIVER_KYC_INCOMPLETE",
@@ -297,8 +312,14 @@ export class DriversService {
     if (query.status) filter.driverStatus = query.status;
     if (query.online !== undefined) filter.isOnline = query.online;
     if (query.search) {
-      const code = query.search.trim().toUpperCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      filter.$or = [{ driverCode: { $regex: `^${code}` } }, { userId: { $in: query.userIds ?? [] } }];
+      const code = query.search
+        .trim()
+        .toUpperCase()
+        .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.$or = [
+        { driverCode: { $regex: `^${code}` } },
+        { userId: { $in: query.userIds ?? [] } },
+      ];
     }
     const [drivers, total] = await Promise.all([
       this.driverModel
@@ -318,10 +339,18 @@ export class DriversService {
    * Refused while the driver is committed to a ride — cancel or finish it
    * first, so a customer is never stranded mid-trip.
    */
-  async suspend(driverId: string, adminUserId: string, reason: string): Promise<DriverProfileDocument> {
+  async suspend(
+    driverId: string,
+    adminUserId: string,
+    reason: string,
+  ): Promise<DriverProfileDocument> {
     const updated = await this.driverModel
       .findOneAndUpdate(
-        { _id: driverId, driverStatus: DriverStatus.APPROVED, currentRideId: null },
+        {
+          _id: driverId,
+          driverStatus: DriverStatus.APPROVED,
+          currentRideId: null,
+        },
         {
           $set: {
             driverStatus: DriverStatus.SUSPENDED,
@@ -338,8 +367,14 @@ export class DriversService {
     if (updated) return updated;
     const driver = await this.getById(driverId);
     if (driver.driverStatus !== DriverStatus.APPROVED)
-      throw apiBadRequest(`Cannot suspend a driver in ${driver.driverStatus} status`, "INVALID_STATUS_TRANSITION");
-    throw apiConflict("This driver is on a ride. Cancel or complete it before suspending.", "DRIVER_HAS_ACTIVE_RIDE");
+      throw apiBadRequest(
+        `Cannot suspend a driver in ${driver.driverStatus} status`,
+        "INVALID_STATUS_TRANSITION",
+      );
+    throw apiConflict(
+      "This driver is on a ride. Cancel or complete it before suspending.",
+      "DRIVER_HAS_ACTIVE_RIDE",
+    );
   }
 
   /** SUSPENDED → APPROVED. The driver goes online again themselves. */
@@ -347,13 +382,19 @@ export class DriversService {
     const updated = await this.driverModel
       .findOneAndUpdate(
         { _id: driverId, driverStatus: DriverStatus.SUSPENDED },
-        { $set: { driverStatus: DriverStatus.APPROVED }, $unset: { suspensionReason: 1, suspendedAt: 1, suspendedBy: 1 } },
+        {
+          $set: { driverStatus: DriverStatus.APPROVED },
+          $unset: { suspensionReason: 1, suspendedAt: 1, suspendedBy: 1 },
+        },
         { returnDocument: "after" },
       )
       .exec();
     if (updated) return updated;
     const driver = await this.getById(driverId);
-    throw apiBadRequest(`Cannot reinstate a driver in ${driver.driverStatus} status`, "INVALID_STATUS_TRANSITION");
+    throw apiBadRequest(
+      `Cannot reinstate a driver in ${driver.driverStatus} status`,
+      "INVALID_STATUS_TRANSITION",
+    );
   }
 
   async countByStatus(): Promise<Record<DriverStatus, number>> {
@@ -369,7 +410,10 @@ export class DriversService {
     return result;
   }
 
-  async approve(driverId: string, adminUserId: string): Promise<DriverProfileDocument> {
+  async approve(
+    driverId: string,
+    adminUserId: string,
+  ): Promise<DriverProfileDocument> {
     const driver = await this.getById(driverId);
     if (driver.driverStatus !== DriverStatus.UNDER_REVIEW)
       throw apiBadRequest(

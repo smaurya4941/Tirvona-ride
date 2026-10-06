@@ -29,44 +29,75 @@ export class ReportsController {
   constructor(private readonly reports: ReportsService) {}
 
   @Get("overview")
-  @ApiOperation({ summary: "Headline rides, customers, drivers and money for the range" })
-  async overview(@Query() query: ReportQueryDto): Promise<ApiSuccessBody<OverviewReport>> {
+  @ApiOperation({
+    summary: "Headline rides, customers, drivers and money for the range",
+  })
+  async overview(
+    @Query() query: ReportQueryDto,
+  ): Promise<ApiSuccessBody<OverviewReport>> {
     return ok(await this.reports.overview(this.reports.range(query)));
   }
 
   @Get("rides")
-  @ApiOperation({ summary: "Rides requested in the range: outcomes, rates, averages, by ride type / zone / day" })
-  async rides(@Query() query: ReportQueryDto): Promise<ApiSuccessBody<RidesReport>> {
+  @ApiOperation({
+    summary:
+      "Rides requested in the range: outcomes, rates, averages, by ride type / zone / day",
+  })
+  async rides(
+    @Query() query: ReportQueryDto,
+  ): Promise<ApiSuccessBody<RidesReport>> {
     return ok(await this.reports.rides(this.reports.range(query)));
   }
 
   @Get("revenue")
-  @ApiOperation({ summary: "Ride value, discounts, collections, refunds, fees, earnings and commission" })
-  async revenue(@Query() query: ReportQueryDto): Promise<ApiSuccessBody<RevenueReport>> {
+  @ApiOperation({
+    summary:
+      "Ride value, discounts, collections, refunds, fees, earnings and commission",
+  })
+  async revenue(
+    @Query() query: ReportQueryDto,
+  ): Promise<ApiSuccessBody<RevenueReport>> {
     return ok(await this.reports.revenue(this.reports.range(query)));
   }
 
   @Get("drivers")
-  @ApiOperation({ summary: "Driver pipeline, availability and top drivers in the range" })
-  async drivers(@Query() query: ReportQueryDto): Promise<ApiSuccessBody<DriversReport>> {
+  @ApiOperation({
+    summary: "Driver pipeline, availability and top drivers in the range",
+  })
+  async drivers(
+    @Query() query: ReportQueryDto,
+  ): Promise<ApiSuccessBody<DriversReport>> {
     return ok(await this.reports.drivers(this.reports.range(query)));
   }
 
   @Get("customers")
-  @ApiOperation({ summary: "New / active customers and their bookings (aggregate only, no personal data)" })
-  async customers(@Query() query: ReportQueryDto): Promise<ApiSuccessBody<CustomersReport>> {
+  @ApiOperation({
+    summary:
+      "New / active customers and their bookings (aggregate only, no personal data)",
+  })
+  async customers(
+    @Query() query: ReportQueryDto,
+  ): Promise<ApiSuccessBody<CustomersReport>> {
     return ok(await this.reports.customers(this.reports.range(query)));
   }
 
   @Get("cancellations")
-  @ApiOperation({ summary: "Cancellations by actor, reason, ride state and day; fee totals" })
-  async cancellations(@Query() query: ReportQueryDto): Promise<ApiSuccessBody<CancellationsReport>> {
+  @ApiOperation({
+    summary: "Cancellations by actor, reason, ride state and day; fee totals",
+  })
+  async cancellations(
+    @Query() query: ReportQueryDto,
+  ): Promise<ApiSuccessBody<CancellationsReport>> {
     return ok(await this.reports.cancellations(this.reports.range(query)));
   }
 
   @Get("promotions")
-  @ApiOperation({ summary: "Promo usage, discounts given and promo-assisted rides" })
-  async promotions(@Query() query: ReportQueryDto): Promise<ApiSuccessBody<PromotionsReport>> {
+  @ApiOperation({
+    summary: "Promo usage, discounts given and promo-assisted rides",
+  })
+  async promotions(
+    @Query() query: ReportQueryDto,
+  ): Promise<ApiSuccessBody<PromotionsReport>> {
     return ok(await this.reports.promotions(this.reports.range(query)));
   }
 }

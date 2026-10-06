@@ -2,7 +2,10 @@ import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { SchemaTypes, Types } from "mongoose";
 import type { HydratedDocument } from "mongoose";
 import { RIDE_TYPE_CODE_PATTERN } from "../../ride-types/schemas/ride-type.schema";
-import { CommissionConfigStatus, CommissionType } from "../interfaces/earning-status";
+import {
+  CommissionConfigStatus,
+  CommissionType,
+} from "../interfaces/earning-status";
 
 /**
  * Commission history, one version sequence per ride type. Each admin change
@@ -25,7 +28,11 @@ export class CommissionConfig {
   @Prop({ required: true, min: 1 })
   version!: number;
 
-  @Prop({ required: true, enum: CommissionType, default: CommissionType.PERCENTAGE })
+  @Prop({
+    required: true,
+    enum: CommissionType,
+    default: CommissionType.PERCENTAGE,
+  })
   type!: CommissionType;
 
   /** Percent of the final fare (0–100, up to two decimals). */
@@ -35,7 +42,11 @@ export class CommissionConfig {
   @Prop({ required: true })
   effectiveFrom!: Date;
 
-  @Prop({ required: true, enum: CommissionConfigStatus, default: CommissionConfigStatus.ACTIVE })
+  @Prop({
+    required: true,
+    enum: CommissionConfigStatus,
+    default: CommissionConfigStatus.ACTIVE,
+  })
   status!: CommissionConfigStatus;
 
   @Prop({ trim: true })
@@ -53,12 +64,17 @@ export class CommissionConfig {
 }
 
 export type CommissionConfigDocument = HydratedDocument<CommissionConfig>;
-export const CommissionConfigSchema = SchemaFactory.createForClass(CommissionConfig);
+export const CommissionConfigSchema =
+  SchemaFactory.createForClass(CommissionConfig);
 
 // Version numbers are unique within a ride type (legacy rows have none).
 CommissionConfigSchema.index(
   { rideType: 1, version: 1 },
-  { unique: true, partialFilterExpression: { rideType: { $exists: true } }, name: "uniq_commission_version_per_ride_type" },
+  {
+    unique: true,
+    partialFilterExpression: { rideType: { $exists: true } },
+    name: "uniq_commission_version_per_ride_type",
+  },
 );
 // Two live versions of one ride type may not start at the same instant:
 // which one applied would be ambiguous.
@@ -66,9 +82,17 @@ CommissionConfigSchema.index(
   { rideType: 1, effectiveFrom: 1 },
   {
     unique: true,
-    partialFilterExpression: { rideType: { $exists: true }, status: CommissionConfigStatus.ACTIVE },
+    partialFilterExpression: {
+      rideType: { $exists: true },
+      status: CommissionConfigStatus.ACTIVE,
+    },
     name: "uniq_active_commission_start_per_ride_type",
   },
 );
 // The resolver: newest applicable version for a ride type.
-CommissionConfigSchema.index({ rideType: 1, status: 1, effectiveFrom: -1, version: -1 });
+CommissionConfigSchema.index({
+  rideType: 1,
+  status: 1,
+  effectiveFrom: -1,
+  version: -1,
+});

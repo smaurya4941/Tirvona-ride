@@ -22,7 +22,9 @@ export class RazorpayGatewayError extends Error {
 
   /** Network trouble or a Razorpay-side 5xx — worth retrying later. */
   get transient(): boolean {
-    return this.status === undefined || this.status >= 500 || this.status === 429;
+    return (
+      this.status === undefined || this.status >= 500 || this.status === 429
+    );
   }
 }
 
@@ -43,7 +45,11 @@ export abstract class RazorpayGateway {
   abstract fetchPayment(paymentId: string): Promise<RazorpayPayment>;
 
   /** Captures an authorised payment for exactly `amountPaise`. */
-  abstract capturePayment(paymentId: string, amountPaise: number, currency: string): Promise<RazorpayPayment>;
+  abstract capturePayment(
+    paymentId: string,
+    amountPaise: number,
+    currency: string,
+  ): Promise<RazorpayPayment>;
 
   /** Every payment attempted against an order (newest first as Razorpay returns them). */
   abstract fetchOrderPayments(orderId: string): Promise<RazorpayPayment[]>;
@@ -51,10 +57,15 @@ export abstract class RazorpayGateway {
   /** Refunds (part of) a captured payment to its original method, at normal speed. */
   abstract createRefund(input: CreateRefundInput): Promise<RazorpayRefund>;
 
-  abstract fetchRefund(razorpayPaymentId: string, refundId: string): Promise<RazorpayRefund>;
+  abstract fetchRefund(
+    razorpayPaymentId: string,
+    refundId: string,
+  ): Promise<RazorpayRefund>;
 
   /** Every refund of a payment (reconciliation, lost create responses). */
-  abstract fetchPaymentRefunds(razorpayPaymentId: string): Promise<RazorpayRefund[]>;
+  abstract fetchPaymentRefunds(
+    razorpayPaymentId: string,
+  ): Promise<RazorpayRefund[]>;
 
   /** One page of the account's payments created in [from, to] (reconciliation runs). */
   abstract listPayments(input: ListPaymentsInput): Promise<RazorpayPayment[]>;

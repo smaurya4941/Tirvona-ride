@@ -28,7 +28,10 @@ import { RidesAdminService } from "./rides-admin.service";
 import { RidesController } from "./rides.controller";
 import { RidesService } from "./rides.service";
 import { Ride, RideSchema } from "./schemas/ride.schema";
-import { RideStatusHistory, RideStatusHistorySchema } from "./schemas/ride-status-history.schema";
+import {
+  RideStatusHistory,
+  RideStatusHistorySchema,
+} from "./schemas/ride-status-history.schema";
 
 // Dependency direction (no cycles):
 //   Rides → Matching → Drivers(model)

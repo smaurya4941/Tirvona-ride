@@ -11,7 +11,10 @@ import { UserRole } from "../../common/types/user-role.enum";
 import type { Page } from "../rides/rides.service";
 import { ComplaintsService } from "./complaints.service";
 import type { ComplaintView } from "./complaints.service";
-import { CreateComplaintDto, ListComplaintsQueryDto } from "./dto/complaint.dto";
+import {
+  CreateComplaintDto,
+  ListComplaintsQueryDto,
+} from "./dto/complaint.dto";
 
 @ApiTags("Complaints")
 @ApiBearerAuth()
@@ -22,7 +25,9 @@ export class ComplaintsController {
 
   @Post()
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
-  @ApiOperation({ summary: "Report an issue (optionally about one of your rides)" })
+  @ApiOperation({
+    summary: "Report an issue (optionally about one of your rides)",
+  })
   async create(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateComplaintDto,
@@ -40,7 +45,9 @@ export class ComplaintsController {
   }
 
   @Get(":id")
-  @ApiOperation({ summary: "One of your complaints with its status and resolution" })
+  @ApiOperation({
+    summary: "One of your complaints with its status and resolution",
+  })
   async findOne(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id", ParseObjectIdPipe) id: string,

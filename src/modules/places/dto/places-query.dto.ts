@@ -1,18 +1,39 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsInt, IsLatitude, IsLongitude, IsNumber, IsOptional, IsString, Length, Matches, Max, Min, ValidateIf } from "class-validator";
+import {
+  IsInt,
+  IsLatitude,
+  IsLongitude,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+  Max,
+  Min,
+  ValidateIf,
+} from "class-validator";
 
 /** Optional rider position; both halves or neither. */
 class NearQueryDto {
-  @ApiPropertyOptional({ example: 27.5714, description: "Rider latitude, to rank nearby places first" })
-  @ValidateIf((dto: NearQueryDto) => dto.longitude !== undefined || dto.latitude !== undefined)
+  @ApiPropertyOptional({
+    example: 27.5714,
+    description: "Rider latitude, to rank nearby places first",
+  })
+  @ValidateIf(
+    (dto: NearQueryDto) =>
+      dto.longitude !== undefined || dto.latitude !== undefined,
+  )
   @Type(() => Number)
   @IsNumber({ allowNaN: false, allowInfinity: false })
   @IsLatitude()
   latitude?: number;
 
   @ApiPropertyOptional({ example: 77.6716 })
-  @ValidateIf((dto: NearQueryDto) => dto.longitude !== undefined || dto.latitude !== undefined)
+  @ValidateIf(
+    (dto: NearQueryDto) =>
+      dto.longitude !== undefined || dto.latitude !== undefined,
+  )
   @Type(() => Number)
   @IsNumber({ allowNaN: false, allowInfinity: false })
   @IsLongitude()
@@ -28,9 +49,14 @@ export class AutocompleteQueryDto extends NearQueryDto {
   @Length(1, 100)
   q!: string;
 
-  @ApiPropertyOptional({ example: "k3J9x0aQ-2mZ", description: "Autocomplete session token" })
+  @ApiPropertyOptional({
+    example: "k3J9x0aQ-2mZ",
+    description: "Autocomplete session token",
+  })
   @IsOptional()
-  @Matches(SESSION_TOKEN, { message: "sessionToken must be 8–64 URL-safe characters" })
+  @Matches(SESSION_TOKEN, {
+    message: "sessionToken must be 8–64 URL-safe characters",
+  })
   sessionToken?: string;
 
   @ApiPropertyOptional({ example: 8, minimum: 1, maximum: 10 })
@@ -43,15 +69,22 @@ export class AutocompleteQueryDto extends NearQueryDto {
 }
 
 export class ResolvePlaceQueryDto {
-  @ApiProperty({ example: "osm:W123456", description: "A suggestion id from /places/autocomplete" })
+  @ApiProperty({
+    example: "osm:W123456",
+    description: "A suggestion id from /places/autocomplete",
+  })
   @IsString()
   @Length(3, 320)
-  @Matches(/^(featured|osm|google):[A-Za-z0-9_-]+$/, { message: "id is not a place id" })
+  @Matches(/^(featured|osm|google):[A-Za-z0-9_-]+$/, {
+    message: "id is not a place id",
+  })
   id!: string;
 
   @ApiPropertyOptional({ example: "k3J9x0aQ-2mZ" })
   @IsOptional()
-  @Matches(SESSION_TOKEN, { message: "sessionToken must be 8–64 URL-safe characters" })
+  @Matches(SESSION_TOKEN, {
+    message: "sessionToken must be 8–64 URL-safe characters",
+  })
   sessionToken?: string;
 }
 

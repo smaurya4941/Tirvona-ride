@@ -13,14 +13,20 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from "@nestjs/swagger";
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from "@nestjs/swagger";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { apiBadRequest } from "../../common/exceptions/api.exception";
 import { ok } from "../../common/http/api-response";
 import type { ApiSuccessBody } from "../../common/http/api-response";
-import { documentUploadOptions, streamDocument } from "../../common/http/file-upload";
-import { UploadCleanupInterceptor } from "../../common/interceptors/upload-cleanup.interceptor";
+import { documentUploadOptions } from "../../common/http/file-upload";
+import { StorageService } from "../storage/storage.service";
 import { ParseObjectIdPipe } from "../../common/pipes/parse-object-id.pipe";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
@@ -34,7 +40,11 @@ import {
   VehicleChangeDto,
 } from "./dto/driver-change.dto";
 import { DriverChangesService } from "./driver-changes.service";
-import type { AdminDriverChangeView, DriverChangeView, DriverChangesOverview } from "./driver-changes.service";
+import type {
+  AdminDriverChangeView,
+  DriverChangeView,
+  DriverChangesOverview,
+} from "./driver-changes.service";
 import type { Page } from "../rides/rides.service";
 
 /**
@@ -46,7 +56,10 @@ import type { Page } from "../rides/rides.service";
 @Roles(UserRole.DRIVER)
 @Controller({ path: "drivers/me/change-requests", version: "1" })
 export class DriverChangesController {
-  constructor(private readonly changes: DriverChangesService) {}
+  constructor(
+    private readonly changes: DriverChangesService,
+    private readonly storage: StorageService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: "Pending changes and recent decisions" })
@@ -58,7 +71,9 @@ export class DriverChangesController {
   }
 
   @Post("profile")
-  @ApiOperation({ summary: "Ask to change licence number / expiry or date of birth" })
+  @ApiOperation({
+    summary: "Ask to change licence number / expiry or date of birth",
+  })
   async profile(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: DriverProfileChangeDto,
@@ -76,7 +91,10 @@ export class DriverChangesController {
   }
 
   @Post("document")
-  @ApiOperation({ summary: "Submit a new or renewed driver or vehicle document (multipart `file`)" })
+  @ApiOperation({
+    summary:
+      "Submit a new or renewed driver or vehicle document (multipart `file`)",
+  })
   @ApiConsumes("multipart/form-data")
   @ApiBody({
     schema: {
@@ -91,23 +109,26 @@ export class DriverChangesController {
       },
     },
   })
-  @UseInterceptors(FileInterceptor("file", documentUploadOptions), UploadCleanupInterceptor)
+  @UseInterceptors(FileInterceptor("file", documentUploadOptions))
   async document(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: DocumentChangeDto,
     @UploadedFile() file?: Express.Multer.File,
   ): Promise<ApiSuccessBody<DriverChangeView>> {
-    if (!file) throw apiBadRequest("A file is required", "DOCUMENT_INVALID_TYPE");
+    if (!file)
+      throw apiBadRequest("A file is required", "DOCUMENT_INVALID_TYPE");
     return ok(await this.changes.requestDocumentChange(user.userId, dto, file));
   }
 
   @Get(":id/file")
-  @ApiOperation({ summary: "The file submitted with a pending or approved document change" })
+  @ApiOperation({
+    summary: "The file submitted with a pending or approved document change",
+  })
   async file(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id", ParseObjectIdPipe) id: string,
   ): Promise<StreamableFile> {
-    return streamDocument(await this.changes.fileForDriver(user.userId, id));
+    return this.storage.stream(await this.changes.fileForDriver(user.userId, id));
   }
 
   @Delete(":id")
@@ -129,11 +150,17 @@ export class AdminDriverChangesController {
   constructor(
     private readonly changes: DriverChangesService,
     private readonly audit: AuditLogService,
+    private readonly storage: StorageService,
   ) {}
 
   @Get()
-  @ApiOperation({ summary: "Driver change requests (the review queue by default: PENDING, oldest first)" })
-  async list(@Query() query: AdminDriverChangeQueryDto): Promise<ApiSuccessBody<Page<AdminDriverChangeView>>> {
+  @ApiOperation({
+    summary:
+      "Driver change requests (the review queue by default: PENDING, oldest first)",
+  })
+  async list(
+    @Query() query: AdminDriverChangeQueryDto,
+  ): Promise<ApiSuccessBody<Page<AdminDriverChangeView>>> {
     return ok(await this.changes.listForAdmin(query));
   }
 
@@ -144,15 +171,21 @@ export class AdminDriverChangesController {
   }
 
   @Get(":id")
-  @ApiOperation({ summary: "One change request with the verified values it would replace" })
-  async get(@Param("id", ParseObjectIdPipe) id: string): Promise<ApiSuccessBody<AdminDriverChangeView>> {
+  @ApiOperation({
+    summary: "One change request with the verified values it would replace",
+  })
+  async get(
+    @Param("id", ParseObjectIdPipe) id: string,
+  ): Promise<ApiSuccessBody<AdminDriverChangeView>> {
     return ok(await this.changes.getForAdmin(id));
   }
 
   @Get(":id/file")
   @ApiOperation({ summary: "The uploaded document of a document change" })
-  async file(@Param("id", ParseObjectIdPipe) id: string): Promise<StreamableFile> {
-    return streamDocument(await this.changes.fileForAdmin(id));
+  async file(
+    @Param("id", ParseObjectIdPipe) id: string,
+  ): Promise<StreamableFile> {
+    return this.storage.stream(await this.changes.fileForAdmin(id));
   }
 
   @Post(":id/approve")
@@ -169,7 +202,11 @@ export class AdminDriverChangesController {
       targetType: "DRIVER",
       targetId: view.driver.id,
       targetLabel: `${view.driver.name} (${view.driver.driverCode}) · ${view.label}`,
-      metadata: { changeRequestId: view.id, kind: view.kind, changes: view.changes },
+      metadata: {
+        changeRequestId: view.id,
+        kind: view.kind,
+        changes: view.changes,
+      },
     });
     return ok(view);
   }

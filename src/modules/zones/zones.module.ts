@@ -5,7 +5,9 @@ import { ZonesService } from "./zones.service";
 
 /** Service areas. Admin endpoints live in AdminModule; rides use ZonesService at booking. */
 @Module({
-  imports: [MongooseModule.forFeature([{ name: Zone.name, schema: ZoneSchema }])],
+  imports: [
+    MongooseModule.forFeature([{ name: Zone.name, schema: ZoneSchema }]),
+  ],
   providers: [ZonesService],
   exports: [ZonesService, MongooseModule],
 })

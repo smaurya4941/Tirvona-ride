@@ -14,10 +14,17 @@ import {
   Min,
   ValidateIf,
 } from "class-validator";
-import { RefundDriverImpact, RefundReason, RefundStatus, RefundTarget } from "../interfaces/refund-status";
+import {
+  RefundDriverImpact,
+  RefundReason,
+  RefundStatus,
+  RefundTarget,
+} from "../interfaces/refund-status";
 
 /** Reasons an admin may pick (EXTERNAL is reserved for dashboard refunds). */
-const ADMIN_REASONS = Object.values(RefundReason).filter((reason) => reason !== RefundReason.EXTERNAL);
+const ADMIN_REASONS = Object.values(RefundReason).filter(
+  (reason) => reason !== RefundReason.EXTERNAL,
+);
 
 /**
  * An admin refund. `amount` is rupees; leave it out for "refund everything
@@ -25,7 +32,11 @@ const ADMIN_REASONS = Object.values(RefundReason).filter((reason) => reason !== 
  * what is already refunded or on its way — never trusting the panel's math.
  */
 export class CreateRefundDto {
-  @ApiPropertyOptional({ description: "Rupees, up to 2 decimals. Omit for a full refund of what remains.", example: 50 })
+  @ApiPropertyOptional({
+    description:
+      "Rupees, up to 2 decimals. Omit for a full refund of what remains.",
+    example: 50,
+  })
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(1)
@@ -33,17 +44,23 @@ export class CreateRefundDto {
   amount?: number;
 
   @ApiProperty({ enum: ADMIN_REASONS })
-  @IsEnum(ADMIN_REASONS, { message: `reason must be one of ${ADMIN_REASONS.join(", ")}` })
+  @IsEnum(ADMIN_REASONS, {
+    message: `reason must be one of ${ADMIN_REASONS.join(", ")}`,
+  })
   reason!: RefundReason;
 
-  @ApiProperty({ description: "Why (kept in the audit trail)", example: "Driver took a long detour" })
+  @ApiProperty({
+    description: "Why (kept in the audit trail)",
+    example: "Driver took a long detour",
+  })
   @IsString()
   @Length(3, 300)
   note!: string;
 
   @ApiPropertyOptional({
     enum: RefundDriverImpact,
-    description: "Default depends on the reason (fare/cancellation/admin: PROPORTIONAL; support/system/duplicate: NONE)",
+    description:
+      "Default depends on the reason (fare/cancellation/admin: PROPORTIONAL; support/system/duplicate: NONE)",
   })
   @IsOptional()
   @IsEnum(RefundDriverImpact)
@@ -54,18 +71,31 @@ export class CreateRefundDto {
   @IsEnum(RefundTarget)
   target?: RefundTarget;
 
-  @ApiPropertyOptional({ description: "The duplicate capture to refund (target DUPLICATE_CAPTURE)", example: "pay_Pq8Y1Ab2Cd3Efg" })
-  @ValidateIf((dto: CreateRefundDto) => dto.target === RefundTarget.DUPLICATE_CAPTURE)
-  @Matches(/^pay_[A-Za-z0-9]{6,40}$/, { message: "razorpayPaymentId is not a Razorpay payment id" })
+  @ApiPropertyOptional({
+    description: "The duplicate capture to refund (target DUPLICATE_CAPTURE)",
+    example: "pay_Pq8Y1Ab2Cd3Efg",
+  })
+  @ValidateIf(
+    (dto: CreateRefundDto) => dto.target === RefundTarget.DUPLICATE_CAPTURE,
+  )
+  @Matches(/^pay_[A-Za-z0-9]{6,40}$/, {
+    message: "razorpayPaymentId is not a Razorpay payment id",
+  })
   razorpayPaymentId?: string;
 
-  @ApiProperty({ description: "Client-generated UUID; resending the same key never refunds twice" })
+  @ApiProperty({
+    description:
+      "Client-generated UUID; resending the same key never refunds twice",
+  })
   @IsUUID()
   idempotencyKey!: string;
 }
 
 export class ReviewRefundDto {
-  @ApiProperty({ enum: RefundDriverImpact, description: "Whether the driver shares this dashboard refund" })
+  @ApiProperty({
+    enum: RefundDriverImpact,
+    description: "Whether the driver shares this dashboard refund",
+  })
   @IsEnum(RefundDriverImpact)
   driverImpact!: RefundDriverImpact;
 
@@ -102,9 +132,13 @@ export class AdminRefundsQueryDto {
   @IsEnum(RefundReason)
   reason?: RefundReason;
 
-  @ApiPropertyOptional({ description: "Only dashboard refunds awaiting review" })
+  @ApiPropertyOptional({
+    description: "Only dashboard refunds awaiting review",
+  })
   @IsOptional()
-  @Transform(({ value }) => (value === "true" ? true : value === "false" ? false : value))
+  @Transform(({ value }) =>
+    value === "true" ? true : value === "false" ? false : value,
+  )
   @IsBoolean()
   needsReview?: boolean;
 }

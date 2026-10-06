@@ -52,14 +52,19 @@ export class RideRouteService {
    * Null while there is no leg to route (searching, driver waiting at the
    * pickup, finished) or the driver's position is not known yet.
    */
-  async forUser(user: AuthenticatedUser, rideId: string): Promise<LiveRouteView | null> {
+  async forUser(
+    user: AuthenticatedUser,
+    rideId: string,
+  ): Promise<LiveRouteView | null> {
     const owner =
       user.role === UserRole.DRIVER
         ? { driverId: (await this.rides.resolveDriver(user.userId))._id }
         : { customerId: new Types.ObjectId(user.userId) };
     const ride = await this.rideModel
       .findOne({ _id: new Types.ObjectId(rideId), ...owner })
-      .select("status driverId pickup destination kind circuit.stops circuit.currentStopOrder")
+      .select(
+        "status driverId pickup destination kind circuit.stops circuit.currentStopOrder",
+      )
       .lean()
       .exec();
     if (!ride) throw rideNotFound();
@@ -71,9 +76,17 @@ export class RideRouteService {
 
     // A circuit is driven stop by stop: the trip leg leads to the current stop.
     const currentStop =
-      ride.kind === RideKind.CIRCUIT ? ride.circuit?.stops.find((stop) => stop.order === ride.circuit?.currentStopOrder) : undefined;
-    const target = stage === "APPROACH" ? ride.pickup : (currentStop ?? ride.destination);
-    const destination = { latitude: target.latitude, longitude: target.longitude };
+      ride.kind === RideKind.CIRCUIT
+        ? ride.circuit?.stops.find(
+            (stop) => stop.order === ride.circuit?.currentStopOrder,
+          )
+        : undefined;
+    const target =
+      stage === "APPROACH" ? ride.pickup : (currentStop ?? ride.destination);
+    const destination = {
+      latitude: target.latitude,
+      longitude: target.longitude,
+    };
     const route = await this.liveRoutes.forRide(
       rideId,
       stage,

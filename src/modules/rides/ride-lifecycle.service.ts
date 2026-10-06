@@ -13,10 +13,17 @@ import { MatchingService } from "../matching/matching.service";
 import type { FinalFareMode } from "../../config/environment";
 import { measureTrip, resolveFinalFare } from "../pricing/trip-meter";
 import { CancellationsService } from "../cancellations/cancellations.service";
-import type { CancellationPreview, ResolvedReason } from "../cancellations/cancellations.service";
+import type {
+  CancellationPreview,
+  ResolvedReason,
+} from "../cancellations/cancellations.service";
 import { CancellationFeeStatus } from "../cancellations/schemas/cancellation.schemas";
 import { computeDiscount } from "../promotions/promo-rules";
-import { CircuitEvent, CircuitStopStatus, RideKind } from "../circuit-rides/circuit-ride.types";
+import {
+  CircuitEvent,
+  CircuitStopStatus,
+  RideKind,
+} from "../circuit-rides/circuit-ride.types";
 import { RideDispatchService } from "./ride-dispatch.service";
 import { rideConflict, rideNotFound } from "./ride-errors";
 import { RideEventsService } from "./ride-events.service";
@@ -67,8 +74,12 @@ export class RideLifecycleService {
     this.otpTtlMs = config.getOrThrow<number>("rideOtpTtlMinutes") * 60_000;
     this.otpMaxAttempts = config.getOrThrow<number>("rideOtpMaxAttempts");
     this.finalFareMode = config.getOrThrow<FinalFareMode>("finalFareMode");
-    this.finalFareMaxEstimateMultiplier = config.getOrThrow<number>("finalFareMaxEstimateMultiplier");
-    this.tripMeterMaxGapSeconds = config.getOrThrow<number>("tripMeterMaxGapSeconds");
+    this.finalFareMaxEstimateMultiplier = config.getOrThrow<number>(
+      "finalFareMaxEstimateMultiplier",
+    );
+    this.tripMeterMaxGapSeconds = config.getOrThrow<number>(
+      "tripMeterMaxGapSeconds",
+    );
   }
 
   // ── Driver actions ────────────────────────────────────────────────────
@@ -76,7 +87,11 @@ export class RideLifecycleService {
   async accept(driverUserId: string, rideId: string): Promise<DriverRideView> {
     const driver = await this.driverFor(driverUserId);
     if (!driver.isOnline)
-      throw new ApiException(HttpStatus.CONFLICT, "Go online to accept rides", "DRIVER_OFFLINE");
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        "Go online to accept rides",
+        "DRIVER_OFFLINE",
+      );
 
     const id = new Types.ObjectId(rideId);
     const accepted = await this.transitions.apply({
@@ -91,13 +106,21 @@ export class RideLifecycleService {
       actor: this.actorFor(driverUserId, RideActorType.DRIVER),
     });
     if (accepted) {
-      void this.locations.recordCheckpoint(accepted._id, driver._id, CheckpointKind.ACCEPTED);
+      void this.locations.recordCheckpoint(
+        accepted._id,
+        driver._id,
+        CheckpointKind.ACCEPTED,
+      );
       return this.views.forDriver(accepted, driver);
     }
     throw await this.explainOfferFailure(id, driver, "accept");
   }
 
-  async reject(driverUserId: string, rideId: string, reason?: string): Promise<{ rejected: true }> {
+  async reject(
+    driverUserId: string,
+    rideId: string,
+    reason?: string,
+  ): Promise<{ rejected: true }> {
     const driver = await this.driverFor(driverUserId);
     const id = new Types.ObjectId(rideId);
     const result = await this.dispatch.endAssignment(
@@ -133,10 +156,18 @@ export class RideLifecycleService {
       actor: this.actorFor(driverUserId, RideActorType.DRIVER),
     });
     if (ride) {
-      void this.locations.recordCheckpoint(ride._id, driver._id, CheckpointKind.ARRIVED);
+      void this.locations.recordCheckpoint(
+        ride._id,
+        driver._id,
+        CheckpointKind.ARRIVED,
+      );
       return this.views.forDriver(ride, driver);
     }
-    throw await this.explainDriverActionFailure(rideId, driver, "mark arrived for");
+    throw await this.explainDriverActionFailure(
+      rideId,
+      driver,
+      "mark arrived for",
+    );
   }
 
   /**
@@ -144,7 +175,11 @@ export class RideLifecycleService {
    * lockout or expiry the code is rotated so a stolen/guessed code is
    * useless; the customer's app receives the new one as `ride.otp_refreshed`.
    */
-  async start(driverUserId: string, rideId: string, otp: string): Promise<DriverRideView> {
+  async start(
+    driverUserId: string,
+    rideId: string,
+    otp: string,
+  ): Promise<DriverRideView> {
     const driver = await this.driverFor(driverUserId);
     const ride = await this.rideModel
       .findOne({ _id: rideId, driverId: driver._id })
@@ -152,10 +187,17 @@ export class RideLifecycleService {
       .exec();
     if (!ride) throw rideNotFound();
     if (ride.status !== RideStatus.DRIVER_ARRIVED)
-      throw rideConflict(this.wrongStateMessage("start", ride.status), ride.status);
+      throw rideConflict(
+        this.wrongStateMessage("start", ride.status),
+        ride.status,
+      );
     const expectedCode = ride.otpCode;
 
-    if (!expectedCode || !ride.otpExpiresAt || ride.otpExpiresAt.getTime() <= Date.now()) {
+    if (
+      !expectedCode ||
+      !ride.otpExpiresAt ||
+      ride.otpExpiresAt.getTime() <= Date.now()
+    ) {
       await this.rotateOtp(ride._id, "OTP_EXPIRED");
       throw new ApiException(
         HttpStatus.BAD_REQUEST,
@@ -167,7 +209,11 @@ export class RideLifecycleService {
     if (!rideOtpMatches(otp, expectedCode)) {
       const counted = await this.rideModel
         .findOneAndUpdate(
-          { _id: ride._id, status: RideStatus.DRIVER_ARRIVED, otpCode: expectedCode },
+          {
+            _id: ride._id,
+            status: RideStatus.DRIVER_ARRIVED,
+            otpCode: expectedCode,
+          },
           { $inc: { otpAttempts: 1 } },
           { returnDocument: "after" },
         )
@@ -181,9 +227,14 @@ export class RideLifecycleService {
           "RIDE_OTP_TOO_MANY_ATTEMPTS",
         );
       }
-      throw new ApiException(HttpStatus.BAD_REQUEST, "Incorrect OTP", "RIDE_OTP_INVALID", {
-        attemptsRemaining: this.otpMaxAttempts - attempts,
-      });
+      throw new ApiException(
+        HttpStatus.BAD_REQUEST,
+        "Incorrect OTP",
+        "RIDE_OTP_INVALID",
+        {
+          attemptsRemaining: this.otpMaxAttempts - attempts,
+        },
+      );
     }
 
     const started = await this.transitions.apply({
@@ -198,7 +249,10 @@ export class RideLifecycleService {
         otpVerifiedAt: new Date(),
         // The circuit clock is startedAt; the first stop becomes the one being driven to.
         ...(ride.kind === RideKind.CIRCUIT
-          ? { "circuit.currentStopOrder": 1, "circuit.stops.0.status": CircuitStopStatus.ARRIVING }
+          ? {
+              "circuit.currentStopOrder": 1,
+              "circuit.stops.0.status": CircuitStopStatus.ARRIVING,
+            }
           : {}),
       },
       unset: ["otpCode", "otpExpiresAt"],
@@ -206,22 +260,39 @@ export class RideLifecycleService {
       metadata: { otpVerified: true },
     });
     if (started) {
-      void this.locations.recordCheckpoint(started._id, driver._id, CheckpointKind.STARTED);
-      if (started.kind === RideKind.CIRCUIT) this.events.circuitEvent(started, CircuitEvent.STARTED);
+      void this.locations.recordCheckpoint(
+        started._id,
+        driver._id,
+        CheckpointKind.STARTED,
+      );
+      if (started.kind === RideKind.CIRCUIT)
+        this.events.circuitEvent(started, CircuitEvent.STARTED);
       return this.views.forDriver(started, driver);
     }
     throw await this.explainDriverActionFailure(rideId, driver, "start");
   }
 
-  async complete(driverUserId: string, rideId: string): Promise<DriverRideView> {
+  async complete(
+    driverUserId: string,
+    rideId: string,
+  ): Promise<DriverRideView> {
     const driver = await this.driverFor(driverUserId);
-    const ride = await this.rideModel.findOne({ _id: rideId, driverId: driver._id }).exec();
+    const ride = await this.rideModel
+      .findOne({ _id: rideId, driverId: driver._id })
+      .exec();
     if (!ride) throw rideNotFound();
     if (ride.status !== RideStatus.RIDE_STARTED)
-      throw rideConflict(this.wrongStateMessage("complete", ride.status), ride.status);
+      throw rideConflict(
+        this.wrongStateMessage("complete", ride.status),
+        ride.status,
+      );
     // A circuit ends only when its stops are done, priced by its package: POST /circuit-rides/:id/complete.
     if (ride.kind === RideKind.CIRCUIT)
-      throw rideConflict("Finish the circuit from its own screen", ride.status, "CIRCUIT_COMPLETE_REQUIRED");
+      throw rideConflict(
+        "Finish the circuit from its own screen",
+        ride.status,
+        "CIRCUIT_COMPLETE_REQUIRED",
+      );
 
     // Priced with the tariff snapshotted at booking (never today's tariff) on
     // the actual trip: server-timed duration and the GPS-trail distance, with
@@ -229,7 +300,14 @@ export class RideLifecycleService {
     const completedAt = new Date();
     const measurement =
       this.finalFareMode === "actual" && ride.startedAt
-        ? measureTrip(await this.locations.tripTrail(ride._id, driver._id, ride.startedAt), this.tripMeterMaxGapSeconds)
+        ? measureTrip(
+            await this.locations.tripTrail(
+              ride._id,
+              driver._id,
+              ride.startedAt,
+            ),
+            this.tripMeterMaxGapSeconds,
+          )
         : undefined;
     const priced = resolveFinalFare({
       mode: this.finalFareMode,
@@ -279,8 +357,13 @@ export class RideLifecycleService {
         completedAt,
         "fare.finalFare": finalFare,
         "fare.final": snapshot,
-        ...(ride.promo ? { "fare.discount": discount, "fare.payableFare": payableFare } : {}),
-        paymentStatus: payableFare > 0 ? RidePaymentStatus.PENDING : RidePaymentStatus.NOT_REQUIRED,
+        ...(ride.promo
+          ? { "fare.discount": discount, "fare.payableFare": payableFare }
+          : {}),
+        paymentStatus:
+          payableFare > 0
+            ? RidePaymentStatus.PENDING
+            : RidePaymentStatus.NOT_REQUIRED,
       },
       actor: this.actorFor(driverUserId, RideActorType.DRIVER),
       metadata: {
@@ -288,15 +371,34 @@ export class RideLifecycleService {
         distanceMeters: priced.distanceMeters,
         distanceSource: priced.distanceSource,
         durationSeconds: priced.durationSeconds,
-        ...(measurement ? { trail: { points: measurement.points, reliable: measurement.reliable, reason: measurement.reason } } : {}),
-        ...(priced.capApplied ? { capApplied: true, uncappedFare: priced.uncappedFare } : {}),
-        ...(ride.promo ? { discount, payableFare, promoCode: ride.promo.code } : {}),
+        ...(measurement
+          ? {
+              trail: {
+                points: measurement.points,
+                reliable: measurement.reliable,
+                reason: measurement.reason,
+              },
+            }
+          : {}),
+        ...(priced.capApplied
+          ? { capApplied: true, uncappedFare: priced.uncappedFare }
+          : {}),
+        ...(ride.promo
+          ? { discount, payableFare, promoCode: ride.promo.code }
+          : {}),
       },
     });
-    if (!completed) throw await this.explainDriverActionFailure(rideId, driver, "complete");
+    if (!completed)
+      throw await this.explainDriverActionFailure(rideId, driver, "complete");
 
-    await this.matching.release(driver._id, completed._id, { completedRide: true });
-    void this.locations.recordCheckpoint(completed._id, driver._id, CheckpointKind.COMPLETED);
+    await this.matching.release(driver._id, completed._id, {
+      completedRide: true,
+    });
+    void this.locations.recordCheckpoint(
+      completed._id,
+      driver._id,
+      CheckpointKind.COMPLETED,
+    );
     this.dispatch.kick();
     return this.views.forDriver(completed, driver);
   }
@@ -304,13 +406,20 @@ export class RideLifecycleService {
   // ── Cancellation ──────────────────────────────────────────────────────
 
   /** What the cancel sheet shows: allowed?, reasons for this actor, and any fee right now. */
-  async cancellationPreview(user: AuthenticatedUser, rideId: string): Promise<CancellationPreview> {
+  async cancellationPreview(
+    user: AuthenticatedUser,
+    rideId: string,
+  ): Promise<CancellationPreview> {
     const isDriver = user.role === UserRole.DRIVER;
     const driver = isDriver ? await this.driverFor(user.userId) : undefined;
-    const owner: QueryFilter<Ride> = driver ? { driverId: driver._id } : { customerId: new Types.ObjectId(user.userId) };
+    const owner: QueryFilter<Ride> = driver
+      ? { driverId: driver._id }
+      : { customerId: new Types.ObjectId(user.userId) };
     const ride = await this.rideModel.findOne({ ...owner, _id: rideId }).exec();
     if (!ride) throw rideNotFound();
-    const cancellable = (isDriver ? DRIVER_CANCELLABLE_STATUSES : CUSTOMER_CANCELLABLE_STATUSES).includes(ride.status);
+    const cancellable = (
+      isDriver ? DRIVER_CANCELLABLE_STATUSES : CUSTOMER_CANCELLABLE_STATUSES
+    ).includes(ride.status);
     return this.cancellations.preview({
       actor: isDriver ? RideActorType.DRIVER : RideActorType.CUSTOMER,
       status: ride.status,
@@ -337,14 +446,21 @@ export class RideLifecycleService {
     const owner: QueryFilter<Ride> = driver
       ? { driverId: driver._id }
       : { customerId: new Types.ObjectId(user.userId) };
-    const cancellable = isDriver ? DRIVER_CANCELLABLE_STATUSES : CUSTOMER_CANCELLABLE_STATUSES;
-    const actor = this.actorFor(user.userId, isDriver ? RideActorType.DRIVER : RideActorType.CUSTOMER);
+    const cancellable = isDriver
+      ? DRIVER_CANCELLABLE_STATUSES
+      : CUSTOMER_CANCELLABLE_STATUSES;
+    const actor = this.actorFor(
+      user.userId,
+      isDriver ? RideActorType.DRIVER : RideActorType.CUSTOMER,
+    );
     let reason: ResolvedReason | undefined;
 
     // Optimistic loop: the status can move under us (driver accepts while the
     // customer taps cancel). Re-read and re-check rather than guess.
     for (let attempt = 0; attempt < MAX_CANCEL_RETRIES; attempt += 1) {
-      const ride = await this.rideModel.findOne({ ...owner, _id: rideId }).exec();
+      const ride = await this.rideModel
+        .findOne({ ...owner, _id: rideId })
+        .exec();
       if (!ride) throw rideNotFound();
       if (!cancellable.includes(ride.status))
         throw rideConflict(
@@ -357,7 +473,11 @@ export class RideLifecycleService {
 
       // Validated only once the ride is known to be cancellable, so a wrong
       // state is reported as such rather than as a bad reason.
-      reason ??= await this.cancellations.resolveReason(actor.type, input.reasonCode, input.note);
+      reason ??= await this.cancellations.resolveReason(
+        actor.type,
+        input.reasonCode,
+        input.note,
+      );
       // Assessed against the status we are about to leave; the transition is
       // conditional on that same status, so the fee cannot go stale.
       const fee = await this.cancellations.assess({
@@ -367,7 +487,9 @@ export class RideLifecycleService {
         fare: ride.fare.estimatedFare,
       });
       const feeAmount = fee.applies ? fee.amount : 0;
-      const reasonText = reason.note ? `${reason.label}: ${reason.note}` : reason.label;
+      const reasonText = reason.note
+        ? `${reason.label}: ${reason.note}`
+        : reason.label;
 
       const cancelled = await this.transitions.apply({
         rideId: ride._id,
@@ -383,13 +505,21 @@ export class RideLifecycleService {
             reasonCode: reason.code,
             note: reason.note,
             feeAmount,
-            feeStatus: feeAmount > 0 ? CancellationFeeStatus.DUE : CancellationFeeStatus.NOT_APPLICABLE,
+            feeStatus:
+              feeAmount > 0
+                ? CancellationFeeStatus.DUE
+                : CancellationFeeStatus.NOT_APPLICABLE,
           },
         },
         unset: ["otpCode", "otpExpiresAt", "assignmentExpiresAt"],
         actor,
         reason: reasonText,
-        metadata: { reasonCode: reason.code, ...(feeAmount > 0 ? { cancellationFee: feeAmount, policyVersion: fee.policyVersion } : {}) },
+        metadata: {
+          reasonCode: reason.code,
+          ...(feeAmount > 0
+            ? { cancellationFee: feeAmount, policyVersion: fee.policyVersion }
+            : {}),
+        },
       });
       if (!cancelled) continue;
 
@@ -405,12 +535,20 @@ export class RideLifecycleService {
       if (ride.driverId) {
         await this.matching.release(ride.driverId, ride._id);
         if (ride.acceptedAt)
-          void this.locations.recordCheckpoint(ride._id, ride.driverId, CheckpointKind.CANCELLED);
+          void this.locations.recordCheckpoint(
+            ride._id,
+            ride.driverId,
+            CheckpointKind.CANCELLED,
+          );
         this.dispatch.kick();
       }
-      return driver ? this.views.forDriver(cancelled, driver) : this.views.forCustomer(cancelled);
+      return driver
+        ? this.views.forDriver(cancelled, driver)
+        : this.views.forCustomer(cancelled);
     }
-    const latest = await this.rideModel.findOne({ ...owner, _id: rideId }).exec();
+    const latest = await this.rideModel
+      .findOne({ ...owner, _id: rideId })
+      .exec();
     throw rideConflict(
       "The ride changed while cancelling. Please try again.",
       latest?.status ?? RideStatus.CANCELLED,
@@ -420,7 +558,9 @@ export class RideLifecycleService {
 
   // ── Helpers ───────────────────────────────────────────────────────────
 
-  private async driverFor(driverUserId: string): Promise<DriverProfileDocument> {
+  private async driverFor(
+    driverUserId: string,
+  ): Promise<DriverProfileDocument> {
     const driver = await this.rides.resolveDriver(driverUserId);
     await this.matching.touch(driver._id);
     return driver;
@@ -430,7 +570,10 @@ export class RideLifecycleService {
     return { type, userId: new Types.ObjectId(userId) };
   }
 
-  private async rotateOtp(rideId: Types.ObjectId, reason: string): Promise<void> {
+  private async rotateOtp(
+    rideId: Types.ObjectId,
+    reason: string,
+  ): Promise<void> {
     const rotated = await this.rideModel
       .updateOne(
         { _id: rideId, status: RideStatus.DRIVER_ARRIVED },
@@ -463,21 +606,36 @@ export class RideLifecycleService {
     if (!ride) return rideNotFound();
 
     const assignedToMe = ride.driverId?.equals(driver._id) ?? false;
-    const wasOfferedToMe = assignedToMe || ride.rejectedDriverIds.some((id) => id.equals(driver._id));
+    const wasOfferedToMe =
+      assignedToMe ||
+      ride.rejectedDriverIds.some((id) => id.equals(driver._id));
     if (!wasOfferedToMe)
       // A driver who was never offered the ride learns nothing about it —
       // except the classic race loser, who gets the conflict the spec wants.
-      return ride.status === RideStatus.DRIVER_ASSIGNED || ride.status === RideStatus.DRIVER_ACCEPTED
-        ? rideConflict("This ride is no longer available", ride.status, "RIDE_STATE_CONFLICT")
+      return ride.status === RideStatus.DRIVER_ASSIGNED ||
+        ride.status === RideStatus.DRIVER_ACCEPTED
+        ? rideConflict(
+            "This ride is no longer available",
+            ride.status,
+            "RIDE_STATE_CONFLICT",
+          )
         : rideNotFound();
 
     if (!assignedToMe)
-      return rideConflict("This request is no longer assigned to you", ride.status, "RIDE_STATE_CONFLICT");
+      return rideConflict(
+        "This request is no longer assigned to you",
+        ride.status,
+        "RIDE_STATE_CONFLICT",
+      );
 
     if (ride.status === RideStatus.DRIVER_ASSIGNED) {
       // Offer lapsed between the driver's last poll and the tap.
       await this.dispatch.settle(ride);
-      return rideConflict("This request has expired", RideStatus.SEARCHING, "RIDE_STATE_CONFLICT");
+      return rideConflict(
+        "This request has expired",
+        RideStatus.SEARCHING,
+        "RIDE_STATE_CONFLICT",
+      );
     }
     return rideConflict(
       ride.status === RideStatus.DRIVER_ACCEPTED && action === "accept"
@@ -492,9 +650,14 @@ export class RideLifecycleService {
     driver: DriverProfileDocument,
     action: string,
   ): Promise<ApiException | ReturnType<typeof rideNotFound>> {
-    const ride = await this.rideModel.findOne({ _id: rideId, driverId: driver._id }).exec();
+    const ride = await this.rideModel
+      .findOne({ _id: rideId, driverId: driver._id })
+      .exec();
     if (!ride) return rideNotFound();
-    return rideConflict(this.wrongStateMessage(action, ride.status), ride.status);
+    return rideConflict(
+      this.wrongStateMessage(action, ride.status),
+      ride.status,
+    );
   }
 
   private wrongStateMessage(action: string, status: RideStatus): string {

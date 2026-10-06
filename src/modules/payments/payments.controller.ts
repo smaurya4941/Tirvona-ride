@@ -1,6 +1,22 @@
-import { Body, Controller, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, Req } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  Query,
+  Req,
+} from "@nestjs/common";
 import type { RawBodyRequest } from "@nestjs/common";
-import { ApiBearerAuth, ApiExcludeEndpoint, ApiOperation, ApiTags } from "@nestjs/swagger";
+import {
+  ApiBearerAuth,
+  ApiExcludeEndpoint,
+  ApiOperation,
+  ApiTags,
+} from "@nestjs/swagger";
 import { SkipThrottle } from "@nestjs/throttler";
 import type { Request } from "express";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
@@ -11,8 +27,18 @@ import type { ApiSuccessBody } from "../../common/http/api-response";
 import { ParseObjectIdPipe } from "../../common/pipes/parse-object-id.pipe";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
-import { CreatePaymentDto, PaymentFailureDto, PaymentHistoryQueryDto, VerifyPaymentDto } from "./dto/payment.dto";
-import type { CheckoutView, PaymentHistoryItem, PaymentReceiptView, PaymentView } from "./interfaces/payment-views";
+import {
+  CreatePaymentDto,
+  PaymentFailureDto,
+  PaymentHistoryQueryDto,
+  VerifyPaymentDto,
+} from "./dto/payment.dto";
+import type {
+  CheckoutView,
+  PaymentHistoryItem,
+  PaymentReceiptView,
+  PaymentView,
+} from "./interfaces/payment-views";
 import { PaymentWebhookService } from "./payment-webhook.service";
 import type { WebhookResult } from "./payment-webhook.service";
 import { PaymentsService } from "./payments.service";
@@ -31,7 +57,10 @@ export class PaymentsController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @Roles(UserRole.CUSTOMER)
-  @ApiOperation({ summary: "Open (or re-open) payment for a completed ride; returns the Razorpay checkout" })
+  @ApiOperation({
+    summary:
+      "Open (or re-open) payment for a completed ride; returns the Razorpay checkout",
+  })
   async create(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreatePaymentDto,
@@ -44,7 +73,8 @@ export class PaymentsController {
   @ApiBearerAuth()
   @Roles(UserRole.CUSTOMER)
   @ApiOperation({
-    summary: "Pay the driver in cash: marks the completed ride paid (method CASH) for its final fare",
+    summary:
+      "Pay the driver in cash: marks the completed ride paid (method CASH) for its final fare",
     description:
       "Same checks as /payments/create. 409 PAYMENT_ALREADY_COMPLETED when paid, " +
       "409 PAYMENT_IN_PROGRESS while an online payment is still being confirmed.",
@@ -60,7 +90,10 @@ export class PaymentsController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @Roles(UserRole.CUSTOMER)
-  @ApiOperation({ summary: "Verify a Razorpay checkout result server-side (signature + gateway + amount)" })
+  @ApiOperation({
+    summary:
+      "Verify a Razorpay checkout result server-side (signature + gateway + amount)",
+  })
   async verify(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: VerifyPaymentDto,
@@ -103,7 +136,15 @@ export class PaymentsController {
   async history(
     @CurrentUser() user: AuthenticatedUser,
     @Query() query: PaymentHistoryQueryDto,
-  ): Promise<ApiSuccessBody<{ items: PaymentHistoryItem[]; page: number; limit: number; total: number; hasMore: boolean }>> {
+  ): Promise<
+    ApiSuccessBody<{
+      items: PaymentHistoryItem[];
+      page: number;
+      limit: number;
+      total: number;
+      hasMore: boolean;
+    }>
+  > {
     return ok(await this.payments.history(user.userId, query));
   }
 
@@ -122,7 +163,10 @@ export class PaymentsController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @Roles(UserRole.CUSTOMER)
-  @ApiOperation({ summary: "Report a failed/dismissed checkout so the app can offer a retry (advisory)" })
+  @ApiOperation({
+    summary:
+      "Report a failed/dismissed checkout so the app can offer a retry (advisory)",
+  })
   async failure(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id", ParseObjectIdPipe) id: string,

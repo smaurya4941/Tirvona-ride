@@ -3,7 +3,10 @@ import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
 import { Types } from "mongoose";
-import { apiBadRequest, apiForbidden } from "../../common/exceptions/api.exception";
+import {
+  apiBadRequest,
+  apiForbidden,
+} from "../../common/exceptions/api.exception";
 import { CircuitPackagesService } from "../circuit-packages/circuit-packages.service";
 import type { CircuitStopView } from "../circuit-packages/circuit-packages.service";
 import type { CircuitPackageDocument } from "../circuit-packages/schemas/circuit-package.schema";
@@ -25,11 +28,26 @@ import { ZonesService } from "../zones/zones.service";
 import { CircuitLedgerService } from "./circuit-ledger.service";
 import { calculateCircuitFare } from "./circuit-pricing";
 import { CircuitStopStatus, RideKind } from "./circuit-ride.types";
-import type { CircuitEstimateDto, CreateCircuitRideDto } from "./dto/circuit-ride.dto";
+import type {
+  CircuitEstimateDto,
+  CreateCircuitRideDto,
+} from "./dto/circuit-ride.dto";
 
 export interface CircuitEstimateView {
-  package: { id: string; code: string; name: string; city: string; coverPath: string | null; revision: number };
-  rideType: { code: string; displayName: string; icon: string; seatCapacity: number };
+  package: {
+    id: string;
+    code: string;
+    name: string;
+    city: string;
+    coverPath: string | null;
+    revision: number;
+  };
+  rideType: {
+    code: string;
+    displayName: string;
+    icon: string;
+    seatCapacity: number;
+  };
   passengers: number;
   /** The most passengers this vehicle may carry on this circuit. */
   maxPassengers: number;
@@ -42,7 +60,12 @@ export interface CircuitEstimateView {
     provider: string;
     polyline?: string;
     pickupLeg: { distanceMeters: number; durationSeconds: number };
-    legs: Array<{ from: string; to: string; distanceMeters: number; durationSeconds: number }>;
+    legs: Array<{
+      from: string;
+      to: string;
+      distanceMeters: number;
+      durationSeconds: number;
+    }>;
   };
   pricing: {
     basePrice: number;
@@ -68,7 +91,8 @@ export interface CircuitEstimateView {
   cancellationPolicy?: string;
 }
 
-const isDuplicateKey = (error: unknown): boolean => (error as { code?: number } | undefined)?.code === 11000;
+const isDuplicateKey = (error: unknown): boolean =>
+  (error as { code?: number } | undefined)?.code === 11000;
 
 /**
  * Circuit estimate and booking. A circuit is booked like a ride and runs on the
@@ -98,8 +122,10 @@ export class CircuitRidesService {
     private readonly ledger: CircuitLedgerService,
     config: ConfigService,
   ) {
-    this.maxPickupDistanceMeters = config.getOrThrow<number>("circuitMaxPickupDistanceKm") * 1000;
-    this.searchTimeoutMs = config.getOrThrow<number>("rideSearchTimeoutSeconds") * 1000;
+    this.maxPickupDistanceMeters =
+      config.getOrThrow<number>("circuitMaxPickupDistanceKm") * 1000;
+    this.searchTimeoutMs =
+      config.getOrThrow<number>("rideSearchTimeoutSeconds") * 1000;
   }
 
   async estimate(dto: CircuitEstimateDto): Promise<CircuitEstimateView> {
@@ -112,7 +138,11 @@ export class CircuitRidesService {
    * then create the ride in SEARCHING and start matching. Safe to repeat with the
    * same idempotency key: the second call returns the first booking.
    */
-  async create(customerUserId: string, dto: CreateCircuitRideDto, headerKey?: string): Promise<CustomerRideView> {
+  async create(
+    customerUserId: string,
+    dto: CreateCircuitRideDto,
+    headerKey?: string,
+  ): Promise<CustomerRideView> {
     const customerId = new Types.ObjectId(customerUserId);
     const bookingKey = dto.idempotencyKey ?? headerKey;
     if (bookingKey) {
@@ -121,13 +151,16 @@ export class CircuitRidesService {
     }
 
     const customer = await this.users.findById(customerUserId);
-    if (customer.status !== UserStatus.ACTIVE) throw apiForbidden("This account cannot book rides", "USER_BLOCKED");
+    if (customer.status !== UserStatus.ACTIVE)
+      throw apiForbidden("This account cannot book rides", "USER_BLOCKED");
     await this.rides.assertNoActiveRide(customerId);
 
     const { view, pkg, rideType, legs } = await this.quote(dto);
     const zone = await this.zones.assertServiceable(dto.pickup);
     const last = view.stops[view.stops.length - 1];
-    const allRoadRouted = legs.every((leg) => leg.route.provider === "GOOGLE_ROUTES");
+    const allRoadRouted = legs.every(
+      (leg) => leg.route.provider === "GOOGLE_ROUTES",
+    );
 
     let ride;
     try {
@@ -137,7 +170,11 @@ export class CircuitRidesService {
         rideType: rideType.code,
         vehicleType: rideType.vehicleType,
         pickup: dto.pickup,
-        destination: { address: last.address, latitude: last.latitude, longitude: last.longitude },
+        destination: {
+          address: last.address,
+          latitude: last.latitude,
+          longitude: last.longitude,
+        },
         distanceMeters: view.route.distanceMeters,
         durationSeconds: view.route.durationSeconds,
         routeProvider: allRoadRouted ? "GOOGLE_ROUTES" : "HAVERSINE",
@@ -193,7 +230,10 @@ export class CircuitRidesService {
         const existing = await this.findByBookingKey(customerId, bookingKey);
         if (existing) return this.views.forCustomer(existing);
       }
-      if (isDuplicateKey(error)) this.logger.warn(`Circuit booking hit a duplicate key: ${(error as Error).message}`);
+      if (isDuplicateKey(error))
+        this.logger.warn(
+          `Circuit booking hit a duplicate key: ${(error as Error).message}`,
+        );
       throw error;
     }
 
@@ -215,7 +255,12 @@ export class CircuitRidesService {
       rideId: ride._id,
       type: "BOOKED",
       actor: { type: RideActorType.CUSTOMER, userId: customerId },
-      data: { packageCode: pkg.code, packageRevision: pkg.revision, rideType: rideType.code, passengers: dto.passengers },
+      data: {
+        packageCode: pkg.code,
+        packageRevision: pkg.revision,
+        rideType: rideType.code,
+        passengers: dto.passengers,
+      },
     });
     void this.packages.markBooked(pkg._id);
     this.events.created(ride);
@@ -226,7 +271,10 @@ export class CircuitRidesService {
     try {
       current = (await this.dispatch.dispatch(ride._id)) ?? ride;
     } catch (error) {
-      this.logger.error(`Initial dispatch failed for circuit ${ride.rideCode}`, error instanceof Error ? error.stack : String(error));
+      this.logger.error(
+        `Initial dispatch failed for circuit ${ride.rideCode}`,
+        error instanceof Error ? error.stack : String(error),
+      );
     }
     return this.views.forCustomer(current);
   }
@@ -237,7 +285,11 @@ export class CircuitRidesService {
     const pkg = await this.packages.findActive(dto.packageId);
     const rideType = await this.rideTypes.getBookable(dto.rideType);
     // Each vehicle has its own price on a circuit: the tariff is the chosen one's.
-    const tariff = await this.packages.assertBookable(pkg, rideType, dto.passengers);
+    const tariff = await this.packages.assertBookable(
+      pkg,
+      rideType,
+      dto.passengers,
+    );
     const stops = [...pkg.stops].sort((a, b) => a.order - b.order);
 
     if (haversineMeters(dto.pickup, stops[0]) > this.maxPickupDistanceMeters)
@@ -249,21 +301,43 @@ export class CircuitRidesService {
 
     // Pickup → stop 1, then stop → stop. The pickup is the origin; it is never a stop.
     const points = [dto.pickup, ...stops];
-    const routes = await Promise.all(points.slice(1).map((point, index) => this.locations.routeBetween(points[index], point)));
+    const routes = await Promise.all(
+      points
+        .slice(1)
+        .map((point, index) =>
+          this.locations.routeBetween(points[index], point),
+        ),
+    );
     const legs = routes.map((route, index) => ({
       route,
       from: index === 0 ? dto.pickup.address : stops[index - 1].name,
       to: stops[index].name,
     }));
-    const distanceMeters = routes.reduce((sum, route) => sum + route.distanceMeters, 0);
-    const durationSeconds = routes.reduce((sum, route) => sum + route.durationSeconds, 0);
+    const distanceMeters = routes.reduce(
+      (sum, route) => sum + route.distanceMeters,
+      0,
+    );
+    const durationSeconds = routes.reduce(
+      (sum, route) => sum + route.durationSeconds,
+      0,
+    );
 
-    const projected = calculateCircuitFare(tariff, distanceMeters, durationSeconds);
-    const supply = await this.rides.pickupSupply(dto.pickup, rideType.vehicleType);
+    const projected = calculateCircuitFare(
+      tariff,
+      distanceMeters,
+      durationSeconds,
+    );
+    const supply = await this.rides.pickupSupply(
+      dto.pickup,
+      rideType.vehicleType,
+    );
     const notices: string[] = [];
     if (projected.extraKm > 0)
-      notices.push(`This route is about ${(distanceMeters / 1000).toFixed(1)} km, ${projected.extraKm} km over the included distance.`);
-    if (projected.extraBlocks > 0) notices.push("The planned route alone is longer than the included time.");
+      notices.push(
+        `This route is about ${(distanceMeters / 1000).toFixed(1)} km, ${projected.extraKm} km over the included distance.`,
+      );
+    if (projected.extraBlocks > 0)
+      notices.push("The planned route alone is longer than the included time.");
 
     const view: CircuitEstimateView = {
       package: {
@@ -271,20 +345,42 @@ export class CircuitRidesService {
         code: pkg.code,
         name: pkg.name,
         city: pkg.city,
-        coverPath: pkg.cover ? `/circuit-packages/${pkg._id.toString()}/cover?v=${pkg.cover.version}` : null,
+        coverPath: pkg.cover
+          ? `/circuit-packages/${pkg._id.toString()}/cover?v=${pkg.cover.version}`
+          : null,
         revision: pkg.revision,
       },
-      rideType: { code: rideType.code, displayName: rideType.displayName, icon: rideType.icon, seatCapacity: rideType.seatCapacity },
+      rideType: {
+        code: rideType.code,
+        displayName: rideType.displayName,
+        icon: rideType.icon,
+        seatCapacity: rideType.seatCapacity,
+      },
       passengers: dto.passengers,
       maxPassengers: Math.min(pkg.maxPassengers, rideType.seatCapacity),
-      pickup: { address: dto.pickup.address, latitude: dto.pickup.latitude, longitude: dto.pickup.longitude },
+      pickup: {
+        address: dto.pickup.address,
+        latitude: dto.pickup.latitude,
+        longitude: dto.pickup.longitude,
+      },
       stops: stops.map(stopView),
       route: {
         distanceMeters,
         durationSeconds,
-        provider: routes.every((route) => route.provider === "GOOGLE_ROUTES") ? "GOOGLE_ROUTES" : "HAVERSINE",
-        polyline: joinLegs(routes.map((route, index) => ({ from: points[index], to: points[index + 1], polyline: route.polyline }))),
-        pickupLeg: { distanceMeters: routes[0].distanceMeters, durationSeconds: routes[0].durationSeconds },
+        provider: routes.every((route) => route.provider === "GOOGLE_ROUTES")
+          ? "GOOGLE_ROUTES"
+          : "HAVERSINE",
+        polyline: joinLegs(
+          routes.map((route, index) => ({
+            from: points[index],
+            to: points[index + 1],
+            polyline: route.polyline,
+          })),
+        ),
+        pickupLeg: {
+          distanceMeters: routes[0].distanceMeters,
+          durationSeconds: routes[0].durationSeconds,
+        },
         legs: legs.map((leg) => ({
           from: leg.from,
           to: leg.to,
@@ -316,11 +412,21 @@ export class CircuitRidesService {
   }
 
   private findByBookingKey(customerId: Types.ObjectId, bookingKey: string) {
-    return this.rideModel.findOne({ customerId, "circuit.bookingKey": bookingKey }).select("+otpCode").exec();
+    return this.rideModel
+      .findOne({ customerId, "circuit.bookingKey": bookingKey })
+      .select("+otpCode")
+      .exec();
   }
 }
 
-const stopView = (stop: { order: number; placeId: string; name: string; address: string; latitude: number; longitude: number }): CircuitStopView => ({
+const stopView = (stop: {
+  order: number;
+  placeId: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+}): CircuitStopView => ({
   order: stop.order,
   placeId: stop.placeId,
   name: stop.name,

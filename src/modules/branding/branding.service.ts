@@ -3,8 +3,15 @@ import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import { Types } from "mongoose";
 import type { Model } from "mongoose";
-import { apiBadRequest, apiNotFound } from "../../common/exceptions/api.exception";
-import { BRAND_ASSET_RULES, BrandAssetKind, brandAssetProblem } from "./branding-rules";
+import {
+  apiBadRequest,
+  apiNotFound,
+} from "../../common/exceptions/api.exception";
+import {
+  BRAND_ASSET_RULES,
+  BrandAssetKind,
+  brandAssetProblem,
+} from "./branding-rules";
 import type { BrandAssetRule } from "./branding-rules";
 import { probeImage } from "./image-probe";
 import { BrandAsset } from "./schemas/brand-asset.schema";
@@ -40,7 +47,9 @@ export interface BrandAssetFile {
 
 @Injectable()
 export class BrandingService {
-  constructor(@InjectModel(BrandAsset.name) private readonly assets: Model<BrandAsset>) {}
+  constructor(
+    @InjectModel(BrandAsset.name) private readonly assets: Model<BrandAsset>,
+  ) {}
 
   async current(): Promise<BrandingView> {
     const assets = await this.assets.find().lean();
@@ -49,18 +58,32 @@ export class BrandingService {
       const asset = byKind.get(kind);
       return asset ? this.toView(asset) : null;
     };
-    return { logo: view(BrandAssetKind.LOGO), splash: view(BrandAssetKind.SPLASH) };
+    return {
+      logo: view(BrandAssetKind.LOGO),
+      splash: view(BrandAssetKind.SPLASH),
+    };
   }
 
   rules(): BrandingRulesView[] {
-    return Object.values(BrandAssetKind).map((kind) => ({ kind, rule: BRAND_ASSET_RULES[kind] }));
+    return Object.values(BrandAssetKind).map((kind) => ({
+      kind,
+      rule: BRAND_ASSET_RULES[kind],
+    }));
   }
 
   async file(kind: BrandAssetKind): Promise<BrandAssetFile> {
     // Hydrated, not lean: lean returns a BSON Binary instead of a Buffer.
     const asset = await this.assets.findOne({ kind }).select("+data");
-    if (!asset) throw apiNotFound(`No custom ${BRAND_ASSET_RULES[kind].label.toLowerCase()} is set`, "BRANDING_NOT_SET");
-    return { data: asset.data, contentType: asset.contentType, version: asset.version };
+    if (!asset)
+      throw apiNotFound(
+        `No custom ${BRAND_ASSET_RULES[kind].label.toLowerCase()} is set`,
+        "BRANDING_NOT_SET",
+      );
+    return {
+      data: asset.data,
+      contentType: asset.contentType,
+      version: asset.version,
+    };
   }
 
   /** Validates the image by its bytes and replaces the current one for `kind`. */
@@ -71,9 +94,17 @@ export class BrandingService {
   ): Promise<{ view: BrandAssetView; previousVersion: string | null }> {
     const image = probeImage(upload.buffer);
     const problem = brandAssetProblem(kind, upload.buffer.length, image);
-    if (problem || !image) throw apiBadRequest(problem ?? "Unsupported image", "BRANDING_INVALID_IMAGE", { hint: BRAND_ASSET_RULES[kind].hint });
+    if (problem || !image)
+      throw apiBadRequest(
+        problem ?? "Unsupported image",
+        "BRANDING_INVALID_IMAGE",
+        { hint: BRAND_ASSET_RULES[kind].hint },
+      );
 
-    const previous = await this.assets.findOne({ kind }).select("version").lean();
+    const previous = await this.assets
+      .findOne({ kind })
+      .select("version")
+      .lean();
     const saved = await this.assets
       .findOneAndUpdate(
         { kind },
@@ -84,7 +115,10 @@ export class BrandingService {
             bytes: upload.buffer.length,
             width: image.width,
             height: image.height,
-            version: createHash("sha256").update(upload.buffer).digest("hex").slice(0, 16),
+            version: createHash("sha256")
+              .update(upload.buffer)
+              .digest("hex")
+              .slice(0, 16),
             originalName: upload.originalname?.slice(0, 200),
             updatedBy: new Types.ObjectId(adminId),
           },
@@ -92,7 +126,10 @@ export class BrandingService {
         { upsert: true, returnDocument: "after" },
       )
       .lean();
-    return { view: this.toView(saved), previousVersion: previous?.version ?? null };
+    return {
+      view: this.toView(saved),
+      previousVersion: previous?.version ?? null,
+    };
   }
 
   /** Back to the apps' bundled default. Returns whether anything was removed. */
@@ -101,7 +138,18 @@ export class BrandingService {
     return result.deletedCount > 0;
   }
 
-  private toView(asset: Pick<BrandAsset, "kind" | "contentType" | "bytes" | "width" | "height" | "version" | "updatedAt">): BrandAssetView {
+  private toView(
+    asset: Pick<
+      BrandAsset,
+      | "kind"
+      | "contentType"
+      | "bytes"
+      | "width"
+      | "height"
+      | "version"
+      | "updatedAt"
+    >,
+  ): BrandAssetView {
     return {
       kind: asset.kind,
       path: `/branding/assets/${asset.kind}?v=${asset.version}`,

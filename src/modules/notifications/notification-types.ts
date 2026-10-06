@@ -73,7 +73,8 @@ const HIGH_PRIORITY: ReadonlySet<NotificationType> = new Set([
   NotificationType.SOS_UPDATED,
 ]);
 
-export const isHighPriority = (type: NotificationType): boolean => HIGH_PRIORITY.has(type);
+export const isHighPriority = (type: NotificationType): boolean =>
+  HIGH_PRIORITY.has(type);
 
 /** Ride notifications replace each other in the tray instead of piling up. */
 const RIDE_TYPES: ReadonlySet<NotificationType> = new Set([
@@ -87,7 +88,8 @@ const RIDE_TYPES: ReadonlySet<NotificationType> = new Set([
   NotificationType.RIDE_NO_DRIVER,
 ]);
 
-export const isRideStatusType = (type: NotificationType): boolean => RIDE_TYPES.has(type);
+export const isRideStatusType = (type: NotificationType): boolean =>
+  RIDE_TYPES.has(type);
 
 /**
  * The alert sound a push plays. Android takes the sound from the

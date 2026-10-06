@@ -24,7 +24,10 @@ export class CircuitPackagesMigration implements OnApplicationBootstrap {
 
   async onApplicationBootstrap(): Promise<void> {
     const migrated = await this.packages.migrateLegacyPricing();
-    if (migrated) this.logger.log(`Moved ${migrated} circuit package(s) onto per-vehicle pricing`);
+    if (migrated)
+      this.logger.log(
+        `Moved ${migrated} circuit package(s) onto per-vehicle pricing`,
+      );
   }
 }
 

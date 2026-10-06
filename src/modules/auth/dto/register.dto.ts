@@ -10,7 +10,8 @@ import { DeviceInfoDto } from "./device.dto";
 // never self-registered.
 const REGISTERABLE_ROLES = [UserRole.CUSTOMER, UserRole.DRIVER] as const;
 
-const trim = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value);
+const trim = ({ value }: { value: unknown }) =>
+  typeof value === "string" ? value.trim() : value;
 const trimOrUndefined = ({ value }: { value: unknown }) =>
   typeof value === "string" ? value.trim() || undefined : value;
 
@@ -33,13 +34,18 @@ export class RegisterDto extends DeviceInfoDto {
   @Length(1, 60)
   lastName?: string;
 
-  @ApiProperty({ example: "+919812345678", description: "E.164; a 10-digit Indian mobile is accepted" })
+  @ApiProperty({
+    example: "+919812345678",
+    description: "E.164; a 10-digit Indian mobile is accepted",
+  })
   @IsMobileNumber()
   phone!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() || undefined : value))
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.trim().toLowerCase() || undefined : value,
+  )
   @IsEmail()
   @Length(3, 254)
   email?: string;

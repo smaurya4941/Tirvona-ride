@@ -38,7 +38,8 @@ export class CancellationReason {
 }
 
 export type CancellationReasonDocument = HydratedDocument<CancellationReason>;
-export const CancellationReasonSchema = SchemaFactory.createForClass(CancellationReason);
+export const CancellationReasonSchema =
+  SchemaFactory.createForClass(CancellationReason);
 CancellationReasonSchema.index({ actor: 1, code: 1 }, { unique: true });
 CancellationReasonSchema.index({ actor: 1, isActive: 1, sortOrder: 1 });
 
@@ -70,7 +71,10 @@ const CustomerFeePolicySchema = SchemaFactory.createForClass(CustomerFeePolicy);
  * Every change is a new version (like commission): cancellations record the
  * version that priced them, so a later policy change never rewrites history.
  */
-@Schema({ timestamps: { createdAt: true, updatedAt: false }, collection: "cancellation_policies" })
+@Schema({
+  timestamps: { createdAt: true, updatedAt: false },
+  collection: "cancellation_policies",
+})
 export class CancellationPolicy {
   @Prop({ required: true, immutable: true })
   version!: number;
@@ -88,7 +92,8 @@ export class CancellationPolicy {
 }
 
 export type CancellationPolicyDocument = HydratedDocument<CancellationPolicy>;
-export const CancellationPolicySchema = SchemaFactory.createForClass(CancellationPolicy);
+export const CancellationPolicySchema =
+  SchemaFactory.createForClass(CancellationPolicy);
 CancellationPolicySchema.index({ version: -1 }, { unique: true });
 
 // ── Cancellation records ────────────────────────────────────────────────
@@ -96,7 +101,12 @@ CancellationPolicySchema.index({ version: -1 }, { unique: true });
 /** One per cancelled ride: who, why, in which state, and what it cost. */
 @Schema({ timestamps: true, collection: "cancellations" })
 export class Cancellation {
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "Ride", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "Ride",
+    immutable: true,
+  })
   rideId!: Types.ObjectId;
 
   @Prop({ required: true, immutable: true })
@@ -105,7 +115,12 @@ export class Cancellation {
   @Prop({ required: true, immutable: true })
   rideType!: string;
 
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "User", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "User",
+    immutable: true,
+  })
   customerId!: Types.ObjectId;
 
   @Prop({ type: SchemaTypes.ObjectId, ref: "DriverProfile", immutable: true })

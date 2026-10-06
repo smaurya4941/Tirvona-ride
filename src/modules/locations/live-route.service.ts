@@ -44,7 +44,8 @@ export class LiveRouteService {
     private readonly locations: LocationsService,
     config: ConfigService,
   ) {
-    this.refreshMs = config.getOrThrow<number>("routesLiveRefreshSeconds") * 1000;
+    this.refreshMs =
+      config.getOrThrow<number>("routesLiveRefreshSeconds") * 1000;
     this.refreshMeters = config.getOrThrow<number>("routesLiveRefreshMeters");
     this.routes = new TtlCache<LiveRoute>(MAX_TRACKED_RIDES);
   }
@@ -56,14 +57,21 @@ export class LiveRouteService {
     destination: GeoCoordinates,
   ): Promise<LiveRoute> {
     const cached = this.routes.get(rideId);
-    if (cached && this.isFresh(cached, stage, driver, destination)) return cached;
+    if (cached && this.isFresh(cached, stage, driver, destination))
+      return cached;
 
     const pending = this.inFlight.get(rideId);
     if (pending) return pending;
     const load = this.locations
       .routeBetween(driver, destination)
       .then((route): LiveRoute => {
-        const live: LiveRoute = { ...route, stage, origin: driver, destination, computedAt: new Date() };
+        const live: LiveRoute = {
+          ...route,
+          stage,
+          origin: driver,
+          destination,
+          computedAt: new Date(),
+        };
         this.routes.set(rideId, live, this.refreshMs * RETENTION_FACTOR);
         return live;
       })

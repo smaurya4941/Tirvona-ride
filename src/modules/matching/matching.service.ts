@@ -2,7 +2,10 @@ import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model, Types } from "mongoose";
-import { DriverProfile, DriverStatus } from "../drivers/schemas/driver-profile.schema";
+import {
+  DriverProfile,
+  DriverStatus,
+} from "../drivers/schemas/driver-profile.schema";
 import { toGeoJsonPoint } from "../locations/geo";
 import type { GeoCoordinates } from "../locations/geo";
 import { PlatformSettingsService } from "../ride-config/platform-settings.service";
@@ -44,11 +47,13 @@ export class MatchingService {
   private readonly locationStaleMs: number;
 
   constructor(
-    @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
+    @InjectModel(DriverProfile.name)
+    private readonly driverModel: Model<DriverProfile>,
     private readonly settings: PlatformSettingsService,
     config: ConfigService,
   ) {
-    this.locationStaleMs = config.getOrThrow<number>("driverLocationStaleSeconds") * 1000;
+    this.locationStaleMs =
+      config.getOrThrow<number>("driverLocationStaleSeconds") * 1000;
   }
 
   /**
@@ -79,8 +84,12 @@ export class MatchingService {
               isAvailable: true,
               currentRideId: null,
               activeVehicleType: query.vehicleType,
-              locationUpdatedAt: { $gte: new Date(Date.now() - this.locationStaleMs) },
-              ...(query.circuitEligible ? { circuitEligible: { $ne: false } } : {}),
+              locationUpdatedAt: {
+                $gte: new Date(Date.now() - this.locationStaleMs),
+              },
+              ...(query.circuitEligible
+                ? { circuitEligible: { $ne: false } }
+                : {}),
               ...(query.excludeDriverIds?.length
                 ? { _id: { $nin: query.excludeDriverIds } }
                 : {}),
@@ -106,7 +115,11 @@ export class MatchingService {
    * eligibility as matching (minus the vehicle type), so the map never
    * shows a car that could not actually be dispatched.
    */
-  async nearbyAvailable(point: GeoCoordinates, radiusMeters: number, limit: number): Promise<NearbyDriver[]> {
+  async nearbyAvailable(
+    point: GeoCoordinates,
+    radiusMeters: number,
+    limit: number,
+  ): Promise<NearbyDriver[]> {
     return this.driverModel
       .aggregate<NearbyDriver>([
         {
@@ -121,7 +134,9 @@ export class MatchingService {
               isOnline: true,
               isAvailable: true,
               currentRideId: null,
-              locationUpdatedAt: { $gte: new Date(Date.now() - this.locationStaleMs) },
+              locationUpdatedAt: {
+                $gte: new Date(Date.now() - this.locationStaleMs),
+              },
             },
           },
         },
@@ -144,7 +159,10 @@ export class MatchingService {
    * dispatched concurrently can both pick the same nearest driver; exactly
    * one reservation wins and the other moves on to its next candidate.
    */
-  async reserve(driverId: Types.ObjectId, rideId: Types.ObjectId): Promise<boolean> {
+  async reserve(
+    driverId: Types.ObjectId,
+    rideId: Types.ObjectId,
+  ): Promise<boolean> {
     const result = await this.driverModel
       .updateOne(
         {
@@ -174,7 +192,11 @@ export class MatchingService {
     const online = await this.driverModel
       .updateOne(
         { _id: driverId, currentRideId: rideId, isOnline: true },
-        { $set: { isAvailable: true, lastSeenAt: new Date() }, $unset: { currentRideId: 1 }, ...inc },
+        {
+          $set: { isAvailable: true, lastSeenAt: new Date() },
+          $unset: { currentRideId: 1 },
+          ...inc,
+        },
       )
       .exec();
     if (online.modifiedCount === 1) return;

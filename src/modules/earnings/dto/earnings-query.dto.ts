@@ -70,7 +70,10 @@ export class MarkEarningPaidDto {
   @ApiProperty({ example: "BANK-SEP-24001" })
   @IsString()
   @Length(3, 80)
-  @Matches(REFERENCE, { message: "payoutReference may contain letters, digits, spaces and . _ / # -" })
+  @Matches(REFERENCE, {
+    message:
+      "payoutReference may contain letters, digits, spaces and . _ / # -",
+  })
   payoutReference!: string;
 
   @ApiPropertyOptional({ example: "September weekly settlement" })
@@ -85,7 +88,10 @@ export class CreatePayoutDto extends MarkEarningPaidDto {
   @IsMongoId()
   driverId!: string;
 
-  @ApiProperty({ type: [String], description: "AVAILABLE earnings of this driver being settled" })
+  @ApiProperty({
+    type: [String],
+    description: "AVAILABLE earnings of this driver being settled",
+  })
   @IsArray()
   @ArrayNotEmpty()
   @ArrayMaxSize(500)

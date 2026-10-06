@@ -1,7 +1,11 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { SchemaTypes, Types } from "mongoose";
 import type { HydratedDocument } from "mongoose";
-import { CommissionType, EarningStatus, PaymentMode } from "../interfaces/earning-status";
+import {
+  CommissionType,
+  EarningStatus,
+  PaymentMode,
+} from "../interfaces/earning-status";
 
 /**
  * One immutable ledger line per paid ride: what the customer paid, what
@@ -18,16 +22,36 @@ import { CommissionType, EarningStatus, PaymentMode } from "../interfaces/earnin
  */
 @Schema({ timestamps: true, collection: "driver_earnings" })
 export class DriverEarning {
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "DriverProfile", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "DriverProfile",
+    immutable: true,
+  })
   driverId!: Types.ObjectId;
 
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "User", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "User",
+    immutable: true,
+  })
   driverUserId!: Types.ObjectId;
 
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "Ride", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "Ride",
+    immutable: true,
+  })
   rideId!: Types.ObjectId;
 
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "Payment", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "Payment",
+    immutable: true,
+  })
   paymentId!: Types.ObjectId;
 
   // ── Ride snapshot (so the ledger reads without joins) ─────────────────
@@ -75,7 +99,12 @@ export class DriverEarning {
   netEarningPaise!: number;
 
   /** The commission version applied (audit trail). */
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "CommissionConfig", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "CommissionConfig",
+    immutable: true,
+  })
   commissionConfigId!: Types.ObjectId;
 
   @Prop({ required: true, immutable: true })
@@ -117,8 +146,14 @@ export class DriverEarning {
 export type DriverEarningDocument = HydratedDocument<DriverEarning>;
 export const DriverEarningSchema = SchemaFactory.createForClass(DriverEarning);
 
-DriverEarningSchema.index({ rideId: 1 }, { unique: true, name: "uniq_earning_per_ride" });
-DriverEarningSchema.index({ paymentId: 1 }, { unique: true, name: "uniq_earning_per_payment" });
+DriverEarningSchema.index(
+  { rideId: 1 },
+  { unique: true, name: "uniq_earning_per_ride" },
+);
+DriverEarningSchema.index(
+  { paymentId: 1 },
+  { unique: true, name: "uniq_earning_per_payment" },
+);
 DriverEarningSchema.index({ driverId: 1, rideCompletedAt: -1 });
 DriverEarningSchema.index({ driverId: 1, status: 1 });
 // Settlement-window promotion sweep.

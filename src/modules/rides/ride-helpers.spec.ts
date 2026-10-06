@@ -4,7 +4,8 @@ import { generateRideOtp, rideOtpMatches } from "./ride-otp";
 
 describe("ride OTP", () => {
   it("is always four digits", () => {
-    for (let index = 0; index < 200; index += 1) expect(generateRideOtp()).toMatch(/^\d{4}$/);
+    for (let index = 0; index < 200; index += 1)
+      expect(generateRideOtp()).toMatch(/^\d{4}$/);
   });
 
   it("matches only the exact code", () => {
@@ -25,7 +26,10 @@ describe("generateRideCode", () => {
 describe("startOfDayInTimeZone", () => {
   it("returns local midnight for IST (UTC+5:30)", () => {
     // 2026-03-10 02:00 IST == 2026-03-09 20:30 UTC
-    const start = startOfDayInTimeZone(new Date("2026-03-09T20:30:00Z"), "Asia/Kolkata");
+    const start = startOfDayInTimeZone(
+      new Date("2026-03-09T20:30:00Z"),
+      "Asia/Kolkata",
+    );
     expect(start.toISOString()).toBe("2026-03-09T18:30:00.000Z");
   });
 

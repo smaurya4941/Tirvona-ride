@@ -17,12 +17,18 @@ export const CIRCUIT_COVER_RULE = {
 
 export type CoverRule = typeof CIRCUIT_COVER_RULE;
 
-const megabytes = (bytes: number): string => `${(bytes / (1024 * 1024)).toFixed(bytes % (1024 * 1024) === 0 ? 0 : 1)} MB`;
+const megabytes = (bytes: number): string =>
+  `${(bytes / (1024 * 1024)).toFixed(bytes % (1024 * 1024) === 0 ? 0 : 1)} MB`;
 
 /** Why the upload cannot be a cover image, or null if it can. Reads the real bytes, never the file name. */
-export function coverProblem(bytes: number, image: ImageInfo | null, rule: CoverRule = CIRCUIT_COVER_RULE): string | null {
+export function coverProblem(
+  bytes: number,
+  image: ImageInfo | null,
+  rule: CoverRule = CIRCUIT_COVER_RULE,
+): string | null {
   if (!image) return "Cover must be a PNG, JPEG or WEBP image";
-  if (bytes > rule.maxBytes) return `Cover must be at most ${megabytes(rule.maxBytes)} (this one is ${megabytes(bytes)})`;
+  if (bytes > rule.maxBytes)
+    return `Cover must be at most ${megabytes(rule.maxBytes)} (this one is ${megabytes(bytes)})`;
   if (image.width < rule.minWidth || image.height < rule.minHeight)
     return `Cover must be at least ${rule.minWidth} × ${rule.minHeight} px (got ${image.width} × ${image.height})`;
   const aspect = image.height / image.width;

@@ -14,14 +14,20 @@ export interface OtpChallengeView {
   codeSent: boolean;
 }
 
-export function toOtpChallengeView(phone: string, challenge: OtpChallenge): OtpChallengeView {
+export function toOtpChallengeView(
+  phone: string,
+  challenge: OtpChallenge,
+): OtpChallengeView {
   return {
     phone,
     maskedPhone: maskPhone(phone),
     channel: challenge.channel,
     codeLength: challenge.codeLength,
     expiresAt: challenge.expiresAt,
-    expiresInSeconds: Math.max(0, Math.round((challenge.expiresAt.getTime() - Date.now()) / 1000)),
+    expiresInSeconds: Math.max(
+      0,
+      Math.round((challenge.expiresAt.getTime() - Date.now()) / 1000),
+    ),
     resendAvailableInSeconds: challenge.resendAvailableInSeconds,
     sendsRemaining: challenge.sendsRemaining,
     codeSent: challenge.codeSent,

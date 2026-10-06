@@ -48,9 +48,13 @@ export const CircuitEvent = {
 } as const;
 export type CircuitEventName = (typeof CircuitEvent)[keyof typeof CircuitEvent];
 
-export const CIRCUIT_STOP_DONE: readonly CircuitStopStatus[] = [CircuitStopStatus.COMPLETED, CircuitStopStatus.SKIPPED];
+export const CIRCUIT_STOP_DONE: readonly CircuitStopStatus[] = [
+  CircuitStopStatus.COMPLETED,
+  CircuitStopStatus.SKIPPED,
+];
 
-export const isStopDone = (status: CircuitStopStatus): boolean => CIRCUIT_STOP_DONE.includes(status);
+export const isStopDone = (status: CircuitStopStatus): boolean =>
+  CIRCUIT_STOP_DONE.includes(status);
 
 export interface StopLike {
   order: number;
@@ -58,16 +62,24 @@ export interface StopLike {
 }
 
 /** The stop the driver is working on: the first one not done. Undefined once every stop is done. */
-export function activeStop<T extends StopLike>(stops: readonly T[]): T | undefined {
-  return [...stops].sort((a, b) => a.order - b.order).find((stop) => !isStopDone(stop.status));
+export function activeStop<T extends StopLike>(
+  stops: readonly T[],
+): T | undefined {
+  return [...stops]
+    .sort((a, b) => a.order - b.order)
+    .find((stop) => !isStopDone(stop.status));
 }
 
-export const allStopsDone = (stops: readonly StopLike[]): boolean => stops.length > 0 && stops.every((stop) => isStopDone(stop.status));
+export const allStopsDone = (stops: readonly StopLike[]): boolean =>
+  stops.length > 0 && stops.every((stop) => isStopDone(stop.status));
 
 /** The stop status a command may start from, and where it leads. */
 export const STOP_COMMANDS = {
   ARRIVE: { from: [CircuitStopStatus.ARRIVING], to: CircuitStopStatus.ARRIVED },
   WAIT: { from: [CircuitStopStatus.ARRIVED], to: CircuitStopStatus.WAITING },
-  COMPLETE: { from: [CircuitStopStatus.ARRIVED, CircuitStopStatus.WAITING], to: CircuitStopStatus.COMPLETED },
+  COMPLETE: {
+    from: [CircuitStopStatus.ARRIVED, CircuitStopStatus.WAITING],
+    to: CircuitStopStatus.COMPLETED,
+  },
 } as const;
 export type StopCommand = keyof typeof STOP_COMMANDS;

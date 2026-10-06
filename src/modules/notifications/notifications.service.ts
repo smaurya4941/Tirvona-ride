@@ -10,7 +10,12 @@ import type { Page } from "../rides/rides.service";
 import { User, UserStatus } from "../users/schemas/user.schema";
 import { DeviceTokensService } from "./device-tokens.service";
 import type { NotificationDraft } from "./notification-plan";
-import { PushStatus, isHighPriority, isRideStatusType, pushSoundFor } from "./notification-types";
+import {
+  PushStatus,
+  isHighPriority,
+  isRideStatusType,
+  pushSoundFor,
+} from "./notification-types";
 import type { NotificationType } from "./notification-types";
 import { PushGateway } from "./push/push.gateway";
 import { Notification } from "./schemas/notification.schema";
@@ -34,7 +39,9 @@ export interface NotificationPage extends Page<NotificationView> {
 }
 
 const isDuplicateKey = (error: unknown): boolean =>
-  typeof error === "object" && error !== null && (error as { code?: number }).code === 11000;
+  typeof error === "object" &&
+  error !== null &&
+  (error as { code?: number }).code === 11000;
 
 /**
  * Creates in-app notifications and delivers them.
@@ -51,7 +58,8 @@ export class NotificationsService {
   private readonly deliveries = new Set<Promise<void>>();
 
   constructor(
-    @InjectModel(Notification.name) private readonly notificationModel: Model<Notification>,
+    @InjectModel(Notification.name)
+    private readonly notificationModel: Model<Notification>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly deviceTokens: DeviceTokensService,
     private readonly push: PushGateway,
@@ -90,7 +98,9 @@ export class NotificationsService {
   }
 
   /** Every active admin account (SOS, new complaints). */
-  async notifyAdmins(draft: Omit<NotificationDraft, "userId" | "recipientRole">): Promise<NotificationDocument[]> {
+  async notifyAdmins(
+    draft: Omit<NotificationDraft, "userId" | "recipientRole">,
+  ): Promise<NotificationDocument[]> {
     const admins = await this.userModel
       .find({ role: UserRole.ADMIN, status: UserStatus.ACTIVE })
       .select("_id")
@@ -101,7 +111,9 @@ export class NotificationsService {
         ...draft,
         userId: admin._id.toString(),
         recipientRole: UserRole.ADMIN,
-        dedupeKey: draft.dedupeKey ? `${draft.dedupeKey}:${admin._id.toString()}` : undefined,
+        dedupeKey: draft.dedupeKey
+          ? `${draft.dedupeKey}:${admin._id.toString()}`
+          : undefined,
       })),
     );
   }
@@ -134,7 +146,9 @@ export class NotificationsService {
   }
 
   async unreadCount(userId: string): Promise<number> {
-    return this.notificationModel.countDocuments({ userId: new Types.ObjectId(userId), isRead: false }).exec();
+    return this.notificationModel
+      .countDocuments({ userId: new Types.ObjectId(userId), isRead: false })
+      .exec();
   }
 
   /** Only the recipient can read (or learn of) a notification. Idempotent. */
@@ -147,15 +161,22 @@ export class NotificationsService {
           { $set: { isRead: true, readAt: new Date() } },
           { returnDocument: "after" },
         )
-        .exec()) ?? (await this.notificationModel.findOne({ _id: new Types.ObjectId(id), userId: owner }).exec());
-    if (!notification) throw apiNotFound("Notification not found", "NOTIFICATION_NOT_FOUND");
+        .exec()) ??
+      (await this.notificationModel
+        .findOne({ _id: new Types.ObjectId(id), userId: owner })
+        .exec());
+    if (!notification)
+      throw apiNotFound("Notification not found", "NOTIFICATION_NOT_FOUND");
     this.publishUnreadCount(userId);
     return this.toView(notification);
   }
 
   async markAllRead(userId: string): Promise<{ updated: number }> {
     const result = await this.notificationModel
-      .updateMany({ userId: new Types.ObjectId(userId), isRead: false }, { $set: { isRead: true, readAt: new Date() } })
+      .updateMany(
+        { userId: new Types.ObjectId(userId), isRead: false },
+        { $set: { isRead: true, readAt: new Date() } },
+      )
       .exec();
     this.publishUnreadCount(userId);
     return { updated: result.modifiedCount };
@@ -220,34 +241,55 @@ export class NotificationsService {
         notificationId: notification._id.toString(),
         type: notification.type,
         sound,
-        ...(notification.rideId ? { rideId: notification.rideId.toString() } : {}),
-        ...(notification.referenceId ? { referenceId: notification.referenceId } : {}),
+        ...(notification.rideId
+          ? { rideId: notification.rideId.toString() }
+          : {}),
+        ...(notification.referenceId
+          ? { referenceId: notification.referenceId }
+          : {}),
       },
       highPriority: isHighPriority(notification.type),
       sound,
       collapseKey:
-        notification.rideId && isRideStatusType(notification.type) ? `ride-${notification.rideId.toString()}` : undefined,
+        notification.rideId && isRideStatusType(notification.type)
+          ? `ride-${notification.rideId.toString()}`
+          : undefined,
     });
 
     const delivered = results.filter((result) => result.delivered);
     const failed = results.filter((result) => !result.delivered);
     await Promise.all([
-      this.deviceTokens.markInvalid(failed.filter((result) => result.tokenInvalid).map((result) => result.token)),
+      this.deviceTokens.markInvalid(
+        failed
+          .filter((result) => result.tokenInvalid)
+          .map((result) => result.token),
+      ),
       this.deviceTokens.touch(delivered.map((result) => result.token)),
     ]);
     await this.setPush(notification, {
-      status: !failed.length ? PushStatus.SENT : delivered.length ? PushStatus.PARTIAL : PushStatus.FAILED,
+      status: !failed.length
+        ? PushStatus.SENT
+        : delivered.length
+          ? PushStatus.PARTIAL
+          : PushStatus.FAILED,
       sentCount: delivered.length,
       failedCount: failed.length,
       error: failed[0]?.error,
     });
     if (failed.length && !delivered.length)
-      this.logger.warn(`Push ${notification.type} to user ${userId} failed on all devices: ${failed[0]?.error ?? ""}`);
+      this.logger.warn(
+        `Push ${notification.type} to user ${userId} failed on all devices: ${failed[0]?.error ?? ""}`,
+      );
   }
 
   private async setPush(
     notification: NotificationDocument,
-    push: { status: PushStatus; sentCount?: number; failedCount?: number; error?: string },
+    push: {
+      status: PushStatus;
+      sentCount?: number;
+      failedCount?: number;
+      error?: string;
+    },
   ): Promise<void> {
     await this.notificationModel
       .updateOne(
@@ -267,7 +309,11 @@ export class NotificationsService {
 
   private publishUnreadCount(userId: string): void {
     void this.unreadCount(userId)
-      .then((unreadCount) => this.realtime.emitToUser(userId, NotificationEvent.UNREAD_COUNT, { unreadCount }))
+      .then((unreadCount) =>
+        this.realtime.emitToUser(userId, NotificationEvent.UNREAD_COUNT, {
+          unreadCount,
+        }),
+      )
       .catch(() => undefined);
   }
 }

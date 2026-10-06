@@ -1,7 +1,21 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
-import { IsDate, IsEnum, IsIn, IsInt, IsOptional, IsString, Length, Max, Min } from "class-validator";
-import { BroadcastAudience, BroadcastDeepLink, BroadcastStatus } from "./broadcast.schema";
+import {
+  IsDate,
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Length,
+  Max,
+  Min,
+} from "class-validator";
+import {
+  BroadcastAudience,
+  BroadcastDeepLink,
+  BroadcastStatus,
+} from "./broadcast.schema";
 
 export class CreateBroadcastDto {
   @ApiProperty({ example: "Temple road closed on Sunday" })
@@ -9,7 +23,9 @@ export class CreateBroadcastDto {
   @Length(3, 120)
   title!: string;
 
-  @ApiProperty({ example: "Parikrama Marg is closed 6–10 am. Pickups will use Gate 2." })
+  @ApiProperty({
+    example: "Parikrama Marg is closed 6–10 am. Pickups will use Gate 2.",
+  })
   @IsString()
   @Length(3, 500)
   message!: string;
@@ -18,12 +34,17 @@ export class CreateBroadcastDto {
   @IsEnum(BroadcastAudience)
   audience!: BroadcastAudience;
 
-  @ApiPropertyOptional({ enum: BroadcastDeepLink, default: BroadcastDeepLink.NONE })
+  @ApiPropertyOptional({
+    enum: BroadcastDeepLink,
+    default: BroadcastDeepLink.NONE,
+  })
   @IsOptional()
   @IsEnum(BroadcastDeepLink)
   deepLink?: BroadcastDeepLink;
 
-  @ApiPropertyOptional({ description: "Schedule for later; omit to keep as a draft" })
+  @ApiPropertyOptional({
+    description: "Schedule for later; omit to keep as a draft",
+  })
   @IsOptional()
   @Type(() => Date)
   @IsDate()
@@ -53,7 +74,10 @@ export class UpdateBroadcastDto {
   @IsEnum(BroadcastDeepLink)
   deepLink?: BroadcastDeepLink;
 
-  @ApiPropertyOptional({ nullable: true, description: "null turns a scheduled broadcast back into a draft" })
+  @ApiPropertyOptional({
+    nullable: true,
+    description: "null turns a scheduled broadcast back into a draft",
+  })
   @IsOptional()
   @Type(() => Date)
   @IsDate()

@@ -15,7 +15,12 @@ import { effectivePaymentStatus } from "./ride-payment-status";
 import type { RidePaymentStatus } from "./ride-payment-status";
 import { DRIVER_ENGAGED_STATUSES, RideStatus } from "./ride-state-machine";
 import type { RideActorType } from "./ride-state-machine";
-import type { RideDocument, RideFinalFare, RideLocation, RideVehicle } from "./schemas/ride.schema";
+import type {
+  RideDocument,
+  RideFinalFare,
+  RideLocation,
+  RideVehicle,
+} from "./schemas/ride.schema";
 
 export interface RideFareView {
   currency: string;
@@ -67,7 +72,9 @@ export interface RideFinalFareView {
   pricingVersion: number;
 }
 
-export function finalFareView(final?: RideFinalFare): RideFinalFareView | undefined {
+export function finalFareView(
+  final?: RideFinalFare,
+): RideFinalFareView | undefined {
   if (!final) return undefined;
   return {
     distanceMeters: final.distanceMeters,
@@ -153,7 +160,12 @@ export interface RideDriverInfo {
    * Last known position once the driver is committed (accepted → started),
    * so the customer map can place the driver before the next live update.
    */
-  location?: { latitude: number; longitude: number; heading?: number; updatedAt: Date };
+  location?: {
+    latitude: number;
+    longitude: number;
+    heading?: number;
+    updatedAt: Date;
+  };
 }
 
 export interface CustomerRideView extends RideView {
@@ -170,8 +182,12 @@ export interface DriverRideView extends RideView {
   pickupDistanceMeters?: number;
 }
 
-const fullName = (user?: Pick<UserDocument, "firstName" | "lastName"> | null): string =>
-  user ? [user.firstName, user.lastName].filter(Boolean).join(" ") : "Tirvona user";
+const fullName = (
+  user?: Pick<UserDocument, "firstName" | "lastName"> | null,
+): string =>
+  user
+    ? [user.firstName, user.lastName].filter(Boolean).join(" ")
+    : "Tirvona user";
 
 // Driver details are shown from assignment until the ride closes normally.
 const SHOWS_DRIVER: readonly RideStatus[] = [
@@ -185,7 +201,8 @@ const SHOWS_DRIVER: readonly RideStatus[] = [
 export class RideViewService {
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<User>,
-    @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
+    @InjectModel(DriverProfile.name)
+    private readonly driverModel: Model<DriverProfile>,
     private readonly locations: LocationsService,
     private readonly driverLocations: DriverLocationService,
   ) {}
@@ -197,10 +214,17 @@ export class RideViewService {
       status: ride.status,
       stateVersion: ride.stateVersion ?? 0,
       kind: ride.kind ?? RideKind.NORMAL,
-      circuit: ride.kind === RideKind.CIRCUIT && ride.circuit ? circuitView(ride.circuit, ride) : undefined,
+      circuit:
+        ride.kind === RideKind.CIRCUIT && ride.circuit
+          ? circuitView(ride.circuit, ride)
+          : undefined,
       rideType: ride.rideType,
       vehicleType: ride.vehicleType,
-      pickup: { address: ride.pickup.address, latitude: ride.pickup.latitude, longitude: ride.pickup.longitude },
+      pickup: {
+        address: ride.pickup.address,
+        latitude: ride.pickup.latitude,
+        longitude: ride.pickup.longitude,
+      },
       destination: {
         address: ride.destination.address,
         latitude: ride.destination.latitude,
@@ -242,7 +266,8 @@ export class RideViewService {
       completedAt: ride.completedAt,
       cancelledAt: ride.cancelledAt,
       expiredAt: ride.expiredAt,
-      searchExpiresAt: ride.status === RideStatus.SEARCHING ? ride.searchExpiresAt : undefined,
+      searchExpiresAt:
+        ride.status === RideStatus.SEARCHING ? ride.searchExpiresAt : undefined,
       cancellation: ride.cancellation
         ? {
             cancelledBy: ride.cancellation.cancelledBy,
@@ -253,9 +278,16 @@ export class RideViewService {
           }
         : undefined,
       promo: ride.promo
-        ? { code: ride.promo.code, title: ride.promo.title, discount: ride.fare.discount ?? ride.promo.estimatedDiscount }
+        ? {
+            code: ride.promo.code,
+            title: ride.promo.title,
+            discount: ride.fare.discount ?? ride.promo.estimatedDiscount,
+          }
         : undefined,
-      zone: ride.zoneId && ride.zoneName ? { id: ride.zoneId.toString(), name: ride.zoneName } : undefined,
+      zone:
+        ride.zoneId && ride.zoneName
+          ? { id: ride.zoneId.toString(), name: ride.zoneName }
+          : undefined,
       paymentStatus: effectivePaymentStatus(ride),
       payment: ride.payment
         ? {
@@ -277,7 +309,9 @@ export class RideViewService {
     if (ride.driverId && SHOWS_DRIVER.includes(ride.status)) {
       view.driver = await this.driverInfo(ride.driverId, ride.vehicle);
       if (view.driver && DRIVER_ENGAGED_STATUSES.includes(ride.status))
-        view.driver.location = await this.driverLocations.lastKnown(ride.driverId);
+        view.driver.location = await this.driverLocations.lastKnown(
+          ride.driverId,
+        );
       // Like the customer's number for the driver, the driver's number is
       // shared only while the driver is committed to the ride (accepted →
       // started): not while an offer is pending, and not after it ends.
@@ -288,7 +322,10 @@ export class RideViewService {
     return view;
   }
 
-  async forDriver(ride: RideDocument, driver: DriverProfileDocument): Promise<DriverRideView> {
+  async forDriver(
+    ride: RideDocument,
+    driver: DriverProfileDocument,
+  ): Promise<DriverRideView> {
     const customer = await this.userModel
       .findById(ride.customerId)
       .select("firstName lastName phone")
@@ -299,18 +336,28 @@ export class RideViewService {
     return {
       ...this.base(ride),
       customer: {
-        name: engaged ? fullName(customer) : (customer?.firstName ?? "Customer"),
+        name: engaged
+          ? fullName(customer)
+          : (customer?.firstName ?? "Customer"),
         phone: engaged ? customer?.phone : undefined,
       },
       assignmentExpiresAt:
-        ride.status === RideStatus.DRIVER_ASSIGNED ? ride.assignmentExpiresAt : undefined,
+        ride.status === RideStatus.DRIVER_ASSIGNED
+          ? ride.assignmentExpiresAt
+          : undefined,
       pickupDistanceMeters: driver.currentLocation
-        ? this.locations.approximateDistanceMeters(fromGeoJsonPoint(driver.currentLocation), ride.pickup)
+        ? this.locations.approximateDistanceMeters(
+            fromGeoJsonPoint(driver.currentLocation),
+            ride.pickup,
+          )
         : ride.driverDistanceMeters,
     };
   }
 
-  async driverInfo(driverId: Types.ObjectId, vehicle?: RideVehicle): Promise<RideDriverInfo | undefined> {
+  async driverInfo(
+    driverId: Types.ObjectId,
+    vehicle?: RideVehicle,
+  ): Promise<RideDriverInfo | undefined> {
     const profile = await this.driverModel.findById(driverId).lean().exec();
     if (!profile) return undefined;
     const user = await this.userModel

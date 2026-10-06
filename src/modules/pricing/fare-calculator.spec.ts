@@ -40,7 +40,13 @@ describe("calculateFare", () => {
 
   it("works in paise so fractional rates never drift", () => {
     const fare = calculateFare(
-      { ...AUTO, baseFare: 0.1, perKmRate: 0.2, perMinuteRate: 0, minimumFare: 0 },
+      {
+        ...AUTO,
+        baseFare: 0.1,
+        perKmRate: 0.2,
+        perMinuteRate: 0,
+        minimumFare: 0,
+      },
       1_000,
       0,
     );
@@ -66,13 +72,21 @@ describe("calculateFare", () => {
   // ── Phase 7 ─────────────────────────────────────────────────────────────
 
   it("is deterministic for the same inputs", () => {
-    const runs = Array.from({ length: 20 }, () => calculateFare(AUTO, 7_345, 1_234));
+    const runs = Array.from({ length: 20 }, () =>
+      calculateFare(AUTO, 7_345, 1_234),
+    );
     for (const run of runs) expect(run).toEqual(runs[0]);
   });
 
   it("charges only the minimum fare for a zero-length, zero-time trip", () => {
     const fare = calculateFare(AUTO, 0, 0);
-    expect(fare).toMatchObject({ distanceCharge: 0, timeCharge: 0, subtotal: 30, minimumFareApplied: true, total: 40 });
+    expect(fare).toMatchObject({
+      distanceCharge: 0,
+      timeCharge: 0,
+      subtotal: 30,
+      minimumFareApplied: true,
+      total: 40,
+    });
   });
 
   it("prices a short and a long trip on the same tariff", () => {
@@ -83,12 +97,35 @@ describe("calculateFare", () => {
   });
 
   it.each([
-    ["BIKE", { currency: "INR", baseFare: 20, perKmRate: 6, perMinuteRate: 1, minimumFare: 30 }, 65],
+    [
+      "BIKE",
+      {
+        currency: "INR",
+        baseFare: 20,
+        perKmRate: 6,
+        perMinuteRate: 1,
+        minimumFare: 30,
+      },
+      65,
+    ],
     ["AUTO", AUTO, 103],
-    ["CAB", { currency: "INR", baseFare: 50, perKmRate: 14, perMinuteRate: 2, minimumFare: 80 }, 150],
-  ])("prices each ride type with its own tariff (%s, 5 km / 15 min)", (_type, rates, expected) => {
-    expect(calculateFare(rates, 5_000, 900).total).toBe(expected);
-  });
+    [
+      "CAB",
+      {
+        currency: "INR",
+        baseFare: 50,
+        perKmRate: 14,
+        perMinuteRate: 2,
+        minimumFare: 80,
+      },
+      150,
+    ],
+  ])(
+    "prices each ride type with its own tariff (%s, 5 km / 15 min)",
+    (_type, rates, expected) => {
+      expect(calculateFare(rates, 5_000, 900).total).toBe(expected);
+    },
+  );
 
   it("rejects non-finite distances", () => {
     expect(() => calculateFare(AUTO, 0, -60)).toThrow(RangeError);

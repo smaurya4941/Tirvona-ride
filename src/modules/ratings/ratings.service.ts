@@ -4,7 +4,11 @@ import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
 import { Types } from "mongoose";
-import { apiBadRequest, apiConflict, apiNotFound } from "../../common/exceptions/api.exception";
+import {
+  apiBadRequest,
+  apiConflict,
+  apiNotFound,
+} from "../../common/exceptions/api.exception";
 import { DriverProfile } from "../drivers/schemas/driver-profile.schema";
 import { rideNotFound } from "../rides/ride-errors";
 import { Ride } from "../rides/schemas/ride.schema";
@@ -35,7 +39,13 @@ export interface RideRatingStatus {
     name: string;
     ratingAverage: number;
     ratingCount: number;
-    vehicle?: { vehicleType: string; registrationNumber: string; make?: string; model?: string; color?: string };
+    vehicle?: {
+      vehicleType: string;
+      registrationNumber: string;
+      make?: string;
+      model?: string;
+      color?: string;
+    };
   } | null;
 }
 
@@ -68,23 +78,33 @@ export interface DriverRatingSummary {
 }
 
 const isDuplicateKey = (error: unknown): boolean =>
-  typeof error === "object" && error !== null && (error as { code?: number }).code === 11000;
+  typeof error === "object" &&
+  error !== null &&
+  (error as { code?: number }).code === 11000;
 
 const round2 = (value: number): number => Math.round(value * 100) / 100;
 
 /** Position after a row, as an opaque string. */
 const encodeCursor = (createdAt: Date, id: Types.ObjectId): string =>
-  Buffer.from(`${createdAt.getTime()}:${id.toHexString()}`).toString("base64url");
+  Buffer.from(`${createdAt.getTime()}:${id.toHexString()}`).toString(
+    "base64url",
+  );
 
-const decodeCursor = (cursor: string): { createdAt: Date; id: Types.ObjectId } | null => {
-  const [millis, id] = Buffer.from(cursor, "base64url").toString("utf8").split(":");
+const decodeCursor = (
+  cursor: string,
+): { createdAt: Date; id: Types.ObjectId } | null => {
+  const [millis, id] = Buffer.from(cursor, "base64url")
+    .toString("utf8")
+    .split(":");
   const time = Number(millis);
-  if (!Number.isSafeInteger(time) || !id || !Types.ObjectId.isValid(id)) return null;
+  if (!Number.isSafeInteger(time) || !id || !Types.ObjectId.isValid(id))
+    return null;
   return { createdAt: new Date(time), id: new Types.ObjectId(id) };
 };
 
 /** Stable per rating, but not the id (which would reveal the exact time). */
-const reviewKey = (id: Types.ObjectId): string => createHash("sha256").update(id.toHexString()).digest("hex").slice(0, 16);
+const reviewKey = (id: Types.ObjectId): string =>
+  createHash("sha256").update(id.toHexString()).digest("hex").slice(0, 16);
 
 /**
  * Customer → driver ratings. NestJS decides everything: whether the ride is
@@ -100,7 +120,8 @@ export class RatingsService {
   constructor(
     @InjectModel(Rating.name) private readonly ratingModel: Model<Rating>,
     @InjectModel(Ride.name) private readonly rideModel: Model<Ride>,
-    @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
+    @InjectModel(DriverProfile.name)
+    private readonly driverModel: Model<DriverProfile>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
     config: ConfigService,
   ) {
@@ -114,10 +135,19 @@ export class RatingsService {
     });
   }
 
-  async statusForRide(customerUserId: string, rideId: string): Promise<RideRatingStatus> {
+  async statusForRide(
+    customerUserId: string,
+    rideId: string,
+  ): Promise<RideRatingStatus> {
     const ride = await this.customerRide(customerUserId, rideId);
-    const existing = await this.ratingModel.findOne({ rideId: ride._id }).exec();
-    const eligibility = ratingEligibility(ride, Boolean(existing), this.windowDays);
+    const existing = await this.ratingModel
+      .findOne({ rideId: ride._id })
+      .exec();
+    const eligibility = ratingEligibility(
+      ride,
+      Boolean(existing),
+      this.windowDays,
+    );
     return {
       rideId: ride._id.toString(),
       canRate: eligibility.canRate,
@@ -128,15 +158,29 @@ export class RatingsService {
     };
   }
 
-  async rate(customerUserId: string, rideId: string, dto: CreateRatingDto): Promise<RatingView> {
+  async rate(
+    customerUserId: string,
+    rideId: string,
+    dto: CreateRatingDto,
+  ): Promise<RatingView> {
     const ride = await this.customerRide(customerUserId, rideId);
     const already = await this.ratingModel.exists({ rideId: ride._id }).exec();
-    const eligibility = ratingEligibility(ride, Boolean(already), this.windowDays);
+    const eligibility = ratingEligibility(
+      ride,
+      Boolean(already),
+      this.windowDays,
+    );
     if (!eligibility.canRate) {
       if (eligibility.reason === RatingBlocker.ALREADY_RATED)
-        throw apiConflict("You have already rated this ride", "RATING_ALREADY_EXISTS");
+        throw apiConflict(
+          "You have already rated this ride",
+          "RATING_ALREADY_EXISTS",
+        );
       if (eligibility.reason === RatingBlocker.WINDOW_CLOSED)
-        throw apiConflict("This ride can no longer be rated", "RATING_WINDOW_CLOSED");
+        throw apiConflict(
+          "This ride can no longer be rated",
+          "RATING_WINDOW_CLOSED",
+        );
       throw apiConflict(
         eligibility.reason === RatingBlocker.PAYMENT_NOT_VERIFIED
           ? "You can rate this ride once the payment is complete"
@@ -157,7 +201,11 @@ export class RatingsService {
       });
     } catch (error) {
       // A double tap racing itself: the unique index lets exactly one in.
-      if (isDuplicateKey(error)) throw apiConflict("You have already rated this ride", "RATING_ALREADY_EXISTS");
+      if (isDuplicateKey(error))
+        throw apiConflict(
+          "You have already rated this ride",
+          "RATING_ALREADY_EXISTS",
+        );
       throw error;
     }
     await this.applyToDriver(rating);
@@ -165,9 +213,14 @@ export class RatingsService {
   }
 
   /** Aggregate for the driver app (`GET /drivers/me/ratings`). */
-  async summaryForDriverUser(driverUserId: string): Promise<DriverRatingSummary> {
-    const driver = await this.driverModel.findOne({ userId: new Types.ObjectId(driverUserId) }).exec();
-    if (!driver) throw apiNotFound("Driver profile not found", "DRIVER_NOT_FOUND");
+  async summaryForDriverUser(
+    driverUserId: string,
+  ): Promise<DriverRatingSummary> {
+    const driver = await this.driverModel
+      .findOne({ userId: new Types.ObjectId(driverUserId) })
+      .exec();
+    if (!driver)
+      throw apiNotFound("Driver profile not found", "DRIVER_NOT_FOUND");
     const rows = await this.ratingModel
       .aggregate<{ _id: number; count: number }>([
         { $match: { driverId: driver._id } },
@@ -175,7 +228,8 @@ export class RatingsService {
       ])
       .exec();
     const distribution = { "1": 0, "2": 0, "3": 0, "4": 0, "5": 0 };
-    for (const row of rows) distribution[String(row._id) as keyof typeof distribution] = row.count;
+    for (const row of rows)
+      distribution[String(row._id) as keyof typeof distribution] = row.count;
     return {
       ratingAverage: driver.ratingAverage,
       ratingCount: driver.ratingCount ?? 0,
@@ -187,16 +241,27 @@ export class RatingsService {
   /** The driver's individual ratings, newest first (`GET /drivers/me/ratings/reviews`). */
   async reviewsForDriverUser(
     driverUserId: string,
-    query: { cursor?: string; limit: number; stars?: number; withComment?: boolean },
+    query: {
+      cursor?: string;
+      limit: number;
+      stars?: number;
+      withComment?: boolean;
+    },
   ): Promise<DriverReviewsPage> {
-    const driver = await this.driverModel.findOne({ userId: new Types.ObjectId(driverUserId) }).select("_id").lean().exec();
-    if (!driver) throw apiNotFound("Driver profile not found", "DRIVER_NOT_FOUND");
+    const driver = await this.driverModel
+      .findOne({ userId: new Types.ObjectId(driverUserId) })
+      .select("_id")
+      .lean()
+      .exec();
+    if (!driver)
+      throw apiNotFound("Driver profile not found", "DRIVER_NOT_FOUND");
 
     const filter: Record<string, unknown> = { driverId: driver._id };
     if (query.stars !== undefined) filter.rating = query.stars;
     if (query.withComment) filter.comment = { $exists: true, $nin: [null, ""] };
     const after = query.cursor ? decodeCursor(query.cursor) : null;
-    if (query.cursor && !after) throw apiBadRequest("Invalid cursor", "VALIDATION_FAILED");
+    if (query.cursor && !after)
+      throw apiBadRequest("Invalid cursor", "VALIDATION_FAILED");
     if (after)
       filter.$or = [
         { createdAt: { $lt: after.createdAt } },
@@ -219,7 +284,10 @@ export class RatingsService {
         comment: row.comment || undefined,
         ratedOn: this.dayFormat.format(row.createdAt),
       })),
-      nextCursor: rows.length > query.limit && last ? encodeCursor(last.createdAt, last._id) : null,
+      nextCursor:
+        rows.length > query.limit && last
+          ? encodeCursor(last.createdAt, last._id)
+          : null,
     };
   }
 
@@ -239,7 +307,13 @@ export class RatingsService {
     await this.driverModel
       .updateOne(
         { _id: driverId },
-        { $set: { ratingSum: sum, ratingCount: count, ratingAverage: count ? round2(sum / count) : 0 } },
+        {
+          $set: {
+            ratingSum: sum,
+            ratingCount: count,
+            ratingAverage: count ? round2(sum / count) : 0,
+          },
+        },
       )
       .exec();
   }
@@ -254,11 +328,19 @@ export class RatingsService {
         .updateOne({ _id: rating.driverId }, [
           {
             $set: {
-              ratingSum: { $add: [{ $ifNull: ["$ratingSum", 0] }, rating.rating] },
+              ratingSum: {
+                $add: [{ $ifNull: ["$ratingSum", 0] }, rating.rating],
+              },
               ratingCount: { $add: [{ $ifNull: ["$ratingCount", 0] }, 1] },
             },
           },
-          { $set: { ratingAverage: { $round: [{ $divide: ["$ratingSum", "$ratingCount"] }, 2] } } },
+          {
+            $set: {
+              ratingAverage: {
+                $round: [{ $divide: ["$ratingSum", "$ratingCount"] }, 2],
+              },
+            },
+          },
         ])
         .exec();
     } catch (error) {
@@ -270,22 +352,39 @@ export class RatingsService {
     }
   }
 
-  private async customerRide(customerUserId: string, rideId: string): Promise<RideDocument> {
+  private async customerRide(
+    customerUserId: string,
+    rideId: string,
+  ): Promise<RideDocument> {
     const ride = await this.rideModel
-      .findOne({ _id: new Types.ObjectId(rideId), customerId: new Types.ObjectId(customerUserId) })
+      .findOne({
+        _id: new Types.ObjectId(rideId),
+        customerId: new Types.ObjectId(customerUserId),
+      })
       .exec();
     // Someone else's ride is indistinguishable from a missing one.
     if (!ride) throw rideNotFound();
     return ride;
   }
 
-  private async driverSummary(ride: RideDocument): Promise<RideRatingStatus["driver"]> {
+  private async driverSummary(
+    ride: RideDocument,
+  ): Promise<RideRatingStatus["driver"]> {
     if (!ride.driverId) return null;
-    const profile = await this.driverModel.findById(ride.driverId).lean().exec();
+    const profile = await this.driverModel
+      .findById(ride.driverId)
+      .lean()
+      .exec();
     if (!profile) return null;
-    const user = await this.userModel.findById(profile.userId).select("firstName lastName").lean().exec();
+    const user = await this.userModel
+      .findById(profile.userId)
+      .select("firstName lastName")
+      .lean()
+      .exec();
     return {
-      name: user ? [user.firstName, user.lastName].filter(Boolean).join(" ") : "Your driver",
+      name: user
+        ? [user.firstName, user.lastName].filter(Boolean).join(" ")
+        : "Your driver",
       ratingAverage: profile.ratingAverage,
       ratingCount: profile.ratingCount ?? 0,
       vehicle: ride.vehicle

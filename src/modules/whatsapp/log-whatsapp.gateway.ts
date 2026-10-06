@@ -2,7 +2,11 @@ import { randomUUID } from "node:crypto";
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { WhatsAppDeliveryError, WhatsAppGateway } from "./whatsapp.gateway";
-import type { AuthenticationCodeMessage, SosAlertMessage, WhatsAppSendResult } from "./whatsapp.gateway";
+import type {
+  AuthenticationCodeMessage,
+  SosAlertMessage,
+  WhatsAppSendResult,
+} from "./whatsapp.gateway";
 
 /**
  * Development stand-in for Meta: prints the code to the server log so the
@@ -20,20 +24,32 @@ export class LogWhatsAppGateway extends WhatsAppGateway {
     super();
     this.production = config.get<string>("nodeEnv") === "production";
     if (!this.production)
-      this.logger.warn("WhatsApp is not configured: signup codes are printed to this log (development only)");
+      this.logger.warn(
+        "WhatsApp is not configured: signup codes are printed to this log (development only)",
+      );
   }
 
-  async sendAuthenticationCode(message: AuthenticationCodeMessage): Promise<WhatsAppSendResult> {
+  async sendAuthenticationCode(
+    message: AuthenticationCodeMessage,
+  ): Promise<WhatsAppSendResult> {
     if (this.production)
-      throw new WhatsAppDeliveryError("MISCONFIGURED", "The log WhatsApp gateway is disabled in production");
+      throw new WhatsAppDeliveryError(
+        "MISCONFIGURED",
+        "The log WhatsApp gateway is disabled in production",
+      );
     // Plain ASCII: the Windows console garbles arrows.
-    this.logger.log(`[DEV OTP] >>> ${message.code} <<< for ${message.to} (WhatsApp not configured)`);
+    this.logger.log(
+      `[DEV OTP] >>> ${message.code} <<< for ${message.to} (WhatsApp not configured)`,
+    );
     return { messageId: `log-${randomUUID()}` };
   }
 
   async sendSosAlert(message: SosAlertMessage): Promise<WhatsAppSendResult> {
     if (this.production)
-      throw new WhatsAppDeliveryError("MISCONFIGURED", "The log WhatsApp gateway is disabled in production");
+      throw new WhatsAppDeliveryError(
+        "MISCONFIGURED",
+        "The log WhatsApp gateway is disabled in production",
+      );
     this.logger.log(
       `[DEV SOS ${message.kind}] ${message.reference} for ${message.to}: ${message.personName} at ` +
         `${message.location.latitude},${message.location.longitude}, track ${message.trackingUrl}`,

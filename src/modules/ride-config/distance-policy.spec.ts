@@ -1,4 +1,9 @@
-import { checkTripDistance, distanceLimitsProblem, maxDistanceMeters, radiiProblem } from "./distance-policy";
+import {
+  checkTripDistance,
+  distanceLimitsProblem,
+  maxDistanceMeters,
+  radiiProblem,
+} from "./distance-policy";
 
 const LIMITS = { minDistanceMeters: 200, maxDistanceKm: 80 };
 
@@ -15,8 +20,12 @@ describe("checkTripDistance", () => {
   });
 
   it("reports the limit that was broken, in metres", () => {
-    expect(checkTripDistance(LIMITS, 10)?.data).toEqual({ minDistanceMeters: 200 });
-    expect(checkTripDistance(LIMITS, 90_000)?.data).toEqual({ maxDistanceMeters: 80_000 });
+    expect(checkTripDistance(LIMITS, 10)?.data).toEqual({
+      minDistanceMeters: 200,
+    });
+    expect(checkTripDistance(LIMITS, 90_000)?.data).toEqual({
+      maxDistanceMeters: 80_000,
+    });
   });
 
   it("judges each ride type by its own limits", () => {
@@ -32,8 +41,12 @@ describe("checkTripDistance", () => {
   });
 
   it("supports fractional maximums without drift", () => {
-    expect(maxDistanceMeters({ minDistanceMeters: 100, maxDistanceKm: 2.5 })).toBe(2_500);
-    expect(maxDistanceMeters({ minDistanceMeters: 100, maxDistanceKm: 0.1 + 0.2 })).toBe(300);
+    expect(
+      maxDistanceMeters({ minDistanceMeters: 100, maxDistanceKm: 2.5 }),
+    ).toBe(2_500);
+    expect(
+      maxDistanceMeters({ minDistanceMeters: 100, maxDistanceKm: 0.1 + 0.2 }),
+    ).toBe(300);
   });
 });
 
@@ -50,8 +63,14 @@ describe("distanceLimitsProblem", () => {
     ["zero maximum", { minDistanceMeters: 200, maxDistanceKm: 0 }],
     ["negative maximum", { minDistanceMeters: 200, maxDistanceKm: -1 }],
     ["NaN", { minDistanceMeters: Number.NaN, maxDistanceKm: 10 }],
-    ["Infinity", { minDistanceMeters: 200, maxDistanceKm: Number.POSITIVE_INFINITY }],
-    ["minimum equal to maximum", { minDistanceMeters: 5_000, maxDistanceKm: 5 }],
+    [
+      "Infinity",
+      { minDistanceMeters: 200, maxDistanceKm: Number.POSITIVE_INFINITY },
+    ],
+    [
+      "minimum equal to maximum",
+      { minDistanceMeters: 5_000, maxDistanceKm: 5 },
+    ],
     ["minimum above maximum", { minDistanceMeters: 6_000, maxDistanceKm: 5 }],
     ["absurd maximum", { minDistanceMeters: 200, maxDistanceKm: 5_000 }],
     ["absurd minimum", { minDistanceMeters: 60_000, maxDistanceKm: 900 }],
@@ -62,11 +81,21 @@ describe("distanceLimitsProblem", () => {
 
 describe("radiiProblem", () => {
   it("accepts sound radii and rejects bad ones", () => {
-    expect(radiiProblem({ matchingRadiusKm: 8, nearbyDriversRadiusKm: 3 })).toBeNull();
-    expect(radiiProblem({ matchingRadiusKm: 0, nearbyDriversRadiusKm: 3 })).not.toBeNull();
-    expect(radiiProblem({ matchingRadiusKm: 8, nearbyDriversRadiusKm: -1 })).not.toBeNull();
-    expect(radiiProblem({ matchingRadiusKm: 500, nearbyDriversRadiusKm: 3 })).not.toBeNull();
+    expect(
+      radiiProblem({ matchingRadiusKm: 8, nearbyDriversRadiusKm: 3 }),
+    ).toBeNull();
+    expect(
+      radiiProblem({ matchingRadiusKm: 0, nearbyDriversRadiusKm: 3 }),
+    ).not.toBeNull();
+    expect(
+      radiiProblem({ matchingRadiusKm: 8, nearbyDriversRadiusKm: -1 }),
+    ).not.toBeNull();
+    expect(
+      radiiProblem({ matchingRadiusKm: 500, nearbyDriversRadiusKm: 3 }),
+    ).not.toBeNull();
     expect(radiiProblem({ matchingRadiusKm: 8 })).not.toBeNull();
-    expect(radiiProblem({ matchingRadiusKm: "8", nearbyDriversRadiusKm: 3 })).not.toBeNull();
+    expect(
+      radiiProblem({ matchingRadiusKm: "8", nearbyDriversRadiusKm: 3 }),
+    ).not.toBeNull();
   });
 });

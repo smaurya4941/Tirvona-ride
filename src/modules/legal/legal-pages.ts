@@ -17,7 +17,7 @@ export interface LegalContext {
 }
 
 /** Bump when the wording changes in substance. */
-export const LEGAL_LAST_UPDATED = "6 October 2026";
+export const LEGAL_LAST_UPDATED = "7 October 2026";
 
 export const LEGAL_PATHS = {
   privacy: "/api/v1/legal/privacy",
@@ -179,8 +179,14 @@ export function renderTerms(ctx: LegalContext): string {
 <h2>6. Payments and refunds</h2>
 <p>Online payments are processed by Razorpay. Refunds, where due, go back to the original payment method. Disputes can be raised from the ride in the app or by contacting support.</p>
 
-<h2>7. Liability</h2>
-<p>To the extent the law allows, ${who} is not liable for indirect losses and is not responsible for the conduct of riders or drivers beyond what the law requires. Nothing here limits liability that cannot be limited by law.</p>
+<h2>7. Liability, devices and insurance</h2>
+<ul>
+<li>${who} is not responsible or liable for any damage or loss, whether personal, financial or of any other kind, during, before or after a ride.</li>
+<li>${who} is not responsible or liable for any damage to the hardware or software of the mobile phone or other electronic device you use to book or drive.</li>
+<li>All insurance is independently covered by the rider or customer (and by the driver for the vehicle and driving). ${who} does not provide any insurance or damage compensation of any kind.</li>
+<li>${who} is also not responsible for the conduct of riders or drivers beyond what the law requires.</li>
+</ul>
+<p>These limits apply to the extent the law allows. Nothing here limits liability that cannot be limited by law.</p>
 
 <h2>8. Ending your account</h2>
 <p>You can delete your account at any time from the app (see our <a href="${escapeHtml(ctx.baseUrl + LEGAL_PATHS.deleteAccount)}">account deletion page</a>). Deleting does not cancel amounts already owed.</p>

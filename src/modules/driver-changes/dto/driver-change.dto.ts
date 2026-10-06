@@ -19,7 +19,8 @@ import { VehicleDocumentType } from "../../vehicles/schemas/vehicle-document.sch
 import { VehicleType } from "../../vehicles/schemas/vehicle.schema";
 import { DriverChangeStatus } from "../schemas/driver-change-request.schema";
 
-const trim = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value);
+const trim = ({ value }: { value: unknown }) =>
+  typeof value === "string" ? value.trim() : value;
 const trimOrUndefined = ({ value }: { value: unknown }) =>
   typeof value === "string" ? value.trim() || undefined : value;
 const plate = ({ value }: { value: unknown }) =>
@@ -34,7 +35,10 @@ export class DriverProfileChangeDto {
   @Length(4, 30)
   licenseNumber?: string;
 
-  @ApiPropertyOptional({ example: "2034-05-31", description: "Must be in the future" })
+  @ApiPropertyOptional({
+    example: "2034-05-31",
+    description: "Must be in the future",
+  })
   @IsOptional()
   @IsDateString({ strict: true })
   licenseExpiry?: string;
@@ -61,7 +65,9 @@ export class VehicleChangeDto {
   @Transform(plate)
   @IsString()
   @Length(4, 15)
-  @Matches(/^[A-Z0-9]+$/, { message: "registrationNumber may contain only letters and digits" })
+  @Matches(/^[A-Z0-9]+$/, {
+    message: "registrationNumber may contain only letters and digits",
+  })
   registrationNumber?: string;
 
   @ApiPropertyOptional()
@@ -103,9 +109,15 @@ export class DocumentChangeDto {
   @IsIn(DOCUMENT_SCOPES)
   scope!: DocumentScope;
 
-  @ApiProperty({ description: "A DriverDocumentType for DRIVER, a VehicleDocumentType for VEHICLE" })
+  @ApiProperty({
+    description:
+      "A DriverDocumentType for DRIVER, a VehicleDocumentType for VEHICLE",
+  })
   // Which enum applies depends on `scope`; the service checks it.
-  @IsIn([...Object.values(DriverDocumentType), ...Object.values(VehicleDocumentType)])
+  @IsIn([
+    ...Object.values(DriverDocumentType),
+    ...Object.values(VehicleDocumentType),
+  ])
   documentType!: string;
 
   @ApiPropertyOptional({ description: "Required for VEHICLE documents" })
@@ -120,7 +132,10 @@ export class DocumentChangeDto {
   @Length(1, 40)
   documentNumber?: string;
 
-  @ApiPropertyOptional({ example: "2027-03-31", description: "When the renewed document expires (future)" })
+  @ApiPropertyOptional({
+    example: "2027-03-31",
+    description: "When the renewed document expires (future)",
+  })
   @IsOptional()
   @Transform(trimOrUndefined)
   @IsDateString({ strict: true })
@@ -135,7 +150,10 @@ export class DriverChangeListQueryDto {
 }
 
 export class AdminDriverChangeQueryDto {
-  @ApiPropertyOptional({ enum: DriverChangeStatus, default: DriverChangeStatus.PENDING })
+  @ApiPropertyOptional({
+    enum: DriverChangeStatus,
+    default: DriverChangeStatus.PENDING,
+  })
   @IsOptional()
   @IsEnum(DriverChangeStatus)
   status: DriverChangeStatus = DriverChangeStatus.PENDING;

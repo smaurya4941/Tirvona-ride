@@ -32,7 +32,9 @@ function haversine(a: TrailPoint, b: TrailPoint): number {
   const dLon = toRadians(b.longitude - a.longitude);
   const h =
     Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRadians(a.latitude)) * Math.cos(toRadians(b.latitude)) * Math.sin(dLon / 2) ** 2;
+    Math.cos(toRadians(a.latitude)) *
+      Math.cos(toRadians(b.latitude)) *
+      Math.sin(dLon / 2) ** 2;
   return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
@@ -46,16 +48,29 @@ function haversine(a: TrailPoint, b: TrailPoint): number {
  * (GPS off, app killed) under-measures, so it is flagged unreliable and the
  * caller falls back to the booked distance.
  */
-export function measureTrip(points: TrailPoint[], maxGapSeconds: number): TripMeasurement {
-  const ordered = [...points].sort((a, b) => a.recordedAt.getTime() - b.recordedAt.getTime());
-  if (ordered.length < 2) return { distanceMeters: 0, points: ordered.length, maxGapSeconds: 0, reliable: false, reason: "TOO_FEW_POINTS" };
+export function measureTrip(
+  points: TrailPoint[],
+  maxGapSeconds: number,
+): TripMeasurement {
+  const ordered = [...points].sort(
+    (a, b) => a.recordedAt.getTime() - b.recordedAt.getTime(),
+  );
+  if (ordered.length < 2)
+    return {
+      distanceMeters: 0,
+      points: ordered.length,
+      maxGapSeconds: 0,
+      reliable: false,
+      reason: "TOO_FEW_POINTS",
+    };
 
   let distance = 0;
   let longestGap = 0;
   let glitches = 0;
   let previous = ordered[0];
   for (const point of ordered.slice(1)) {
-    const seconds = (point.recordedAt.getTime() - previous.recordedAt.getTime()) / 1000;
+    const seconds =
+      (point.recordedAt.getTime() - previous.recordedAt.getTime()) / 1000;
     longestGap = Math.max(longestGap, seconds);
     const leg = haversine(previous, point);
     if (seconds > 0 && leg / seconds > MAX_PLAUSIBLE_SPEED_MPS) {
@@ -71,9 +86,11 @@ export function measureTrip(points: TrailPoint[], maxGapSeconds: number): TripMe
     points: ordered.length,
     maxGapSeconds: Math.round(longestGap),
   };
-  if (longestGap > maxGapSeconds) return { ...measurement, reliable: false, reason: "GAP_TOO_LONG" };
+  if (longestGap > maxGapSeconds)
+    return { ...measurement, reliable: false, reason: "GAP_TOO_LONG" };
   // More than a quarter of the legs jumping: the device's GPS is not usable.
-  if (glitches * 4 > ordered.length - 1) return { ...measurement, reliable: false, reason: "GLITCHY" };
+  if (glitches * 4 > ordered.length - 1)
+    return { ...measurement, reliable: false, reason: "GLITCHY" };
   return { ...measurement, reliable: true };
 }
 
@@ -120,16 +137,29 @@ export interface FinalFareResult {
  */
 export function resolveFinalFare(input: FinalFareInput): FinalFareResult {
   const actual = input.mode === "actual";
-  const durationSource: TripSource = actual && input.startedAt ? "ACTUAL" : "BOOKED";
+  const durationSource: TripSource =
+    actual && input.startedAt ? "ACTUAL" : "BOOKED";
   const durationSeconds =
     durationSource === "ACTUAL"
-      ? Math.max(0, Math.round((input.completedAt.getTime() - input.startedAt!.getTime()) / 1000))
+      ? Math.max(
+          0,
+          Math.round(
+            (input.completedAt.getTime() - input.startedAt!.getTime()) / 1000,
+          ),
+        )
       : input.bookedDurationSeconds;
-  const distanceSource: TripSource = actual && input.measurement?.reliable ? "ACTUAL" : "BOOKED";
-  const distanceMeters = distanceSource === "ACTUAL" ? input.measurement!.distanceMeters : input.bookedDistanceMeters;
+  const distanceSource: TripSource =
+    actual && input.measurement?.reliable ? "ACTUAL" : "BOOKED";
+  const distanceMeters =
+    distanceSource === "ACTUAL"
+      ? input.measurement!.distanceMeters
+      : input.bookedDistanceMeters;
 
   const breakdown = calculateFare(input.rates, distanceMeters, durationSeconds);
-  const cap = input.maxEstimateMultiplier > 0 ? Math.round(input.estimatedFare * input.maxEstimateMultiplier) : Infinity;
+  const cap =
+    input.maxEstimateMultiplier > 0
+      ? Math.round(input.estimatedFare * input.maxEstimateMultiplier)
+      : Infinity;
   const capApplied = breakdown.total > cap;
   return {
     breakdown,

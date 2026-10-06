@@ -1,7 +1,10 @@
 import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { MongooseModule } from "@nestjs/mongoose";
-import { DriverProfile, DriverProfileSchema } from "../drivers/schemas/driver-profile.schema";
+import {
+  DriverProfile,
+  DriverProfileSchema,
+} from "../drivers/schemas/driver-profile.schema";
 import { LocationsModule } from "../locations/locations.module";
 import { Ride, RideSchema } from "../rides/schemas/ride.schema";
 import { User, UserSchema } from "../users/schemas/user.schema";
@@ -25,7 +28,13 @@ import { SocketAuthService } from "./socket-auth.service";
     ]),
     LocationsModule,
   ],
-  providers: [RealtimeGateway, RealtimeService, SocketAuthService, RideRoomAccessService, LocationRelayService],
+  providers: [
+    RealtimeGateway,
+    RealtimeService,
+    SocketAuthService,
+    RideRoomAccessService,
+    LocationRelayService,
+  ],
   exports: [RealtimeService, LocationRelayService],
 })
 export class RealtimeModule {}

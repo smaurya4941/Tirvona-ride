@@ -1,4 +1,12 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Ip, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Ip,
+  Post,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Public } from "../../common/decorators/public.decorator";
@@ -13,7 +21,11 @@ import { RequestLoginOtpDto, VerifyLoginOtpDto } from "./dto/login-otp.dto";
 import { RefreshTokenDto } from "./dto/refresh-token.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { PhoneOtpDto } from "./dto/otp-code.dto";
-import { ForgotPasswordDto, ResetPasswordDto, VerifyPasswordResetOtpDto } from "./dto/password-reset.dto";
+import {
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  VerifyPasswordResetOtpDto,
+} from "./dto/password-reset.dto";
 import { ResendOtpDto } from "./dto/resend-otp.dto";
 import { VerifyOtpDto } from "./dto/verify-otp.dto";
 import { LoginOtpService } from "./login-otp.service";
@@ -38,8 +50,10 @@ export class AuthController {
   @Post("register")
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
-    summary: "Start a customer or driver signup: sends a 6-digit code to the number on WhatsApp",
-    description: "No account exists until POST /auth/verify-otp succeeds with the returned verificationId.",
+    summary:
+      "Start a customer or driver signup: sends a 6-digit code to the number on WhatsApp",
+    description:
+      "No account exists until POST /auth/verify-otp succeeds with the returned verificationId.",
   })
   async register(
     @Body() dto: RegisterDto,
@@ -52,7 +66,10 @@ export class AuthController {
   @ThrottlePolicy("otpVerify")
   @Post("verify-otp")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Verify the signup code: creates the account and signs the user in" })
+  @ApiOperation({
+    summary:
+      "Verify the signup code: creates the account and signs the user in",
+  })
   async verifyOtp(
     @Body() dto: VerifyOtpDto,
     @Ip() ip: string,
@@ -70,8 +87,12 @@ export class AuthController {
   @ThrottlePolicy("otpSend")
   @Post("resend-otp")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Send a new signup code on WhatsApp (earlier codes stop working)" })
-  async resendOtp(@Body() dto: ResendOtpDto): Promise<ApiSuccessBody<SignupChallengeView>> {
+  @ApiOperation({
+    summary: "Send a new signup code on WhatsApp (earlier codes stop working)",
+  })
+  async resendOtp(
+    @Body() dto: ResendOtpDto,
+  ): Promise<ApiSuccessBody<SignupChallengeView>> {
     return ok(await this.signup.resend(dto));
   }
 
@@ -100,11 +121,14 @@ export class AuthController {
   @Post("login/otp/request")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: "Log in with a WhatsApp code: send a 6-digit code to the account's number",
+    summary:
+      "Log in with a WhatsApp code: send a 6-digit code to the account's number",
     description:
       "Also the resend: inside the cooldown the code already sent is kept (codeSent=false), after it a new code replaces it. 404 ACCOUNT_NOT_FOUND when no customer or driver account uses the number (nothing is sent).",
   })
-  async requestLoginOtp(@Body() dto: RequestLoginOtpDto): Promise<ApiSuccessBody<OtpChallengeView>> {
+  async requestLoginOtp(
+    @Body() dto: RequestLoginOtpDto,
+  ): Promise<ApiSuccessBody<OtpChallengeView>> {
     return ok(await this.loginOtp.requestCode(dto.phone));
   }
 
@@ -112,8 +136,14 @@ export class AuthController {
   @ThrottlePolicy("otpVerify")
   @Post("login/otp/verify")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Log in with the WhatsApp code: returns the same session as password login" })
-  async verifyLoginOtp(@Body() dto: VerifyLoginOtpDto, @Ip() ip: string): Promise<ApiSuccessBody<AuthSession>> {
+  @ApiOperation({
+    summary:
+      "Log in with the WhatsApp code: returns the same session as password login",
+  })
+  async verifyLoginOtp(
+    @Body() dto: VerifyLoginOtpDto,
+    @Ip() ip: string,
+  ): Promise<ApiSuccessBody<AuthSession>> {
     return ok(
       await this.loginOtp.verify(dto.phone, dto.otp, {
         deviceId: dto.deviceId,
@@ -155,7 +185,9 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Sign out on every device, this one included" })
-  async logoutAll(@CurrentUser() user: AuthenticatedUser): Promise<ApiSuccessBody<{ sessionsEnded: number }>> {
+  async logoutAll(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ApiSuccessBody<{ sessionsEnded: number }>> {
     return ok({ sessionsEnded: await this.auth.logoutEverywhere(user.userId) });
   }
 
@@ -166,10 +198,14 @@ export class AuthController {
   @Post("password/forgot")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: "Forgot password: send a 6-digit reset code to the account's number on WhatsApp",
-    description: "Inside the resend cooldown the code already sent is kept (codeSent=false). 404 ACCOUNT_NOT_FOUND when no customer or driver account uses the number.",
+    summary:
+      "Forgot password: send a 6-digit reset code to the account's number on WhatsApp",
+    description:
+      "Inside the resend cooldown the code already sent is kept (codeSent=false). 404 ACCOUNT_NOT_FOUND when no customer or driver account uses the number.",
   })
-  async forgotPassword(@Body() dto: ForgotPasswordDto): Promise<ApiSuccessBody<OtpChallengeView>> {
+  async forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+  ): Promise<ApiSuccessBody<OtpChallengeView>> {
     return ok(await this.passwordReset.requestCode(dto.phone));
   }
 
@@ -177,8 +213,13 @@ export class AuthController {
   @ThrottlePolicy("otpVerify")
   @Post("password/verify-otp")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Check the reset code; returns a one-time token for choosing the new password" })
-  async verifyPasswordResetOtp(@Body() dto: VerifyPasswordResetOtpDto): Promise<ApiSuccessBody<PasswordResetTicket>> {
+  @ApiOperation({
+    summary:
+      "Check the reset code; returns a one-time token for choosing the new password",
+  })
+  async verifyPasswordResetOtp(
+    @Body() dto: VerifyPasswordResetOtpDto,
+  ): Promise<ApiSuccessBody<PasswordResetTicket>> {
     return ok(await this.passwordReset.verifyCode(dto.phone, dto.otp));
   }
 
@@ -186,8 +227,14 @@ export class AuthController {
   @ThrottlePolicy("auth")
   @Post("password/reset")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Set a new password with the reset token: signs out every device and signs this one in" })
-  async resetPassword(@Body() dto: ResetPasswordDto, @Ip() ip: string): Promise<ApiSuccessBody<AuthSession>> {
+  @ApiOperation({
+    summary:
+      "Set a new password with the reset token: signs out every device and signs this one in",
+  })
+  async resetPassword(
+    @Body() dto: ResetPasswordDto,
+    @Ip() ip: string,
+  ): Promise<ApiSuccessBody<AuthSession>> {
     return ok(
       await this.passwordReset.reset(dto.resetToken, dto.newPassword, {
         deviceId: dto.deviceId,
@@ -202,8 +249,13 @@ export class AuthController {
   @Post("phone/send-otp")
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Send a WhatsApp code to verify the signed-in account's own number (accounts created before signup OTP)" })
-  async sendPhoneOtp(@CurrentUser() user: AuthenticatedUser): Promise<ApiSuccessBody<OtpChallengeView>> {
+  @ApiOperation({
+    summary:
+      "Send a WhatsApp code to verify the signed-in account's own number (accounts created before signup OTP)",
+  })
+  async sendPhoneOtp(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<ApiSuccessBody<OtpChallengeView>> {
     return ok(await this.signup.sendExistingAccountCode(user.userId));
   }
 
@@ -221,7 +273,9 @@ export class AuthController {
 
   @Get("me")
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Get the authenticated user, including driver status" })
+  @ApiOperation({
+    summary: "Get the authenticated user, including driver status",
+  })
   async me(
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<ApiSuccessBody<AuthUserView>> {

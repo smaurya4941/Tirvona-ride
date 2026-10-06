@@ -9,7 +9,11 @@ export function clampAddress(value: string, max = MAX_ADDRESS_LENGTH): string {
   if (text.length <= max) return text;
   const cut = text.slice(0, max);
   const comma = cut.lastIndexOf(",");
-  return (comma > max / 2 ? cut.slice(0, comma) : cut.slice(0, max - 1).trimEnd() + "…").trim();
+  return (
+    comma > max / 2
+      ? cut.slice(0, comma)
+      : cut.slice(0, max - 1).trimEnd() + "…"
+  ).trim();
 }
 
 /** Lower-case, accent-free, punctuation-free text for matching and cache keys. */
@@ -29,7 +33,11 @@ export function normalizeQuery(value: string): string {
  * row shows: drops the leading name, postcodes and the country, and keeps
  * the most specific [maxParts] pieces.
  */
-export function secondaryLine(fullAddress: string, name: string, maxParts = 4): string {
+export function secondaryLine(
+  fullAddress: string,
+  name: string,
+  maxParts = 4,
+): string {
   const normalizedName = normalizeQuery(name);
   const parts = fullAddress
     .split(",")
@@ -52,7 +60,8 @@ export function secondaryLine(fullAddress: string, name: string, maxParts = 4): 
 /** "Prem Mandir, Raman Reiti, Vrindavan" — name first, then the locality. */
 export function bookingAddress(name: string, secondary: string): string {
   if (!secondary) return clampAddress(name);
-  if (normalizeQuery(secondary).startsWith(normalizeQuery(name))) return clampAddress(secondary);
+  if (normalizeQuery(secondary).startsWith(normalizeQuery(name)))
+    return clampAddress(secondary);
   return clampAddress(`${name}, ${secondary}`);
 }
 

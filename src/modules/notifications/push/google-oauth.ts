@@ -3,7 +3,8 @@ import { createSign } from "node:crypto";
 export const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 export const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
-const base64Url = (input: string | Buffer): string => Buffer.from(input).toString("base64url");
+const base64Url = (input: string | Buffer): string =>
+  Buffer.from(input).toString("base64url");
 
 /**
  * A signed service-account assertion (RFC 7523) that Google exchanges for

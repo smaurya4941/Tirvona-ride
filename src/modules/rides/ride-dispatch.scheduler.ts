@@ -1,5 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { OnApplicationBootstrap, OnApplicationShutdown } from "@nestjs/common";
+import type {
+  OnApplicationBootstrap,
+  OnApplicationShutdown,
+} from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { RideDispatchService } from "./ride-dispatch.service";
 
@@ -10,7 +13,9 @@ import { RideDispatchService } from "./ride-dispatch.service";
  * Every sweep step is idempotent, so running it on several instances is safe.
  */
 @Injectable()
-export class RideDispatchScheduler implements OnApplicationBootstrap, OnApplicationShutdown {
+export class RideDispatchScheduler
+  implements OnApplicationBootstrap, OnApplicationShutdown
+{
   private readonly logger = new Logger(RideDispatchScheduler.name);
   private timer?: NodeJS.Timeout;
   private running = false;
@@ -21,9 +26,13 @@ export class RideDispatchScheduler implements OnApplicationBootstrap, OnApplicat
   ) {}
 
   onApplicationBootstrap(): void {
-    const intervalMs = this.config.getOrThrow<number>("matchingSweepIntervalMs");
+    const intervalMs = this.config.getOrThrow<number>(
+      "matchingSweepIntervalMs",
+    );
     if (intervalMs <= 0) {
-      this.logger.warn("Dispatch sweep disabled (MATCHING_SWEEP_INTERVAL_MS=0)");
+      this.logger.warn(
+        "Dispatch sweep disabled (MATCHING_SWEEP_INTERVAL_MS=0)",
+      );
       return;
     }
     this.timer = setInterval(() => void this.tick(), intervalMs);
@@ -42,7 +51,10 @@ export class RideDispatchScheduler implements OnApplicationBootstrap, OnApplicat
     try {
       await this.dispatch.sweep();
     } catch (error) {
-      this.logger.error("Dispatch sweep failed", error instanceof Error ? error.stack : String(error));
+      this.logger.error(
+        "Dispatch sweep failed",
+        error instanceof Error ? error.stack : String(error),
+      );
     } finally {
       this.running = false;
     }

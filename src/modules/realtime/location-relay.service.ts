@@ -25,8 +25,14 @@ export class LocationRelayService {
     private readonly domainEvents: DomainEventsService,
   ) {}
 
-  async handle(driverId: string, fix: DriverLocationFixDto, options: RelayOptions): Promise<LocationIngestResult> {
-    const result = await this.locations.ingest(driverId, fix, { enforceRateLimit: options.enforceRateLimit });
+  async handle(
+    driverId: string,
+    fix: DriverLocationFixDto,
+    options: RelayOptions,
+  ): Promise<LocationIngestResult> {
+    const result = await this.locations.ingest(driverId, fix, {
+      enforceRateLimit: options.enforceRateLimit,
+    });
     if (!result.accepted) return result;
 
     if (result.relay) {

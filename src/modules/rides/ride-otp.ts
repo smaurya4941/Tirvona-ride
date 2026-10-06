@@ -9,7 +9,10 @@ export const generateRideOtp = (): string =>
     .padStart(RIDE_OTP_LENGTH, "0");
 
 /** Constant-time comparison; false for any length mismatch. */
-export function rideOtpMatches(submitted: string, expected: string | undefined): boolean {
+export function rideOtpMatches(
+  submitted: string,
+  expected: string | undefined,
+): boolean {
   if (!expected) return false;
   const a = Buffer.from(submitted);
   const b = Buffer.from(expected);

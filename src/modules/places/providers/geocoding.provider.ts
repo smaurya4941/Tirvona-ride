@@ -35,10 +35,15 @@ export abstract class GeocodingProvider {
   abstract readonly isConfigured: boolean;
 
   /** Text search as the rider types. Suggestions carry no `featured` flag. */
-  abstract autocomplete(request: ProviderSearchRequest): Promise<Array<Omit<PlaceSuggestion, "featured">>>;
+  abstract autocomplete(
+    request: ProviderSearchRequest,
+  ): Promise<Array<Omit<PlaceSuggestion, "featured">>>;
 
   /** Coordinates for a suggestion id this provider issued; null if unknown. */
-  abstract resolve(id: string, sessionToken?: string): Promise<ResolvedPlace | null>;
+  abstract resolve(
+    id: string,
+    sessionToken?: string,
+  ): Promise<ResolvedPlace | null>;
 
   /** The nearest addressable place to a point; null if none. */
   abstract reverse(point: GeoCoordinates): Promise<ResolvedPlace | null>;

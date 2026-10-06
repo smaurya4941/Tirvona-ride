@@ -19,7 +19,11 @@ const DRIVER_POSITION_DECIMALS = 3;
 
 export interface NearbyDriversView {
   /** Approximate positions of free drivers; no ids, names or plates. */
-  drivers: Array<{ latitude: number; longitude: number; vehicleType: VehicleType | null }>;
+  drivers: Array<{
+    latitude: number;
+    longitude: number;
+    vehicleType: VehicleType | null;
+  }>;
   radiusMeters: number;
 }
 
@@ -47,8 +51,13 @@ export class RiderHomeService {
   async nearbyDrivers(point: GeoCoordinates): Promise<NearbyDriversView> {
     // The admin's current nearby-drivers radius, read per request.
     const radiusMeters = await this.settings.nearbyDriversRadiusMeters();
-    const found = await this.matching.nearbyAvailable(point, radiusMeters, this.nearbyLimit);
-    const round = (value: number) => Number(value.toFixed(DRIVER_POSITION_DECIMALS));
+    const found = await this.matching.nearbyAvailable(
+      point,
+      radiusMeters,
+      this.nearbyLimit,
+    );
+    const round = (value: number) =>
+      Number(value.toFixed(DRIVER_POSITION_DECIMALS));
     return {
       drivers: found.map((driver) => ({
         latitude: round(driver.latitude),
@@ -63,19 +72,39 @@ export class RiderHomeService {
    * Distinct destinations of the rider's own bookings, most recent first.
    * Cancelled bookings count too: the rider still meant to go there.
    */
-  async recentDestinations(customerId: string, limit: number): Promise<RecentDestinationView[]> {
+  async recentDestinations(
+    customerId: string,
+    limit: number,
+  ): Promise<RecentDestinationView[]> {
     const rows = await this.rides
       .find({ customerId: new Types.ObjectId(customerId) })
       .sort({ requestedAt: -1 })
       .limit(RECENT_SCAN_LIMIT)
       .select("destination requestedAt")
-      .lean<Array<{ destination: { address: string; latitude: number; longitude: number }; requestedAt: Date }>>();
+      .lean<
+        Array<{
+          destination: { address: string; latitude: number; longitude: number };
+          requestedAt: Date;
+        }>
+      >();
     const recent: RecentDestinationView[] = [];
     for (const row of rows) {
       if (recent.length >= limit) break;
       const { address, latitude, longitude } = row.destination;
-      if (recent.some((seen) => haversineMeters(seen, { latitude, longitude }) < SAME_DESTINATION_METERS)) continue;
-      recent.push({ address, latitude, longitude, lastUsedAt: row.requestedAt });
+      if (
+        recent.some(
+          (seen) =>
+            haversineMeters(seen, { latitude, longitude }) <
+            SAME_DESTINATION_METERS,
+        )
+      )
+        continue;
+      recent.push({
+        address,
+        latitude,
+        longitude,
+        lastUsedAt: row.requestedAt,
+      });
     }
     return recent;
   }

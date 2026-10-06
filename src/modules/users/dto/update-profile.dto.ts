@@ -10,7 +10,8 @@ import {
   ValidateIf,
 } from "class-validator";
 
-const trim = ({ value }: { value: unknown }) => (typeof value === "string" ? value.trim() : value);
+const trim = ({ value }: { value: unknown }) =>
+  typeof value === "string" ? value.trim() : value;
 
 /** PATCH /users/me — every field optional; only the ones sent change. */
 export class UpdateProfileDto {
@@ -30,10 +31,13 @@ export class UpdateProfileDto {
 
   @ApiPropertyOptional({
     nullable: true,
-    description: "A new address is stored unverified; null or an empty string removes the email",
+    description:
+      "A new address is stored unverified; null or an empty string removes the email",
   })
   @IsOptional()
-  @Transform(({ value }) => (typeof value === "string" ? value.trim().toLowerCase() || null : value))
+  @Transform(({ value }) =>
+    typeof value === "string" ? value.trim().toLowerCase() || null : value,
+  )
   @ValidateIf((_, value) => value !== null)
   @IsEmail()
   @Length(3, 254)
@@ -44,7 +48,10 @@ export class UpdateProfileDto {
   @IsIn(["male", "female", "other"])
   gender?: string;
 
-  @ApiPropertyOptional({ example: "1994-08-15", description: "Calendar date (YYYY-MM-DD) in the past" })
+  @ApiPropertyOptional({
+    example: "1994-08-15",
+    description: "Calendar date (YYYY-MM-DD) in the past",
+  })
   @IsOptional()
   @IsDateString({ strict: true })
   dob?: string;

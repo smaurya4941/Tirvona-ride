@@ -1,7 +1,10 @@
 import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { SchemaTypes, Types } from "mongoose";
 import type { HydratedDocument } from "mongoose";
-import { GeoPoint, GeoPointSchema } from "../../../common/schemas/geo-point.schema";
+import {
+  GeoPoint,
+  GeoPointSchema,
+} from "../../../common/schemas/geo-point.schema";
 import { VehicleType } from "../../vehicles/schemas/vehicle.schema";
 
 export enum DriverStatus {

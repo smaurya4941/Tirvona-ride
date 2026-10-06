@@ -4,16 +4,29 @@ import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model, QueryFilter } from "mongoose";
 import { Types } from "mongoose";
-import { apiBadRequest, apiConflict, apiNotFound } from "../../common/exceptions/api.exception";
+import {
+  apiBadRequest,
+  apiConflict,
+  apiNotFound,
+} from "../../common/exceptions/api.exception";
 import { probeImage } from "../branding/image-probe";
 import { LocationsService } from "../locations/locations.service";
 import { joinLegs } from "../locations/polyline";
 import { AuditLogService } from "../audit/audit-log.service";
 import { PlacesService } from "../places/places.service";
 import { RideTypesService } from "../ride-types/ride-types.service";
-import { checkAvailability, distanceWarning, effectiveCapacity, publishProblems, tariffFor } from "./circuit-package.rules";
+import {
+  checkAvailability,
+  distanceWarning,
+  effectiveCapacity,
+  publishProblems,
+  tariffFor,
+} from "./circuit-package.rules";
 import type { AvailabilityRule, PublishProblem } from "./circuit-package.rules";
-import { PACKAGE_STATUS_TRANSITIONS, CircuitPackageStatus } from "./circuit-package.types";
+import {
+  PACKAGE_STATUS_TRANSITIONS,
+  CircuitPackageStatus,
+} from "./circuit-package.types";
 import { CIRCUIT_COVER_RULE, coverProblem } from "./cover-image";
 import type {
   CircuitStopInputDto,
@@ -23,8 +36,14 @@ import type {
   RoutePreviewDto,
   UpdateCircuitPackageDto,
 } from "./dto/circuit-package.dto";
-import { CircuitPackage, CircuitPackageCounter } from "./schemas/circuit-package.schema";
-import type { CircuitPackageDocument, CircuitVehiclePrice } from "./schemas/circuit-package.schema";
+import {
+  CircuitPackage,
+  CircuitPackageCounter,
+} from "./schemas/circuit-package.schema";
+import type {
+  CircuitPackageDocument,
+  CircuitVehiclePrice,
+} from "./schemas/circuit-package.schema";
 
 export { CIRCUIT_COVER_RULE };
 
@@ -135,7 +154,11 @@ export interface RoutePreviewView {
   stopsDistanceMeters: number;
   stopsDurationSeconds: number;
   /** Reference origin → stop 1, when one is configured. */
-  originLeg?: { distanceMeters: number; durationSeconds: number; provider: string };
+  originLeg?: {
+    distanceMeters: number;
+    durationSeconds: number;
+    provider: string;
+  };
   polyline?: string;
   warnings: string[];
 }
@@ -146,10 +169,19 @@ export interface CoverFile {
   version: string;
 }
 
-type StopSnapshot = { order: number; placeId: string; name: string; address: string; latitude: number; longitude: number };
+type StopSnapshot = {
+  order: number;
+  placeId: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+};
 
-const isDuplicateKey = (error: unknown): boolean => (error as { code?: number } | undefined)?.code === 11000;
-const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const isDuplicateKey = (error: unknown): boolean =>
+  (error as { code?: number } | undefined)?.code === 11000;
+const escapeRegex = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const round1 = (value: number): number => Math.round(value * 10) / 10;
 
 const stopView = (stop: StopSnapshot): CircuitStopView => ({
@@ -162,17 +194,24 @@ const stopView = (stop: StopSnapshot): CircuitStopView => ({
 });
 
 const coverPath = (pkg: CircuitPackageDocument): string | null =>
-  pkg.cover ? `/circuit-packages/${pkg._id.toString()}/cover?v=${pkg.cover.version}` : null;
+  pkg.cover
+    ? `/circuit-packages/${pkg._id.toString()}/cover?v=${pkg.cover.version}`
+    : null;
 
-const allowanceView = (pricing: NonNullable<CircuitPackage["pricing"]>): CircuitAllowanceView => ({
+const allowanceView = (
+  pricing: NonNullable<CircuitPackage["pricing"]>,
+): CircuitAllowanceView => ({
   includedDistanceKm: round1(pricing.includedDistanceMeters / 1000),
-  includedDurationHours: Math.round((pricing.includedDurationSeconds / 3600) * 100) / 100,
+  includedDurationHours:
+    Math.round((pricing.includedDurationSeconds / 3600) * 100) / 100,
   includedDistanceMeters: pricing.includedDistanceMeters,
   includedDurationSeconds: pricing.includedDurationSeconds,
 });
 
 // Plain copies: spreading a hydrated subdocument loses its fields.
-const vehiclePriceView = (price: CircuitVehiclePrice): CircuitVehiclePriceView => ({
+const vehiclePriceView = (
+  price: CircuitVehiclePrice,
+): CircuitVehiclePriceView => ({
   rideType: price.rideType,
   basePrice: price.basePrice,
   extraDistanceRatePerKm: price.extraDistanceRatePerKm,
@@ -180,13 +219,20 @@ const vehiclePriceView = (price: CircuitVehiclePrice): CircuitVehiclePriceView =
 });
 
 /** Prices in `rideTypes` order; prices for vehicles no longer allowed are left out. */
-const orderedVehiclePricing = (pkg: Pick<CircuitPackage, "rideTypes" | "vehiclePricing">): CircuitVehiclePriceView[] =>
+const orderedVehiclePricing = (
+  pkg: Pick<CircuitPackage, "rideTypes" | "vehiclePricing">,
+): CircuitVehiclePriceView[] =>
   pkg.rideTypes
-    .map((code) => (pkg.vehiclePricing ?? []).find((price) => price.rideType === code))
+    .map((code) =>
+      (pkg.vehiclePricing ?? []).find((price) => price.rideType === code),
+    )
     .filter((price): price is CircuitVehiclePrice => !!price)
     .map(vehiclePriceView);
 
-const tariffView = (pricing: NonNullable<CircuitPackage["pricing"]>, price: CircuitVehiclePrice): CircuitPricingView => ({
+const tariffView = (
+  pricing: NonNullable<CircuitPackage["pricing"]>,
+  price: CircuitVehiclePrice,
+): CircuitPricingView => ({
   ...allowanceView(pricing),
   basePrice: price.basePrice,
   extraDistanceRatePerKm: price.extraDistanceRatePerKm,
@@ -213,8 +259,10 @@ export class CircuitPackagesService {
   private readonly timeZone: string;
 
   constructor(
-    @InjectModel(CircuitPackage.name) private readonly packages: Model<CircuitPackage>,
-    @InjectModel(CircuitPackageCounter.name) private readonly counters: Model<CircuitPackageCounter>,
+    @InjectModel(CircuitPackage.name)
+    private readonly packages: Model<CircuitPackage>,
+    @InjectModel(CircuitPackageCounter.name)
+    private readonly counters: Model<CircuitPackageCounter>,
     private readonly places: PlacesService,
     private readonly rideTypes: RideTypesService,
     private readonly locations: LocationsService,
@@ -226,29 +274,46 @@ export class CircuitPackagesService {
 
   // ── Admin ─────────────────────────────────────────────────────────────
 
-  async list(query: ListCircuitPackagesQueryDto): Promise<CircuitPackageAdminView[]> {
+  async list(
+    query: ListCircuitPackagesQueryDto,
+  ): Promise<CircuitPackageAdminView[]> {
     const filter: QueryFilter<CircuitPackage> = {};
     if (query.status) filter.status = query.status;
-    if (query.city) filter.city = { $regex: `^${escapeRegex(query.city)}$`, $options: "i" };
+    if (query.city)
+      filter.city = { $regex: `^${escapeRegex(query.city)}$`, $options: "i" };
     if (query.q) {
       const pattern = { $regex: escapeRegex(query.q), $options: "i" };
       filter.$or = [{ name: pattern }, { code: pattern }];
     }
     const [rows, rideTypes] = await Promise.all([
-      this.packages.find(filter).select("-cover.data").sort({ updatedAt: -1, _id: -1 }).exec(),
+      this.packages
+        .find(filter)
+        .select("-cover.data")
+        .sort({ updatedAt: -1, _id: -1 })
+        .exec(),
       this.rideTypeIndex(),
     ]);
     return rows.map((row) => this.toAdminView(row, rideTypes));
   }
 
   async getAdmin(id: string): Promise<CircuitPackageAdminView> {
-    return this.toAdminView(await this.requirePackage(id), await this.rideTypeIndex());
+    return this.toAdminView(
+      await this.requirePackage(id),
+      await this.rideTypeIndex(),
+    );
   }
 
-  async create(dto: CreateCircuitPackageDto, adminId: string): Promise<CircuitPackageAdminView> {
+  async create(
+    dto: CreateCircuitPackageDto,
+    adminId: string,
+  ): Promise<CircuitPackageAdminView> {
     const stops = dto.stops ? await this.resolveStops(dto.stops) : [];
-    const rideTypes = dto.rideTypes ? await this.assertRideTypes(dto.rideTypes) : [];
-    const vehiclePricing = dto.vehiclePricing ? this.vehiclePricingFromDto(dto.vehiclePricing, rideTypes) : [];
+    const rideTypes = dto.rideTypes
+      ? await this.assertRideTypes(dto.rideTypes)
+      : [];
+    const vehiclePricing = dto.vehiclePricing
+      ? this.vehiclePricingFromDto(dto.vehiclePricing, rideTypes)
+      : [];
     const created = await this.packages.create({
       code: await this.nextCode(),
       name: dto.name,
@@ -261,7 +326,9 @@ export class CircuitPackagesService {
       vehiclePricing,
       ...(dto.maxPassengers ? { maxPassengers: dto.maxPassengers } : {}),
       availability: this.availabilityFromDto(dto.availability),
-      ...(dto.cancellationPolicy ? { cancellationPolicy: dto.cancellationPolicy } : {}),
+      ...(dto.cancellationPolicy
+        ? { cancellationPolicy: dto.cancellationPolicy }
+        : {}),
       ...(dto.referenceOrigin ? { referenceOrigin: dto.referenceOrigin } : {}),
       createdBy: new Types.ObjectId(adminId),
       updatedBy: new Types.ObjectId(adminId),
@@ -272,7 +339,10 @@ export class CircuitPackagesService {
       targetType: "CIRCUIT_PACKAGE",
       targetId: created._id.toString(),
       targetLabel: `${created.code} ${created.name}`,
-      metadata: { status: created.status, stops: stops.map((stop) => stop.name) },
+      metadata: {
+        status: created.status,
+        stops: stops.map((stop) => stop.name),
+      },
     });
     return this.toAdminView(created, await this.rideTypeIndex());
   }
@@ -282,15 +352,29 @@ export class CircuitPackagesService {
    * remove or replace one). A live package must stay publishable, so an edit
    * that would break it is refused instead of leaving customers a bad product.
    */
-  async update(id: string, dto: UpdateCircuitPackageDto, adminId: string): Promise<CircuitPackageAdminView> {
+  async update(
+    id: string,
+    dto: UpdateCircuitPackageDto,
+    adminId: string,
+  ): Promise<CircuitPackageAdminView> {
     const before = await this.requirePackage(id);
     if (before.status === CircuitPackageStatus.ARCHIVED)
-      throw apiConflict("An archived package cannot be edited", "CIRCUIT_PACKAGE_STATUS_INVALID");
+      throw apiConflict(
+        "An archived package cannot be edited",
+        "CIRCUIT_PACKAGE_STATUS_INVALID",
+      );
 
-    const set: Record<string, unknown> = { updatedBy: new Types.ObjectId(adminId) };
+    const set: Record<string, unknown> = {
+      updatedBy: new Types.ObjectId(adminId),
+    };
     const changes: Record<string, { from: unknown; to: unknown }> = {};
     let quoteChanged = false;
-    const note = (field: string, from: unknown, to: unknown, affectsQuote = false): void => {
+    const note = (
+      field: string,
+      from: unknown,
+      to: unknown,
+      affectsQuote = false,
+    ): void => {
       if (JSON.stringify(from) === JSON.stringify(to)) return;
       changes[field] = { from, to };
       quoteChanged ||= affectsQuote;
@@ -309,21 +393,39 @@ export class CircuitPackagesService {
       set.city = dto.city;
     }
     if (dto.cancellationPolicy !== undefined) {
-      note("cancellationPolicy", before.cancellationPolicy, dto.cancellationPolicy);
+      note(
+        "cancellationPolicy",
+        before.cancellationPolicy,
+        dto.cancellationPolicy,
+      );
       set.cancellationPolicy = dto.cancellationPolicy;
     }
-    if (dto.referenceOrigin !== undefined) set.referenceOrigin = dto.referenceOrigin;
+    if (dto.referenceOrigin !== undefined)
+      set.referenceOrigin = dto.referenceOrigin;
     if (dto.stops !== undefined) {
       const stops = await this.resolveStops(dto.stops);
-      note("stops", before.stops.map((stop) => stop.name), stops.map((stop) => stop.name), true);
+      note(
+        "stops",
+        before.stops.map((stop) => stop.name),
+        stops.map((stop) => stop.name),
+        true,
+      );
       set.stops = stops;
     }
     if (dto.pricing !== undefined) {
       const pricing = this.pricingFromDto(dto.pricing);
-      note("pricing", before.pricing ? allowanceView(before.pricing) : undefined, allowanceView(pricing), true);
+      note(
+        "pricing",
+        before.pricing ? allowanceView(before.pricing) : undefined,
+        allowanceView(pricing),
+        true,
+      );
       set.pricing = pricing;
     }
-    const rideTypes = dto.rideTypes !== undefined ? await this.assertRideTypes(dto.rideTypes) : before.rideTypes;
+    const rideTypes =
+      dto.rideTypes !== undefined
+        ? await this.assertRideTypes(dto.rideTypes)
+        : before.rideTypes;
     if (dto.rideTypes !== undefined) {
       note("rideTypes", before.rideTypes, rideTypes, true);
       set.rideTypes = rideTypes;
@@ -334,8 +436,16 @@ export class CircuitPackagesService {
       const vehiclePricing =
         dto.vehiclePricing !== undefined
           ? this.vehiclePricingFromDto(dto.vehiclePricing, rideTypes)
-          : orderedVehiclePricing({ rideTypes, vehiclePricing: before.vehiclePricing });
-      note("vehiclePricing", orderedVehiclePricing(before), orderedVehiclePricing({ rideTypes, vehiclePricing }), true);
+          : orderedVehiclePricing({
+              rideTypes,
+              vehiclePricing: before.vehiclePricing,
+            });
+      note(
+        "vehiclePricing",
+        orderedVehiclePricing(before),
+        orderedVehiclePricing({ rideTypes, vehiclePricing }),
+        true,
+      );
       set.vehiclePricing = vehiclePricing;
     }
     if (dto.maxPassengers !== undefined) {
@@ -343,16 +453,31 @@ export class CircuitPackagesService {
       set.maxPassengers = dto.maxPassengers;
     }
     if (dto.availability !== undefined) {
-      const availability = this.availabilityFromDto(dto.availability, before.availability);
-      note("availability", availabilityView(before), availabilityView({ ...before.toObject(), availability } as CircuitPackage), true);
+      const availability = this.availabilityFromDto(
+        dto.availability,
+        before.availability,
+      );
+      note(
+        "availability",
+        availabilityView(before),
+        availabilityView({
+          ...before.toObject(),
+          availability,
+        } as CircuitPackage),
+        true,
+      );
       set.availability = availability;
     }
 
-    if (Object.keys(changes).length === 0 && dto.referenceOrigin === undefined) return this.toAdminView(before, await this.rideTypeIndex());
+    if (Object.keys(changes).length === 0 && dto.referenceOrigin === undefined)
+      return this.toAdminView(before, await this.rideTypeIndex());
 
     // A live package must remain publishable after the edit.
     if (before.status === CircuitPackageStatus.ACTIVE) {
-      const merged = { ...before.toObject(), ...set } as unknown as CircuitPackage;
+      const merged = {
+        ...before.toObject(),
+        ...set,
+      } as unknown as CircuitPackage;
       await this.assertPublishable(merged);
     }
 
@@ -364,7 +489,11 @@ export class CircuitPackagesService {
       )
       .select("-cover.data")
       .exec();
-    if (!updated) throw apiConflict("This package was changed by someone else. Reload and try again.", "CIRCUIT_PACKAGE_STATUS_INVALID");
+    if (!updated)
+      throw apiConflict(
+        "This package was changed by someone else. Reload and try again.",
+        "CIRCUIT_PACKAGE_STATUS_INVALID",
+      );
 
     if (Object.keys(changes).length)
       await this.audit.record({
@@ -374,17 +503,31 @@ export class CircuitPackagesService {
         targetId: updated._id.toString(),
         targetLabel: `${updated.code} ${updated.name}`,
         reason: dto.reason,
-        metadata: { changes, fields: Object.keys(changes), revision: updated.revision, status: updated.status },
+        metadata: {
+          changes,
+          fields: Object.keys(changes),
+          revision: updated.revision,
+          status: updated.status,
+        },
       });
     return this.toAdminView(updated, await this.rideTypeIndex());
   }
 
   /** Publishing (→ ACTIVE) runs every rule; the other moves only need to be legal. */
-  async setStatus(id: string, status: CircuitPackageStatus, adminId: string, reason?: string): Promise<CircuitPackageAdminView> {
+  async setStatus(
+    id: string,
+    status: CircuitPackageStatus,
+    adminId: string,
+    reason?: string,
+  ): Promise<CircuitPackageAdminView> {
     const pkg = await this.requirePackage(id);
     if (!PACKAGE_STATUS_TRANSITIONS[pkg.status].includes(status))
-      throw apiConflict(`A ${pkg.status.toLowerCase()} package cannot become ${status.toLowerCase()}`, "CIRCUIT_PACKAGE_STATUS_INVALID");
-    if (status === CircuitPackageStatus.ACTIVE) await this.assertPublishable(pkg);
+      throw apiConflict(
+        `A ${pkg.status.toLowerCase()} package cannot become ${status.toLowerCase()}`,
+        "CIRCUIT_PACKAGE_STATUS_INVALID",
+      );
+    if (status === CircuitPackageStatus.ACTIVE)
+      await this.assertPublishable(pkg);
 
     const updated = await this.packages
       .findOneAndUpdate(
@@ -393,14 +536,20 @@ export class CircuitPackagesService {
           $set: {
             status,
             updatedBy: new Types.ObjectId(adminId),
-            ...(status === CircuitPackageStatus.ACTIVE && !pkg.publishedAt ? { publishedAt: new Date() } : {}),
+            ...(status === CircuitPackageStatus.ACTIVE && !pkg.publishedAt
+              ? { publishedAt: new Date() }
+              : {}),
           },
         },
         { returnDocument: "after" },
       )
       .select("-cover.data")
       .exec();
-    if (!updated) throw apiConflict("This package was changed by someone else. Reload and try again.", "CIRCUIT_PACKAGE_STATUS_INVALID");
+    if (!updated)
+      throw apiConflict(
+        "This package was changed by someone else. Reload and try again.",
+        "CIRCUIT_PACKAGE_STATUS_INVALID",
+      );
 
     await this.audit.record({
       adminId,
@@ -418,8 +567,17 @@ export class CircuitPackagesService {
   async remove(id: string, adminId: string): Promise<void> {
     const pkg = await this.requirePackage(id);
     if (pkg.status !== CircuitPackageStatus.DRAFT || pkg.hasBookings)
-      throw apiConflict("Only an unused draft can be deleted. Archive the package instead.", "CIRCUIT_PACKAGE_HAS_BOOKINGS");
-    await this.packages.deleteOne({ _id: pkg._id, status: CircuitPackageStatus.DRAFT, hasBookings: false }).exec();
+      throw apiConflict(
+        "Only an unused draft can be deleted. Archive the package instead.",
+        "CIRCUIT_PACKAGE_HAS_BOOKINGS",
+      );
+    await this.packages
+      .deleteOne({
+        _id: pkg._id,
+        status: CircuitPackageStatus.DRAFT,
+        hasBookings: false,
+      })
+      .exec();
     await this.audit.record({
       adminId,
       action: "circuit_package.delete",
@@ -429,11 +587,19 @@ export class CircuitPackagesService {
     });
   }
 
-  async setCover(id: string, upload: { buffer: Buffer }, adminId: string): Promise<CircuitPackageAdminView> {
+  async setCover(
+    id: string,
+    upload: { buffer: Buffer },
+    adminId: string,
+  ): Promise<CircuitPackageAdminView> {
     const image = probeImage(upload.buffer);
     const problem = coverProblem(upload.buffer.length, image);
     if (problem || !image)
-      throw apiBadRequest(problem ?? "Unsupported image", "CIRCUIT_PACKAGE_INVALID_IMAGE", { hint: CIRCUIT_COVER_RULE.hint });
+      throw apiBadRequest(
+        problem ?? "Unsupported image",
+        "CIRCUIT_PACKAGE_INVALID_IMAGE",
+        { hint: CIRCUIT_COVER_RULE.hint },
+      );
     const pkg = await this.requirePackage(id);
     const updated = await this.packages
       .findByIdAndUpdate(
@@ -443,7 +609,10 @@ export class CircuitPackagesService {
             cover: {
               contentType: image.contentType,
               data: upload.buffer,
-              version: createHash("sha1").update(upload.buffer).digest("hex").slice(0, 12),
+              version: createHash("sha1")
+                .update(upload.buffer)
+                .digest("hex")
+                .slice(0, 12),
               width: image.width,
               height: image.height,
               bytes: upload.buffer.length,
@@ -465,10 +634,20 @@ export class CircuitPackagesService {
     return this.toAdminView(updated ?? pkg, await this.rideTypeIndex());
   }
 
-  async removeCover(id: string, adminId: string): Promise<CircuitPackageAdminView> {
+  async removeCover(
+    id: string,
+    adminId: string,
+  ): Promise<CircuitPackageAdminView> {
     const pkg = await this.requirePackage(id);
     const updated = await this.packages
-      .findByIdAndUpdate(pkg._id, { $unset: { cover: 1 }, $set: { updatedBy: new Types.ObjectId(adminId) } }, { returnDocument: "after" })
+      .findByIdAndUpdate(
+        pkg._id,
+        {
+          $unset: { cover: 1 },
+          $set: { updatedBy: new Types.ObjectId(adminId) },
+        },
+        { returnDocument: "after" },
+      )
       .select("-cover.data")
       .exec();
     await this.audit.record({
@@ -483,10 +662,19 @@ export class CircuitPackagesService {
 
   /** Public (cover images are marketing material); only an ACTIVE or INACTIVE package's cover is served. */
   async coverFile(id: string): Promise<CoverFile> {
-    const pkg = Types.ObjectId.isValid(id) ? await this.packages.findById(id).select("+cover.data status").exec() : null;
+    const pkg = Types.ObjectId.isValid(id)
+      ? await this.packages.findById(id).select("+cover.data status").exec()
+      : null;
     if (!pkg?.cover || pkg.status === CircuitPackageStatus.DRAFT)
-      throw apiNotFound("This package has no cover image", "CIRCUIT_PACKAGE_NOT_FOUND");
-    return { data: pkg.cover.data, contentType: pkg.cover.contentType, version: pkg.cover.version };
+      throw apiNotFound(
+        "This package has no cover image",
+        "CIRCUIT_PACKAGE_NOT_FOUND",
+      );
+    return {
+      data: pkg.cover.data,
+      contentType: pkg.cover.contentType,
+      version: pkg.cover.version,
+    };
   }
 
   /** Admin-side place search so stops are always picked from the Maps provider. */
@@ -504,16 +692,32 @@ export class CircuitPackagesService {
    * stops themselves. The customer's pickup leg is extra and unknown here, so
    * an optional reference origin gives Admin a realistic first leg.
    */
-  async routePreview(id: string, dto: RoutePreviewDto): Promise<RoutePreviewView> {
+  async routePreview(
+    id: string,
+    dto: RoutePreviewDto,
+  ): Promise<RoutePreviewView> {
     const pkg = await this.requirePackage(id);
     // Plain copies: spreading a hydrated subdocument loses its fields.
     const stops: StopSnapshot[] = dto.stops
       ? await this.resolveStops(dto.stops)
-      : pkg.stops.map((stop) => ({ order: stop.order, placeId: stop.placeId, name: stop.name, address: stop.address, latitude: stop.latitude, longitude: stop.longitude }));
-    if (stops.length < 2) throw apiBadRequest("Add at least two stops to preview the route", "CIRCUIT_PACKAGE_INVALID");
+      : pkg.stops.map((stop) => ({
+          order: stop.order,
+          placeId: stop.placeId,
+          name: stop.name,
+          address: stop.address,
+          latitude: stop.latitude,
+          longitude: stop.longitude,
+        }));
+    if (stops.length < 2)
+      throw apiBadRequest(
+        "Add at least two stops to preview the route",
+        "CIRCUIT_PACKAGE_INVALID",
+      );
 
     const legResults = await Promise.all(
-      stops.slice(1).map((stop, index) => this.locations.routeBetween(stops[index], stop)),
+      stops
+        .slice(1)
+        .map((stop, index) => this.locations.routeBetween(stops[index], stop)),
     );
     const legs = legResults.map((route, index) => ({
       from: stops[index].name,
@@ -522,13 +726,23 @@ export class CircuitPackagesService {
       durationSeconds: route.durationSeconds,
       provider: route.provider,
     }));
-    const stopsDistanceMeters = legs.reduce((sum, leg) => sum + leg.distanceMeters, 0);
-    const stopsDurationSeconds = legs.reduce((sum, leg) => sum + leg.durationSeconds, 0);
+    const stopsDistanceMeters = legs.reduce(
+      (sum, leg) => sum + leg.distanceMeters,
+      0,
+    );
+    const stopsDurationSeconds = legs.reduce(
+      (sum, leg) => sum + leg.durationSeconds,
+      0,
+    );
 
     const origin = pkg.referenceOrigin;
-    const originRoute = origin ? await this.locations.routeBetween(origin, stops[0]) : undefined;
+    const originRoute = origin
+      ? await this.locations.routeBetween(origin, stops[0])
+      : undefined;
     const includedMeters =
-      dto.includedDistanceKm !== undefined ? dto.includedDistanceKm * 1000 : pkg.pricing?.includedDistanceMeters;
+      dto.includedDistanceKm !== undefined
+        ? dto.includedDistanceKm * 1000
+        : pkg.pricing?.includedDistanceMeters;
 
     const warnings: string[] = [];
     if (includedMeters !== undefined) {
@@ -536,21 +750,33 @@ export class CircuitPackagesService {
       const warning = distanceWarning(includedMeters, total);
       if (warning)
         warnings.push(
-          originRoute ? `${warning.replace("the stops' own route", "the route from the reference origin through the stops")}` : warning,
+          originRoute
+            ? `${warning.replace("the stops' own route", "the route from the reference origin through the stops")}`
+            : warning,
         );
     }
     if (legs.some((leg) => leg.provider !== "GOOGLE_ROUTES"))
-      warnings.push("Some distances are straight-line estimates because road routing was unavailable.");
+      warnings.push(
+        "Some distances are straight-line estimates because road routing was unavailable.",
+      );
 
     return {
       legs,
       stopsDistanceMeters,
       stopsDurationSeconds,
       originLeg: originRoute
-        ? { distanceMeters: originRoute.distanceMeters, durationSeconds: originRoute.durationSeconds, provider: originRoute.provider }
+        ? {
+            distanceMeters: originRoute.distanceMeters,
+            durationSeconds: originRoute.durationSeconds,
+            provider: originRoute.provider,
+          }
         : undefined,
       polyline: joinLegs(
-        legResults.map((route, index) => ({ from: stops[index], to: stops[index + 1], polyline: route.polyline })),
+        legResults.map((route, index) => ({
+          from: stops[index],
+          to: stops[index + 1],
+          polyline: route.polyline,
+        })),
       ),
       warnings,
     };
@@ -559,11 +785,20 @@ export class CircuitPackagesService {
   // ── Customer ──────────────────────────────────────────────────────────
 
   /** Active packages in season, in a stable order. Availability right now is a flag, not a filter. */
-  async listForCustomers(city?: string, now = new Date()): Promise<CircuitPackageCustomerView[]> {
-    const filter: QueryFilter<CircuitPackage> = { status: CircuitPackageStatus.ACTIVE };
+  async listForCustomers(
+    city?: string,
+    now = new Date(),
+  ): Promise<CircuitPackageCustomerView[]> {
+    const filter: QueryFilter<CircuitPackage> = {
+      status: CircuitPackageStatus.ACTIVE,
+    };
     if (city) filter.city = { $regex: `^${escapeRegex(city)}$`, $options: "i" };
     const [rows, rideTypes] = await Promise.all([
-      this.packages.find(filter).select("-cover.data").sort({ city: 1, name: 1 }).exec(),
+      this.packages
+        .find(filter)
+        .select("-cover.data")
+        .sort({ city: 1, name: 1 })
+        .exec(),
       this.rideTypeIndex(),
     ]);
     return rows
@@ -572,17 +807,24 @@ export class CircuitPackagesService {
       .filter((view): view is CircuitPackageCustomerView => view !== null);
   }
 
-  async getForCustomer(id: string, now = new Date()): Promise<CircuitPackageCustomerView> {
+  async getForCustomer(
+    id: string,
+    now = new Date(),
+  ): Promise<CircuitPackageCustomerView> {
     const pkg = await this.findActive(id);
     const view = this.toCustomerView(pkg, await this.rideTypeIndex(), now);
-    if (!view) throw apiNotFound("Circuit not found", "CIRCUIT_PACKAGE_NOT_FOUND");
+    if (!view)
+      throw apiNotFound("Circuit not found", "CIRCUIT_PACKAGE_NOT_FOUND");
     return view;
   }
 
   /** For booking: the package must be ACTIVE, and the caller applies availability + vehicle rules. */
   async findActive(id: string): Promise<CircuitPackageDocument> {
-    const pkg = Types.ObjectId.isValid(id) ? await this.packages.findById(id).select("-cover.data").exec() : null;
-    if (!pkg || pkg.status !== CircuitPackageStatus.ACTIVE) throw apiNotFound("Circuit not found", "CIRCUIT_PACKAGE_NOT_FOUND");
+    const pkg = Types.ObjectId.isValid(id)
+      ? await this.packages.findById(id).select("-cover.data").exec()
+      : null;
+    if (!pkg || pkg.status !== CircuitPackageStatus.ACTIVE)
+      throw apiNotFound("Circuit not found", "CIRCUIT_PACKAGE_NOT_FOUND");
     return pkg;
   }
 
@@ -596,19 +838,47 @@ export class CircuitPackagesService {
     passengers: number,
     now = new Date(),
   ): Promise<CircuitPricingView> {
-    const verdict = checkAvailability(pkg.availability as AvailabilityRule, now, this.timeZone);
-    if (!verdict.open) throw apiBadRequest(verdict.message, "CIRCUIT_PACKAGE_UNAVAILABLE", { reason: verdict.reason });
-    if (!pkg.rideTypes.includes(rideType.code))
-      throw apiBadRequest(`${rideType.displayName} is not available for ${pkg.name}`, "CIRCUIT_VEHICLE_NOT_ALLOWED");
-    const tariff = tariffFor({ pricing: pkg.pricing, vehiclePricing: pkg.vehiclePricing ?? [] }, rideType.code);
-    if (!tariff || !pkg.pricing)
-      throw apiBadRequest(`${rideType.displayName} is not priced for ${pkg.name} yet`, "CIRCUIT_PACKAGE_UNAVAILABLE");
-    const capacity = effectiveCapacity(pkg.maxPassengers, rideType.seatCapacity);
-    if (passengers > capacity)
-      throw apiBadRequest(`${rideType.displayName} can carry at most ${capacity} passengers on this circuit`, "CIRCUIT_PASSENGERS_EXCEEDED", {
-        maxPassengers: capacity,
+    const verdict = checkAvailability(
+      pkg.availability as AvailabilityRule,
+      now,
+      this.timeZone,
+    );
+    if (!verdict.open)
+      throw apiBadRequest(verdict.message, "CIRCUIT_PACKAGE_UNAVAILABLE", {
+        reason: verdict.reason,
       });
-    return { ...allowanceView(pkg.pricing), basePrice: tariff.basePrice, extraDistanceRatePerKm: tariff.extraDistanceRatePerKm, extraDurationRatePerHour: tariff.extraDurationRatePerHour };
+    if (!pkg.rideTypes.includes(rideType.code))
+      throw apiBadRequest(
+        `${rideType.displayName} is not available for ${pkg.name}`,
+        "CIRCUIT_VEHICLE_NOT_ALLOWED",
+      );
+    const tariff = tariffFor(
+      { pricing: pkg.pricing, vehiclePricing: pkg.vehiclePricing ?? [] },
+      rideType.code,
+    );
+    if (!tariff || !pkg.pricing)
+      throw apiBadRequest(
+        `${rideType.displayName} is not priced for ${pkg.name} yet`,
+        "CIRCUIT_PACKAGE_UNAVAILABLE",
+      );
+    const capacity = effectiveCapacity(
+      pkg.maxPassengers,
+      rideType.seatCapacity,
+    );
+    if (passengers > capacity)
+      throw apiBadRequest(
+        `${rideType.displayName} can carry at most ${capacity} passengers on this circuit`,
+        "CIRCUIT_PASSENGERS_EXCEEDED",
+        {
+          maxPassengers: capacity,
+        },
+      );
+    return {
+      ...allowanceView(pkg.pricing),
+      basePrice: tariff.basePrice,
+      extraDistanceRatePerKm: tariff.extraDistanceRatePerKm,
+      extraDurationRatePerHour: tariff.extraDurationRatePerHour,
+    };
   }
 
   /**
@@ -619,10 +889,17 @@ export class CircuitPackagesService {
    */
   async migrateLegacyPricing(): Promise<number> {
     const legacy = await this.packages.collection
-      .find({ "pricing.basePrice": { $exists: true } }, { projection: { rideTypes: 1, pricing: 1, vehiclePricing: 1 } })
+      .find(
+        { "pricing.basePrice": { $exists: true } },
+        { projection: { rideTypes: 1, pricing: 1, vehiclePricing: 1 } },
+      )
       .toArray();
     for (const row of legacy) {
-      const pricing = row.pricing as { basePrice: number; extraDistanceRatePerKm?: number; extraDurationRatePerHour?: number };
+      const pricing = row.pricing as {
+        basePrice: number;
+        extraDistanceRatePerKm?: number;
+        extraDurationRatePerHour?: number;
+      };
       const existing = (row.vehiclePricing ?? []) as CircuitVehiclePrice[];
       const vehiclePricing = ((row.rideTypes ?? []) as string[]).map(
         (code) =>
@@ -637,7 +914,11 @@ export class CircuitPackagesService {
         { _id: row._id, "pricing.basePrice": { $exists: true } },
         {
           $set: { vehiclePricing },
-          $unset: { "pricing.basePrice": "", "pricing.extraDistanceRatePerKm": "", "pricing.extraDurationRatePerHour": "" },
+          $unset: {
+            "pricing.basePrice": "",
+            "pricing.extraDistanceRatePerKm": "",
+            "pricing.extraDurationRatePerHour": "",
+          },
         },
       );
     }
@@ -646,25 +927,52 @@ export class CircuitPackagesService {
 
   /** Once any customer has booked it, a package can be archived but never deleted. */
   async markBooked(id: Types.ObjectId): Promise<void> {
-    await this.packages.updateOne({ _id: id, hasBookings: false }, { $set: { hasBookings: true } }).exec();
+    await this.packages
+      .updateOne(
+        { _id: id, hasBookings: false },
+        { $set: { hasBookings: true } },
+      )
+      .exec();
   }
 
   // ── Internals ─────────────────────────────────────────────────────────
 
   private async requirePackage(id: string): Promise<CircuitPackageDocument> {
-    const pkg = Types.ObjectId.isValid(id) ? await this.packages.findById(id).select("-cover.data").exec() : null;
-    if (!pkg) throw apiNotFound("Circuit package not found", "CIRCUIT_PACKAGE_NOT_FOUND");
+    const pkg = Types.ObjectId.isValid(id)
+      ? await this.packages.findById(id).select("-cover.data").exec()
+      : null;
+    if (!pkg)
+      throw apiNotFound(
+        "Circuit package not found",
+        "CIRCUIT_PACKAGE_NOT_FOUND",
+      );
     return pkg;
   }
 
   private isPastSeason(pkg: CircuitPackage, now: Date): boolean {
     const { validUntil } = pkg.availability;
     if (!validUntil) return false;
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: this.timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: this.timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
     return today > validUntil;
   }
 
-  private async rideTypeIndex(): Promise<Map<string, { code: string; displayName: string; icon: string; seatCapacity: number; isActive: boolean }>> {
+  private async rideTypeIndex(): Promise<
+    Map<
+      string,
+      {
+        code: string;
+        displayName: string;
+        icon: string;
+        seatCapacity: number;
+        isActive: boolean;
+      }
+    >
+  > {
     const all = await this.rideTypes.listAll();
     return new Map(all.map((type) => [type.code, type]));
   }
@@ -672,19 +980,31 @@ export class CircuitPackagesService {
   private async assertRideTypes(codes: string[]): Promise<string[]> {
     const index = await this.rideTypeIndex();
     const unknown = codes.filter((code) => !index.has(code));
-    if (unknown.length) throw apiBadRequest(`Unknown ride type: ${unknown.join(", ")}`, "CIRCUIT_PACKAGE_INVALID");
+    if (unknown.length)
+      throw apiBadRequest(
+        `Unknown ride type: ${unknown.join(", ")}`,
+        "CIRCUIT_PACKAGE_INVALID",
+      );
     return [...new Set(codes)];
   }
 
   private async assertPublishable(pkg: CircuitPackage): Promise<void> {
     const problems = publishProblems(pkg as never, await this.rideTypeIndex());
     if (problems.length)
-      throw apiBadRequest(`This package cannot be published: ${problems[0].message}`, "CIRCUIT_PACKAGE_NOT_PUBLISHABLE", { problems });
+      throw apiBadRequest(
+        `This package cannot be published: ${problems[0].message}`,
+        "CIRCUIT_PACKAGE_NOT_PUBLISHABLE",
+        { problems },
+      );
   }
 
   /** Server-resolved stops: coordinates, address and name always come from the places provider. */
-  private async resolveStops(inputs: CircuitStopInputDto[]): Promise<StopSnapshot[]> {
-    const resolved = await Promise.all(inputs.map((input) => this.places.resolve(input.placeId)));
+  private async resolveStops(
+    inputs: CircuitStopInputDto[],
+  ): Promise<StopSnapshot[]> {
+    const resolved = await Promise.all(
+      inputs.map((input) => this.places.resolve(input.placeId)),
+    );
     return resolved.map((place, index) => ({
       order: index + 1,
       placeId: inputs[index].placeId,
@@ -695,7 +1015,9 @@ export class CircuitPackagesService {
     }));
   }
 
-  private pricingFromDto(dto: NonNullable<CreateCircuitPackageDto["pricing"]>): NonNullable<CircuitPackage["pricing"]> {
+  private pricingFromDto(
+    dto: NonNullable<CreateCircuitPackageDto["pricing"]>,
+  ): NonNullable<CircuitPackage["pricing"]> {
     return {
       includedDistanceMeters: Math.round(dto.includedDistanceKm * 1000),
       includedDurationSeconds: Math.round(dto.includedDurationHours * 3600),
@@ -703,13 +1025,23 @@ export class CircuitPackagesService {
   }
 
   /** One price per vehicle, only for allowed vehicles, stored in `rideTypes` order. */
-  private vehiclePricingFromDto(prices: CircuitVehiclePriceDto[], rideTypes: string[]): CircuitVehiclePrice[] {
+  private vehiclePricingFromDto(
+    prices: CircuitVehiclePriceDto[],
+    rideTypes: string[],
+  ): CircuitVehiclePrice[] {
     const codes = prices.map((price) => price.rideType);
     const twice = codes.filter((code, index) => codes.indexOf(code) !== index);
-    if (twice.length) throw apiBadRequest(`${twice[0]} is priced twice`, "CIRCUIT_PACKAGE_INVALID");
+    if (twice.length)
+      throw apiBadRequest(
+        `${twice[0]} is priced twice`,
+        "CIRCUIT_PACKAGE_INVALID",
+      );
     const notAllowed = codes.filter((code) => !rideTypes.includes(code));
     if (notAllowed.length)
-      throw apiBadRequest(`${notAllowed.join(", ")} is priced but not an allowed vehicle`, "CIRCUIT_PACKAGE_INVALID");
+      throw apiBadRequest(
+        `${notAllowed.join(", ")} is priced but not an allowed vehicle`,
+        "CIRCUIT_PACKAGE_INVALID",
+      );
     return rideTypes
       .map((code) => prices.find((price) => price.rideType === code))
       .filter((price): price is CircuitVehiclePriceDto => !!price)
@@ -725,7 +1057,11 @@ export class CircuitPackagesService {
     dto: CreateCircuitPackageDto["availability"],
     current?: CircuitPackage["availability"],
   ): CircuitPackage["availability"] {
-    const base = { days: current?.days ?? [0, 1, 2, 3, 4, 5, 6], opensAt: current?.opensAt ?? "06:00", closesAt: current?.closesAt ?? "20:00" };
+    const base = {
+      days: current?.days ?? [0, 1, 2, 3, 4, 5, 6],
+      opensAt: current?.opensAt ?? "06:00",
+      closesAt: current?.closesAt ?? "20:00",
+    };
     const next = {
       ...base,
       ...(dto?.days ? { days: [...dto.days].sort((a, b) => a - b) } : {}),
@@ -735,7 +1071,9 @@ export class CircuitPackagesService {
     // null clears a season bound; undefined keeps it.
     const bound = (key: "validFrom" | "validUntil"): string | undefined => {
       const given = dto?.[key];
-      return given === null ? undefined : (given ?? current?.[key] ?? undefined);
+      return given === null
+        ? undefined
+        : (given ?? current?.[key] ?? undefined);
     };
     const validFrom = bound("validFrom");
     const validUntil = bound("validUntil");
@@ -763,7 +1101,11 @@ export class CircuitPackagesService {
       availability: availabilityView(pkg),
       cancellationPolicy: pkg.cancellationPolicy,
       referenceOrigin: pkg.referenceOrigin
-        ? { label: pkg.referenceOrigin.label, latitude: pkg.referenceOrigin.latitude, longitude: pkg.referenceOrigin.longitude }
+        ? {
+            label: pkg.referenceOrigin.label,
+            latitude: pkg.referenceOrigin.latitude,
+            longitude: pkg.referenceOrigin.longitude,
+          }
         : undefined,
       coverPath: coverPath(pkg),
       revision: pkg.revision,
@@ -777,16 +1119,36 @@ export class CircuitPackagesService {
 
   private toCustomerView(
     pkg: CircuitPackageDocument,
-    rideTypes: Map<string, { code: string; displayName: string; icon: string; seatCapacity: number; isActive: boolean }>,
+    rideTypes: Map<
+      string,
+      {
+        code: string;
+        displayName: string;
+        icon: string;
+        seatCapacity: number;
+        isActive: boolean;
+      }
+    >,
     now: Date,
   ): CircuitPackageCustomerView | null {
     const { pricing } = pkg;
     if (!pricing) return null;
-    const verdict = checkAvailability(pkg.availability as AvailabilityRule, now, this.timeZone);
+    const verdict = checkAvailability(
+      pkg.availability as AvailabilityRule,
+      now,
+      this.timeZone,
+    );
     // Only active, priced vehicles are offered; cheapest first.
     const vehicles: CircuitVehicleOption[] = orderedVehiclePricing(pkg)
       .map((price) => ({ price, type: rideTypes.get(price.rideType) }))
-      .filter((entry): entry is { price: CircuitVehiclePriceView; type: NonNullable<typeof entry.type> } => !!entry.type?.isActive)
+      .filter(
+        (
+          entry,
+        ): entry is {
+          price: CircuitVehiclePriceView;
+          type: NonNullable<typeof entry.type>;
+        } => !!entry.type?.isActive,
+      )
       .map(({ price, type }) => ({
         rideType: type.code,
         displayName: type.displayName,
@@ -806,7 +1168,9 @@ export class CircuitPackagesService {
       stops: [...pkg.stops].sort((a, b) => a.order - b.order).map(stopView),
       pricing: vehicles[0].pricing,
       vehicles,
-      maxPassengers: Math.max(...vehicles.map((vehicle) => vehicle.maxPassengers)),
+      maxPassengers: Math.max(
+        ...vehicles.map((vehicle) => vehicle.maxPassengers),
+      ),
       availability: availabilityView(pkg),
       availableNow: verdict.open,
       unavailableReason: verdict.open ? undefined : verdict.message,
@@ -819,7 +1183,11 @@ export class CircuitPackagesService {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         const counter = await this.counters
-          .findOneAndUpdate({ _id: "circuit_package" }, { $inc: { seq: 1 } }, { upsert: true, returnDocument: "after" })
+          .findOneAndUpdate(
+            { _id: "circuit_package" },
+            { $inc: { seq: 1 } },
+            { upsert: true, returnDocument: "after" },
+          )
           .exec();
         return `CIR-${String(counter.seq).padStart(3, "0")}`;
       } catch (error) {

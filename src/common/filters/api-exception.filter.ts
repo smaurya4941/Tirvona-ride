@@ -1,4 +1,4 @@
-import { Catch, HttpException, HttpStatus, Logger } from "@nestjs/common";
+import { Catch, HttpException, HttpStatus, Logger, PayloadTooLargeException } from "@nestjs/common";
 import type { ArgumentsHost, ExceptionFilter } from "@nestjs/common";
 import type { Request, Response } from "express";
 import type { ApiErrorBody } from "../http/api-response";
@@ -92,6 +92,13 @@ export class ApiExceptionFilter implements ExceptionFilter {
       };
       response.status(status).json(payload);
     };
+
+    // Nest's multer wrapper turns LIMIT_FILE_SIZE into a bare 413 before it
+    // reaches translateUploadError; give it the same stable code.
+    if (exception instanceof PayloadTooLargeException) {
+      body(exception.getStatus(), "The file exceeds the 5 MB upload limit", { code: "DOCUMENT_TOO_LARGE" });
+      return;
+    }
 
     if (exception instanceof HttpException) {
       const raw = exception.getResponse();

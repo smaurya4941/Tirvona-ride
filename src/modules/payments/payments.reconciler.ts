@@ -38,7 +38,9 @@ export interface ReconcilerPass {
  * Every step is idempotent, so overlapping instances are harmless.
  */
 @Injectable()
-export class PaymentsReconciler implements OnApplicationBootstrap, OnModuleDestroy {
+export class PaymentsReconciler
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
   private readonly logger = new Logger(PaymentsReconciler.name);
   private readonly intervalMs: number;
   private readonly staleMs: number;
@@ -53,7 +55,8 @@ export class PaymentsReconciler implements OnApplicationBootstrap, OnModuleDestr
     config: ConfigService,
   ) {
     this.intervalMs = config.getOrThrow<number>("paymentReconcileIntervalMs");
-    this.staleMs = config.getOrThrow<number>("paymentProcessingStaleSeconds") * 1000;
+    this.staleMs =
+      config.getOrThrow<number>("paymentProcessingStaleSeconds") * 1000;
   }
 
   onApplicationBootstrap(): void {
@@ -80,9 +83,15 @@ export class PaymentsReconciler implements OnApplicationBootstrap, OnModuleDestr
     if (this.running) return pass;
     this.running = true;
     try {
-      for (const payment of await this.payments.findStaleProcessing(new Date(now.getTime() - this.staleMs), BATCH)) {
+      for (const payment of await this.payments.findStaleProcessing(
+        new Date(now.getTime() - this.staleMs),
+        BATCH,
+      )) {
         const before = payment.status;
-        const after = await this.payments.reconcile(payment, PaymentEventSource.RECONCILE);
+        const after = await this.payments.reconcile(
+          payment,
+          PaymentEventSource.RECONCILE,
+        );
         if (after.status !== before) pass.reconciled += 1;
       }
       for (const payment of await this.payments.findOpenOrdersToCheck(
@@ -92,16 +101,24 @@ export class PaymentsReconciler implements OnApplicationBootstrap, OnModuleDestr
       )) {
         pass.openOrdersChecked += 1;
         const before = payment.status;
-        const after = await this.payments.reconcile(payment, PaymentEventSource.RECONCILE);
+        const after = await this.payments.reconcile(
+          payment,
+          PaymentEventSource.RECONCILE,
+        );
         if (after.status !== before) pass.reconciled += 1;
       }
-      for (const payment of await this.payments.findCapturedWithoutEarning(BATCH)) {
+      for (const payment of await this.payments.findCapturedWithoutEarning(
+        BATCH,
+      )) {
         await this.payments.afterCapture(payment);
         if (payment.earningId) pass.earningsRecorded += 1;
       }
       pass.promoted = await this.earnings.promoteMatured();
 
-      for (const refund of await this.refunds.findUnsettled(new Date(now.getTime() - REFUND_CHECK_MS), BATCH)) {
+      for (const refund of await this.refunds.findUnsettled(
+        new Date(now.getTime() - REFUND_CHECK_MS),
+        BATCH,
+      )) {
         await this.refunds.resolve(refund, PaymentEventSource.RECONCILE);
         pass.refundsChecked += 1;
       }
@@ -111,13 +128,22 @@ export class PaymentsReconciler implements OnApplicationBootstrap, OnModuleDestr
       }
       pass.dailyRunStarted = await this.reconciliation.ensureDailyRun(now);
 
-      if (pass.reconciled || pass.earningsRecorded || pass.promoted || pass.refundsChecked || pass.clawbacks)
+      if (
+        pass.reconciled ||
+        pass.earningsRecorded ||
+        pass.promoted ||
+        pass.refundsChecked ||
+        pass.clawbacks
+      )
         this.logger.log(
           `Reconciled ${pass.reconciled} payments, recorded ${pass.earningsRecorded} earnings, released ${pass.promoted}, ` +
             `checked ${pass.refundsChecked} refunds, ${pass.clawbacks} clawbacks`,
         );
     } catch (error) {
-      this.logger.error("Payment reconciliation pass failed", error instanceof Error ? error.stack : String(error));
+      this.logger.error(
+        "Payment reconciliation pass failed",
+        error instanceof Error ? error.stack : String(error),
+      );
     } finally {
       this.running = false;
     }

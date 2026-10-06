@@ -3,7 +3,10 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
-import { apiBadRequest, apiConflict } from "../../common/exceptions/api.exception";
+import {
+  apiBadRequest,
+  apiConflict,
+} from "../../common/exceptions/api.exception";
 import { maskPhone } from "../../common/phone/phone-number";
 import { UserRole } from "../../common/types/user-role.enum";
 import { DriversService } from "../drivers/drivers.service";
@@ -28,7 +31,8 @@ export interface SignupChallengeView extends OtpChallengeView {
   verificationId: string;
 }
 
-const sha256 = (value: string): string => createHash("sha256").update(value).digest("hex");
+const sha256 = (value: string): string =>
+  createHash("sha256").update(value).digest("hex");
 
 const sameHash = (a: string, b: string): boolean => {
   const left = Buffer.from(a, "hex");
@@ -37,7 +41,11 @@ const sameHash = (a: string, b: string): boolean => {
 };
 
 const duplicateField = (error: unknown): string | null => {
-  const duplicate = error as { code?: number; keyPattern?: Record<string, unknown>; keyValue?: Record<string, unknown> };
+  const duplicate = error as {
+    code?: number;
+    keyPattern?: Record<string, unknown>;
+    keyValue?: Record<string, unknown>;
+  };
   if (duplicate?.code !== 11000) return null;
   return Object.keys(duplicate.keyPattern ?? duplicate.keyValue ?? {})[0] ?? "";
 };
@@ -57,18 +65,23 @@ export class SignupService {
   private readonly pendingTtlMs: number;
 
   constructor(
-    @InjectModel(PendingSignup.name) private readonly pendingModel: Model<PendingSignup>,
+    @InjectModel(PendingSignup.name)
+    private readonly pendingModel: Model<PendingSignup>,
     private readonly users: UsersService,
     private readonly drivers: DriversService,
     private readonly otp: OtpService,
     private readonly auth: AuthService,
     config: ConfigService,
   ) {
-    this.pendingTtlMs = config.getOrThrow<number>("signupPendingTtlMinutes") * 60_000;
+    this.pendingTtlMs =
+      config.getOrThrow<number>("signupPendingTtlMinutes") * 60_000;
   }
 
   /** POST /auth/register — validates, stores the pending form and sends the code. */
-  async register(dto: RegisterDto, ipAddress?: string): Promise<SignupChallengeView> {
+  async register(
+    dto: RegisterDto,
+    ipAddress?: string,
+  ): Promise<SignupChallengeView> {
     const phone = dto.phone;
     await this.assertAvailable(phone, dto.email);
 
@@ -98,7 +111,12 @@ export class SignupService {
         challenge = await this.otp.issue(phone, OtpPurpose.SIGNUP);
       } catch (error) {
         // The client never received this verificationId: nothing can use it.
-        await this.pendingModel.deleteOne({ _id: pending._id, verificationIdHash: pending.verificationIdHash }).exec();
+        await this.pendingModel
+          .deleteOne({
+            _id: pending._id,
+            verificationIdHash: pending.verificationIdHash,
+          })
+          .exec();
         throw error;
       }
     }
@@ -117,9 +135,15 @@ export class SignupService {
     const challenge = await this.otp.issue(dto.phone, OtpPurpose.SIGNUP);
     // The sign-up stays open while the user is actively retrying.
     await this.pendingModel
-      .updateOne({ _id: pending._id }, { $set: { expiresAt: new Date(Date.now() + this.pendingTtlMs) } })
+      .updateOne(
+        { _id: pending._id },
+        { $set: { expiresAt: new Date(Date.now() + this.pendingTtlMs) } },
+      )
       .exec();
-    return { verificationId: dto.verificationId, ...this.view(dto.phone, challenge) };
+    return {
+      verificationId: dto.verificationId,
+      ...this.view(dto.phone, challenge),
+    };
   }
 
   /**
@@ -127,7 +151,10 @@ export class SignupService {
    * account, and signs the user in. The pending form and the code are both
    * gone afterwards, so neither can be replayed.
    */
-  async verify(dto: VerifyOtpDto, device: DeviceMetadata): Promise<AuthSession> {
+  async verify(
+    dto: VerifyOtpDto,
+    device: DeviceMetadata,
+  ): Promise<AuthSession> {
     const pending = await this.pendingFor(dto.phone, dto.verificationId);
     // Someone finished signing up with this number (or email) meanwhile:
     // fail before spending the code.
@@ -135,13 +162,16 @@ export class SignupService {
       await this.abandon(pending);
       throw this.phoneTaken();
     }
-    if (pending.email && (await this.users.existsByEmail(pending.email))) throw this.emailTaken();
+    if (pending.email && (await this.users.existsByEmail(pending.email)))
+      throw this.emailTaken();
 
     await this.otp.verify(pending.phone, OtpPurpose.SIGNUP, dto.otp);
 
     const user = await this.createAccount(pending);
     await this.pendingModel.deleteOne({ _id: pending._id }).exec();
-    this.logger.log(`Signup completed for ${maskPhone(pending.phone)} as ${user.role}`);
+    this.logger.log(
+      `Signup completed for ${maskPhone(pending.phone)} as ${user.role}`,
+    );
     return this.auth.startSession(user._id.toString(), user.role, device);
   }
 
@@ -155,8 +185,14 @@ export class SignupService {
   async sendExistingAccountCode(userId: string): Promise<OtpChallengeView> {
     const user = await this.users.findById(userId);
     if (user.isPhoneVerified)
-      throw apiConflict("Your mobile number is already verified.", "PHONE_ALREADY_VERIFIED");
-    const active = await this.otp.activeChallenge(user.phone, OtpPurpose.PHONE_VERIFICATION);
+      throw apiConflict(
+        "Your mobile number is already verified.",
+        "PHONE_ALREADY_VERIFIED",
+      );
+    const active = await this.otp.activeChallenge(
+      user.phone,
+      OtpPurpose.PHONE_VERIFICATION,
+    );
     const challenge =
       active && active.resendAvailableInSeconds > 0
         ? active
@@ -165,7 +201,10 @@ export class SignupService {
   }
 
   /** POST /auth/phone/verify-otp — marks the signed-in account's number verified. */
-  async verifyExistingAccount(userId: string, code: string): Promise<AuthUserView> {
+  async verifyExistingAccount(
+    userId: string,
+    code: string,
+  ): Promise<AuthUserView> {
     const user = await this.users.findById(userId);
     if (!user.isPhoneVerified) {
       await this.otp.verify(user.phone, OtpPurpose.PHONE_VERIFICATION, code);
@@ -178,10 +217,14 @@ export class SignupService {
 
   private async assertAvailable(phone: string, email?: string): Promise<void> {
     if (await this.users.existsByPhone(phone)) throw this.phoneTaken();
-    if (email && (await this.users.existsByEmail(email))) throw this.emailTaken();
+    if (email && (await this.users.existsByEmail(email)))
+      throw this.emailTaken();
   }
 
-  private async pendingFor(phone: string, verificationId: string): Promise<PendingSignupDocument> {
+  private async pendingFor(
+    phone: string,
+    verificationId: string,
+  ): Promise<PendingSignupDocument> {
     const pending = await this.pendingModel.findOne({ phone }).exec();
     if (
       !pending ||
@@ -195,10 +238,16 @@ export class SignupService {
     return pending;
   }
 
-  private async savePending(fields: PendingSignup): Promise<PendingSignupDocument> {
+  private async savePending(
+    fields: PendingSignup,
+  ): Promise<PendingSignupDocument> {
     const write = () =>
       this.pendingModel
-        .findOneAndReplace({ phone: fields.phone }, fields, { upsert: true, returnDocument: "after", runValidators: true })
+        .findOneAndReplace({ phone: fields.phone }, fields, {
+          upsert: true,
+          returnDocument: "after",
+          runValidators: true,
+        })
         .exec();
     try {
       return (await write())!;
@@ -209,7 +258,9 @@ export class SignupService {
     }
   }
 
-  private async createAccount(pending: PendingSignupDocument): Promise<UserDocument> {
+  private async createAccount(
+    pending: PendingSignupDocument,
+  ): Promise<UserDocument> {
     let user: UserDocument;
     try {
       user = await this.users.createVerified({

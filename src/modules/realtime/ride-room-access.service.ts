@@ -10,7 +10,11 @@ import type { SocketIdentity } from "./realtime.types";
 
 export type RoomAccess =
   | { allowed: true; rideId: string; status: RideStatus; stateVersion: number }
-  | { allowed: false; reason: "RIDE_NOT_FOUND" | "RIDE_NOT_ACTIVE"; status?: RideStatus };
+  | {
+      allowed: false;
+      reason: "RIDE_NOT_FOUND" | "RIDE_NOT_ACTIVE";
+      status?: RideStatus;
+    };
 
 /**
  * Who may be in `ride:{id}`: its customer while the ride is active, and its
@@ -19,10 +23,13 @@ export type RoomAccess =
  */
 @Injectable()
 export class RideRoomAccessService {
-  constructor(@InjectModel(Ride.name) private readonly rideModel: Model<Ride>) {}
+  constructor(
+    @InjectModel(Ride.name) private readonly rideModel: Model<Ride>,
+  ) {}
 
   async check(identity: SocketIdentity, rideId: string): Promise<RoomAccess> {
-    if (!Types.ObjectId.isValid(rideId)) return { allowed: false, reason: "RIDE_NOT_FOUND" };
+    if (!Types.ObjectId.isValid(rideId))
+      return { allowed: false, reason: "RIDE_NOT_FOUND" };
     const owner = this.ownerFilter(identity);
     if (!owner) return { allowed: false, reason: "RIDE_NOT_FOUND" };
 
@@ -35,9 +42,17 @@ export class RideRoomAccessService {
     if (!ride) return { allowed: false, reason: "RIDE_NOT_FOUND" };
 
     const member =
-      identity.role === UserRole.CUSTOMER ? ride.isActive : DRIVER_ENGAGED_STATUSES.includes(ride.status);
-    if (!member) return { allowed: false, reason: "RIDE_NOT_ACTIVE", status: ride.status };
-    return { allowed: true, rideId, status: ride.status, stateVersion: ride.stateVersion ?? 0 };
+      identity.role === UserRole.CUSTOMER
+        ? ride.isActive
+        : DRIVER_ENGAGED_STATUSES.includes(ride.status);
+    if (!member)
+      return { allowed: false, reason: "RIDE_NOT_ACTIVE", status: ride.status };
+    return {
+      allowed: true,
+      rideId,
+      status: ride.status,
+      stateVersion: ride.stateVersion ?? 0,
+    };
   }
 
   /** Rooms restored automatically on every (re)connect. */
@@ -53,7 +68,10 @@ export class RideRoomAccessService {
   }
 
   private ownerFilter(identity: SocketIdentity): QueryFilter<Ride> | null {
-    if (identity.role === UserRole.CUSTOMER) return { customerId: new Types.ObjectId(identity.userId) };
-    return identity.driverId ? { driverId: new Types.ObjectId(identity.driverId) } : null;
+    if (identity.role === UserRole.CUSTOMER)
+      return { customerId: new Types.ObjectId(identity.userId) };
+    return identity.driverId
+      ? { driverId: new Types.ObjectId(identity.driverId) }
+      : null;
   }
 }

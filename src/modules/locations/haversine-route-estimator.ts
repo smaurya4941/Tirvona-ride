@@ -23,7 +23,10 @@ export class HaversineRouteEstimator implements RouteEstimator {
     this.distanceFactor = config.getOrThrow<number>("routeDistanceFactor");
   }
 
-  estimate(origin: GeoCoordinates, destination: GeoCoordinates): Promise<RouteEstimate> {
+  estimate(
+    origin: GeoCoordinates,
+    destination: GeoCoordinates,
+  ): Promise<RouteEstimate> {
     const distanceMeters = Math.round(
       haversineMeters(origin, destination) * this.distanceFactor,
     );
@@ -31,6 +34,10 @@ export class HaversineRouteEstimator implements RouteEstimator {
       MIN_DURATION_SECONDS,
       Math.round(distanceMeters / this.averageSpeedMetersPerSecond),
     );
-    return Promise.resolve({ distanceMeters, durationSeconds, provider: "HAVERSINE" });
+    return Promise.resolve({
+      distanceMeters,
+      durationSeconds,
+      provider: "HAVERSINE",
+    });
   }
 }

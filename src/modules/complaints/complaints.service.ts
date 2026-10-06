@@ -2,7 +2,12 @@ import { HttpStatus, Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model, QueryFilter } from "mongoose";
 import { Types } from "mongoose";
-import { ApiException, apiBadRequest, apiConflict, apiNotFound } from "../../common/exceptions/api.exception";
+import {
+  ApiException,
+  apiBadRequest,
+  apiConflict,
+  apiNotFound,
+} from "../../common/exceptions/api.exception";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
 import { generateReferenceCode } from "../../common/utils/reference-code";
@@ -79,7 +84,14 @@ export interface AdminComplaintDetail extends AdminComplaintView {
     requestedAt: Date;
     completedAt?: Date;
   } | null;
-  history: Array<{ at: Date; action: string; status?: ComplaintStatus; note?: string; byRole: UserRole; by: string | null }>;
+  history: Array<{
+    at: Date;
+    action: string;
+    status?: ComplaintStatus;
+    note?: string;
+    byRole: UserRole;
+    by: string | null;
+  }>;
 }
 
 export interface ComplaintSummary {
@@ -89,10 +101,13 @@ export interface ComplaintSummary {
   resolvedToday: number;
 }
 
-const fullName = (user?: { firstName?: string; lastName?: string } | null): string =>
+const fullName = (
+  user?: { firstName?: string; lastName?: string } | null,
+): string =>
   user ? [user.firstName, user.lastName].filter(Boolean).join(" ") : "Unknown";
 
-const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegex = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const STATUS_LABEL: Record<ComplaintStatus, string> = {
   [ComplaintStatus.OPEN]: "open",
@@ -101,7 +116,8 @@ const STATUS_LABEL: Record<ComplaintStatus, string> = {
   [ComplaintStatus.CLOSED]: "closed",
 };
 
-const notFound = () => apiNotFound("Complaint not found", "COMPLAINT_NOT_FOUND");
+const notFound = () =>
+  apiNotFound("Complaint not found", "COMPLAINT_NOT_FOUND");
 
 /**
  * Complaints / support tickets. Customers and drivers file them (optionally
@@ -111,27 +127,42 @@ const notFound = () => apiNotFound("Complaint not found", "COMPLAINT_NOT_FOUND")
 @Injectable()
 export class ComplaintsService {
   constructor(
-    @InjectModel(SupportTicket.name) private readonly ticketModel: Model<SupportTicket>,
+    @InjectModel(SupportTicket.name)
+    private readonly ticketModel: Model<SupportTicket>,
     @InjectModel(Ride.name) private readonly rideModel: Model<Ride>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
-    @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
+    @InjectModel(DriverProfile.name)
+    private readonly driverModel: Model<DriverProfile>,
     private readonly notifications: NotificationsService,
   ) {}
 
   // ── Customer / driver ────────────────────────────────────────────────
 
-  async create(user: AuthenticatedUser, dto: CreateComplaintDto): Promise<ComplaintView> {
+  async create(
+    user: AuthenticatedUser,
+    dto: CreateComplaintDto,
+  ): Promise<ComplaintView> {
     if (!categoryAllowed(user.role, dto.category))
-      throw apiBadRequest("This category is not available for your account", "COMPLAINT_NOT_ALLOWED");
+      throw apiBadRequest(
+        "This category is not available for your account",
+        "COMPLAINT_NOT_ALLOWED",
+      );
     if (!dto.rideId && RIDE_REQUIRED_CATEGORIES.includes(dto.category))
       throw apiBadRequest("Choose the ride this is about", "VALIDATION_FAILED");
 
     const owner = new Types.ObjectId(user.userId);
-    const ride = dto.rideId ? await this.participantRide(user, dto.rideId) : undefined;
+    const ride = dto.rideId
+      ? await this.participantRide(user, dto.rideId)
+      : undefined;
 
     if (ride) {
       const open = await this.ticketModel
-        .findOne({ userId: owner, rideId: ride._id, category: dto.category, status: { $in: OPEN_COMPLAINT_STATUSES } })
+        .findOne({
+          userId: owner,
+          rideId: ride._id,
+          category: dto.category,
+          status: { $in: OPEN_COMPLAINT_STATUSES },
+        })
         .select("_id ticketCode")
         .lean()
         .exec();
@@ -161,7 +192,15 @@ export class ComplaintsService {
           description: dto.description,
           status: ComplaintStatus.OPEN,
           priority: initialPriority(dto.category),
-          history: [{ at: now, byUserId: owner, byRole: user.role, action: "CREATED", status: ComplaintStatus.OPEN }],
+          history: [
+            {
+              at: now,
+              byUserId: owner,
+              byRole: user.role,
+              action: "CREATED",
+              status: ComplaintStatus.OPEN,
+            },
+          ],
         });
       } catch (error) {
         if ((error as { code?: number }).code !== 11000) throw error;
@@ -179,7 +218,10 @@ export class ComplaintsService {
           message: `Ticket ${ticket.ticketCode}: our support team will review it and update you here.`,
           rideId: ride?._id.toString(),
           referenceId: ticket._id.toString(),
-          data: { complaintId: ticket._id.toString(), ticketCode: ticket.ticketCode },
+          data: {
+            complaintId: ticket._id.toString(),
+            ticketCode: ticket.ticketCode,
+          },
           dedupeKey: `complaint:${ticket._id.toString()}:created`,
         },
       ]),
@@ -189,15 +231,23 @@ export class ComplaintsService {
         message: `${dto.subject}${ride ? ` · ride ${ride.rideCode}` : ""}`,
         rideId: ride?._id.toString(),
         referenceId: ticket._id.toString(),
-        data: { complaintId: ticket._id.toString(), ticketCode: ticket.ticketCode },
+        data: {
+          complaintId: ticket._id.toString(),
+          ticketCode: ticket.ticketCode,
+        },
         dedupeKey: `complaint:${ticket._id.toString()}:admin`,
       }),
     ]);
     return this.toView(ticket);
   }
 
-  async listMine(user: AuthenticatedUser, query: ListComplaintsQueryDto): Promise<Page<ComplaintView>> {
-    const filter: QueryFilter<SupportTicket> = { userId: new Types.ObjectId(user.userId) };
+  async listMine(
+    user: AuthenticatedUser,
+    query: ListComplaintsQueryDto,
+  ): Promise<Page<ComplaintView>> {
+    const filter: QueryFilter<SupportTicket> = {
+      userId: new Types.ObjectId(user.userId),
+    };
     if (query.status) filter.status = query.status;
     const [tickets, total] = await Promise.all([
       this.ticketModel
@@ -219,7 +269,10 @@ export class ComplaintsService {
 
   async getMine(user: AuthenticatedUser, id: string): Promise<ComplaintView> {
     const ticket = await this.ticketModel
-      .findOne({ _id: new Types.ObjectId(id), userId: new Types.ObjectId(user.userId) })
+      .findOne({
+        _id: new Types.ObjectId(id),
+        userId: new Types.ObjectId(user.userId),
+      })
       .exec();
     if (!ticket) throw notFound();
     return this.toView(ticket);
@@ -227,7 +280,9 @@ export class ComplaintsService {
 
   // ── Admin ────────────────────────────────────────────────────────────
 
-  async adminList(query: AdminListComplaintsQueryDto): Promise<Page<AdminComplaintView>> {
+  async adminList(
+    query: AdminListComplaintsQueryDto,
+  ): Promise<Page<AdminComplaintView>> {
     const filter: QueryFilter<SupportTicket> = {};
     if (query.status) filter.status = query.status;
     if (query.category) filter.category = query.category;
@@ -274,11 +329,18 @@ export class ComplaintsService {
   async summary(timeZoneDayStart: Date): Promise<ComplaintSummary> {
     const [open, inReview, urgentOpen, resolvedToday] = await Promise.all([
       this.ticketModel.countDocuments({ status: ComplaintStatus.OPEN }).exec(),
-      this.ticketModel.countDocuments({ status: ComplaintStatus.IN_REVIEW }).exec(),
       this.ticketModel
-        .countDocuments({ status: { $in: OPEN_COMPLAINT_STATUSES }, priority: ComplaintPriority.URGENT })
+        .countDocuments({ status: ComplaintStatus.IN_REVIEW })
         .exec(),
-      this.ticketModel.countDocuments({ resolvedAt: { $gte: timeZoneDayStart } }).exec(),
+      this.ticketModel
+        .countDocuments({
+          status: { $in: OPEN_COMPLAINT_STATUSES },
+          priority: ComplaintPriority.URGENT,
+        })
+        .exec(),
+      this.ticketModel
+        .countDocuments({ resolvedAt: { $gte: timeZoneDayStart } })
+        .exec(),
     ]);
     return { open, inReview, urgentOpen, resolvedToday };
   }
@@ -289,17 +351,28 @@ export class ComplaintsService {
     return this.buildDetail(ticket);
   }
 
-  async adminUpdate(adminUserId: string, id: string, dto: UpdateComplaintDto): Promise<AdminComplaintDetail> {
+  async adminUpdate(
+    adminUserId: string,
+    id: string,
+    dto: UpdateComplaintDto,
+  ): Promise<AdminComplaintDetail> {
     const ticket = await this.ticketModel.findById(id).exec();
     if (!ticket) throw notFound();
-    if (dto.status === undefined && dto.priority === undefined && !dto.note && !dto.assignToMe && !dto.resolution)
+    if (
+      dto.status === undefined &&
+      dto.priority === undefined &&
+      !dto.note &&
+      !dto.assignToMe &&
+      !dto.resolution
+    )
       throw apiBadRequest("Nothing to update", "VALIDATION_FAILED");
 
     const admin = new Types.ObjectId(adminUserId);
     const now = new Date();
     const set: Record<string, unknown> = {};
     const history: Array<Record<string, unknown>> = [];
-    const statusChanged = dto.status !== undefined && dto.status !== ticket.status;
+    const statusChanged =
+      dto.status !== undefined && dto.status !== ticket.status;
 
     if (statusChanged) {
       if (!canTransitionComplaint(ticket.status, dto.status!))
@@ -307,35 +380,71 @@ export class ComplaintsService {
           `A ${ticket.status} complaint cannot move to ${dto.status}`,
           "COMPLAINT_INVALID_TRANSITION",
         );
-      if (dto.status === ComplaintStatus.RESOLVED && !dto.resolution && !ticket.resolution)
-        throw apiBadRequest("Add a resolution the user will see", "VALIDATION_FAILED");
+      if (
+        dto.status === ComplaintStatus.RESOLVED &&
+        !dto.resolution &&
+        !ticket.resolution
+      )
+        throw apiBadRequest(
+          "Add a resolution the user will see",
+          "VALIDATION_FAILED",
+        );
       set.status = dto.status;
       if (dto.status === ComplaintStatus.RESOLVED) set.resolvedAt = now;
       if (dto.status === ComplaintStatus.CLOSED) set.closedAt = now;
-      history.push({ at: now, byUserId: admin, byRole: UserRole.ADMIN, action: "STATUS", status: dto.status, note: dto.note });
+      history.push({
+        at: now,
+        byUserId: admin,
+        byRole: UserRole.ADMIN,
+        action: "STATUS",
+        status: dto.status,
+        note: dto.note,
+      });
     } else if (dto.note) {
-      history.push({ at: now, byUserId: admin, byRole: UserRole.ADMIN, action: "NOTE", note: dto.note });
+      history.push({
+        at: now,
+        byUserId: admin,
+        byRole: UserRole.ADMIN,
+        action: "NOTE",
+        note: dto.note,
+      });
     }
     if (dto.resolution) set.resolution = dto.resolution;
     if (dto.priority && dto.priority !== ticket.priority) {
       set.priority = dto.priority;
-      history.push({ at: now, byUserId: admin, byRole: UserRole.ADMIN, action: `PRIORITY_${dto.priority}` });
+      history.push({
+        at: now,
+        byUserId: admin,
+        byRole: UserRole.ADMIN,
+        action: `PRIORITY_${dto.priority}`,
+      });
     }
     // Acting on a ticket (or asking to) makes the admin its owner.
     if (dto.assignToMe || statusChanged) set.assignedAdminId = admin;
     if (dto.assignToMe && !ticket.assignedAdminId?.equals(admin))
-      history.push({ at: now, byUserId: admin, byRole: UserRole.ADMIN, action: "ASSIGNED" });
+      history.push({
+        at: now,
+        byUserId: admin,
+        byRole: UserRole.ADMIN,
+        action: "ASSIGNED",
+      });
 
     // Compare-and-set on the status the admin was looking at.
     const updated = await this.ticketModel
       .findOneAndUpdate(
         { _id: ticket._id, status: ticket.status },
-        { $set: set, ...(history.length ? { $push: { history: { $each: history } } } : {}) },
+        {
+          $set: set,
+          ...(history.length ? { $push: { history: { $each: history } } } : {}),
+        },
         { returnDocument: "after", runValidators: true },
       )
       .exec();
     if (!updated)
-      throw apiConflict("This complaint was just updated by someone else — reload it", "COMPLAINT_INVALID_TRANSITION");
+      throw apiConflict(
+        "This complaint was just updated by someone else — reload it",
+        "COMPLAINT_INVALID_TRANSITION",
+      );
 
     if (statusChanged) {
       await this.notifications.notify([
@@ -350,7 +459,11 @@ export class ComplaintsService {
               : `Your complaint "${updated.subject}" is now ${STATUS_LABEL[updated.status]}.`,
           rideId: updated.rideId?.toString(),
           referenceId: updated._id.toString(),
-          data: { complaintId: updated._id.toString(), ticketCode: updated.ticketCode, status: updated.status },
+          data: {
+            complaintId: updated._id.toString(),
+            ticketCode: updated.ticketCode,
+            status: updated.status,
+          },
           dedupeKey: `complaint:${updated._id.toString()}:${updated.status}:${now.getTime()}`,
         },
       ]);
@@ -361,11 +474,18 @@ export class ComplaintsService {
   // ── Internals ────────────────────────────────────────────────────────
 
   /** A ride the caller took part in (a driver: only rides they accepted). */
-  private async participantRide(user: AuthenticatedUser, rideId: string): Promise<RideDocument> {
+  private async participantRide(
+    user: AuthenticatedUser,
+    rideId: string,
+  ): Promise<RideDocument> {
     const caller = new Types.ObjectId(user.userId);
     const scope: QueryFilter<Ride> =
-      user.role === UserRole.DRIVER ? { driverUserId: caller, acceptedAt: { $exists: true } } : { customerId: caller };
-    const ride = await this.rideModel.findOne({ _id: new Types.ObjectId(rideId), ...scope }).exec();
+      user.role === UserRole.DRIVER
+        ? { driverUserId: caller, acceptedAt: { $exists: true } }
+        : { customerId: caller };
+    const ride = await this.rideModel
+      .findOne({ _id: new Types.ObjectId(rideId), ...scope })
+      .exec();
     if (!ride) throw apiNotFound("Ride not found", "RIDE_NOT_FOUND");
     return ride;
   }
@@ -376,11 +496,14 @@ export class ComplaintsService {
     for (const ticket of tickets) {
       userIds.add(ticket.userId.toString());
       if (ticket.customerId) userIds.add(ticket.customerId.toString());
-      if (ticket.assignedAdminId) userIds.add(ticket.assignedAdminId.toString());
+      if (ticket.assignedAdminId)
+        userIds.add(ticket.assignedAdminId.toString());
       if (ticket.driverId) driverIds.add(ticket.driverId.toString());
     }
     const drivers = await this.driverModel
-      .find({ _id: { $in: [...driverIds].map((id) => new Types.ObjectId(id)) } })
+      .find({
+        _id: { $in: [...driverIds].map((id) => new Types.ObjectId(id)) },
+      })
       .select("userId driverCode")
       .lean()
       .exec();
@@ -392,7 +515,9 @@ export class ComplaintsService {
       .exec();
     return {
       users: new Map(users.map((user) => [user._id.toString(), user])),
-      drivers: new Map(drivers.map((driver) => [driver._id.toString(), driver])),
+      drivers: new Map(
+        drivers.map((driver) => [driver._id.toString(), driver]),
+      ),
     };
   }
 
@@ -402,12 +527,19 @@ export class ComplaintsService {
   ): AdminComplaintView {
     const person = (id?: Types.ObjectId): PersonRef | null => {
       const user = id ? people.users.get(id.toString()) : undefined;
-      return user ? { id: user._id.toString(), name: fullName(user), phone: user.phone } : null;
+      return user
+        ? { id: user._id.toString(), name: fullName(user), phone: user.phone }
+        : null;
     };
-    const driverProfile = ticket.driverId ? people.drivers.get(ticket.driverId.toString()) : undefined;
+    const driverProfile = ticket.driverId
+      ? people.drivers.get(ticket.driverId.toString())
+      : undefined;
     const driverUser = driverProfile ? person(driverProfile.userId) : null;
-    const admin = ticket.assignedAdminId ? people.users.get(ticket.assignedAdminId.toString()) : undefined;
-    const base: Omit<ComplaintView, "timeline"> & { timeline?: unknown } = this.toView(ticket);
+    const admin = ticket.assignedAdminId
+      ? people.users.get(ticket.assignedAdminId.toString())
+      : undefined;
+    const base: Omit<ComplaintView, "timeline"> & { timeline?: unknown } =
+      this.toView(ticket);
     delete base.timeline;
     return {
       ...base,
@@ -417,18 +549,36 @@ export class ComplaintsService {
       customer: person(ticket.customerId),
       driver:
         driverUser && driverProfile
-          ? { ...driverUser, driverId: driverProfile._id.toString(), driverCode: driverProfile.driverCode }
+          ? {
+              ...driverUser,
+              driverId: driverProfile._id.toString(),
+              driverCode: driverProfile.driverCode,
+            }
           : null,
-      assignedAdmin: admin ? { id: admin._id.toString(), name: fullName(admin) } : null,
+      assignedAdmin: admin
+        ? { id: admin._id.toString(), name: fullName(admin) }
+        : null,
     };
   }
 
-  private async buildDetail(ticket: SupportTicketDocument): Promise<AdminComplaintDetail> {
+  private async buildDetail(
+    ticket: SupportTicketDocument,
+  ): Promise<AdminComplaintDetail> {
     const people = await this.people([ticket]);
-    const ride = ticket.rideId ? await this.rideModel.findById(ticket.rideId).exec() : null;
-    const actorIds = ticket.history.map((entry) => entry.byUserId).filter((id): id is Types.ObjectId => Boolean(id));
-    const actors = await this.userModel.find({ _id: { $in: actorIds } }).select("firstName lastName").lean().exec();
-    const names = new Map(actors.map((user) => [user._id.toString(), fullName(user)]));
+    const ride = ticket.rideId
+      ? await this.rideModel.findById(ticket.rideId).exec()
+      : null;
+    const actorIds = ticket.history
+      .map((entry) => entry.byUserId)
+      .filter((id): id is Types.ObjectId => Boolean(id));
+    const actors = await this.userModel
+      .find({ _id: { $in: actorIds } })
+      .select("firstName lastName")
+      .lean()
+      .exec();
+    const names = new Map(
+      actors.map((user) => [user._id.toString(), fullName(user)]),
+    );
     return {
       ...this.toAdminView(ticket, people),
       ride: ride
@@ -452,7 +602,9 @@ export class ComplaintsService {
         status: entry.status,
         note: entry.note,
         byRole: entry.byRole,
-        by: entry.byUserId ? (names.get(entry.byUserId.toString()) ?? null) : null,
+        by: entry.byUserId
+          ? (names.get(entry.byUserId.toString()) ?? null)
+          : null,
       })),
     };
   }

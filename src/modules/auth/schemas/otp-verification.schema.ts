@@ -21,7 +21,11 @@ export enum OtpPurpose {
  *
  * Only an HMAC of the code is stored (see OtpService), never the code.
  */
-@Schema({ collection: "otp_verifications", timestamps: false, versionKey: false })
+@Schema({
+  collection: "otp_verifications",
+  timestamps: false,
+  versionKey: false,
+})
 export class OtpVerification {
   @Prop({ required: true })
   phone!: string;
@@ -48,7 +52,8 @@ export class OtpVerification {
 }
 
 export type OtpVerificationDocument = HydratedDocument<OtpVerification>;
-export const OtpVerificationSchema = SchemaFactory.createForClass(OtpVerification);
+export const OtpVerificationSchema =
+  SchemaFactory.createForClass(OtpVerification);
 
 // One active code per phone and purpose — the lookup for verify and resend.
 OtpVerificationSchema.index({ phone: 1, purpose: 1 }, { unique: true });

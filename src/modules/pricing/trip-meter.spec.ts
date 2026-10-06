@@ -1,11 +1,21 @@
 import { measureTrip, resolveFinalFare } from "./trip-meter";
 import type { TrailPoint } from "./trip-meter";
 
-const RATES = { currency: "INR", baseFare: 30, perKmRate: 12, perMinuteRate: 1.5, minimumFare: 50 };
+const RATES = {
+  currency: "INR",
+  baseFare: 30,
+  perKmRate: 12,
+  perMinuteRate: 1.5,
+  minimumFare: 50,
+};
 const START = new Date("2026-09-28T10:00:00Z");
 
 /** A straight northward trail: one fix every `everySeconds`, `metersPerFix` apart. */
-function trail(fixes: number, everySeconds: number, metersPerFix: number): TrailPoint[] {
+function trail(
+  fixes: number,
+  everySeconds: number,
+  metersPerFix: number,
+): TrailPoint[] {
   const degreesPerMeter = 1 / 111_195;
   return Array.from({ length: fixes }, (_, index) => ({
     latitude: 27.5714 + index * metersPerFix * degreesPerMeter,
@@ -24,14 +34,27 @@ describe("measureTrip", () => {
   });
 
   it("is unreliable with fewer than two points", () => {
-    expect(measureTrip(trail(1, 15, 100), 120)).toMatchObject({ reliable: false, reason: "TOO_FEW_POINTS" });
-    expect(measureTrip([], 120)).toMatchObject({ reliable: false, distanceMeters: 0 });
+    expect(measureTrip(trail(1, 15, 100), 120)).toMatchObject({
+      reliable: false,
+      reason: "TOO_FEW_POINTS",
+    });
+    expect(measureTrip([], 120)).toMatchObject({
+      reliable: false,
+      distanceMeters: 0,
+    });
   });
 
   it("is unreliable across a long GPS gap (under-measures)", () => {
     const points = trail(10, 15, 100);
-    points.push({ ...points[9], latitude: points[9].latitude + 0.02, recordedAt: new Date(START.getTime() + 20 * 60_000) });
-    expect(measureTrip(points, 120)).toMatchObject({ reliable: false, reason: "GAP_TOO_LONG" });
+    points.push({
+      ...points[9],
+      latitude: points[9].latitude + 0.02,
+      recordedAt: new Date(START.getTime() + 20 * 60_000),
+    });
+    expect(measureTrip(points, 120)).toMatchObject({
+      reliable: false,
+      reason: "GAP_TOO_LONG",
+    });
   });
 
   it("skips a GPS jump instead of billing it", () => {
@@ -63,7 +86,12 @@ describe("resolveFinalFare", () => {
 
   it("bills the booked route in booked mode", () => {
     const result = resolveFinalFare({ ...base, mode: "booked" });
-    expect(result).toMatchObject({ distanceSource: "BOOKED", durationSource: "BOOKED", distanceMeters: 5000, durationSeconds: 900 });
+    expect(result).toMatchObject({
+      distanceSource: "BOOKED",
+      durationSource: "BOOKED",
+      distanceMeters: 5000,
+      durationSeconds: 900,
+    });
     expect(result.total).toBe(113);
   });
 
@@ -96,7 +124,12 @@ describe("resolveFinalFare", () => {
 
   it("applies no cap when the multiplier is 0", () => {
     const measurement = measureTrip(trail(201, 15, 100), 120);
-    const result = resolveFinalFare({ ...base, mode: "actual", measurement, maxEstimateMultiplier: 0 });
+    const result = resolveFinalFare({
+      ...base,
+      mode: "actual",
+      measurement,
+      maxEstimateMultiplier: 0,
+    });
     expect(result.capApplied).toBe(false);
     expect(result.total).toBeGreaterThan(170);
   });

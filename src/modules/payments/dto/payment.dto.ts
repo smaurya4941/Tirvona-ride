@@ -30,7 +30,9 @@ const PAYMENT_ID = /^pay_[A-Za-z0-9]{6,40}$/;
 
 /** What Razorpay Checkout hands the app on success, forwarded untouched. */
 export class VerifyPaymentDto {
-  @ApiProperty({ description: "Tirvona payment id returned by /payments/create" })
+  @ApiProperty({
+    description: "Tirvona payment id returned by /payments/create",
+  })
   @IsMongoId()
   paymentId!: string;
 
@@ -39,11 +41,17 @@ export class VerifyPaymentDto {
   razorpayOrderId!: string;
 
   @ApiProperty({ example: "pay_Pq8Y1Ab2Cd3Efg" })
-  @Matches(PAYMENT_ID, { message: "razorpayPaymentId is not a Razorpay payment id" })
+  @Matches(PAYMENT_ID, {
+    message: "razorpayPaymentId is not a Razorpay payment id",
+  })
   razorpayPaymentId!: string;
 
-  @ApiProperty({ description: "razorpay_signature from the checkout success callback" })
-  @Matches(/^[a-f0-9]{64}$/i, { message: "razorpaySignature must be a 64-character hex digest" })
+  @ApiProperty({
+    description: "razorpay_signature from the checkout success callback",
+  })
+  @Matches(/^[a-f0-9]{64}$/i, {
+    message: "razorpaySignature must be a 64-character hex digest",
+  })
   razorpaySignature!: string;
 }
 
@@ -75,7 +83,9 @@ export class PaymentFailureDto {
   @Length(1, 500)
   description?: string;
 
-  @ApiPropertyOptional({ description: "true when the customer dismissed the checkout" })
+  @ApiPropertyOptional({
+    description: "true when the customer dismissed the checkout",
+  })
   @IsOptional()
   @IsBoolean()
   cancelled?: boolean;
@@ -112,17 +122,25 @@ export class AdminPaymentsQueryDto extends PageQueryDto {
   @IsEnum(PaymentStatus)
   status?: PaymentStatus;
 
-  @ApiPropertyOptional({ enum: PaymentGateway, description: "RAZORPAY (online) or CASH" })
+  @ApiPropertyOptional({
+    enum: PaymentGateway,
+    description: "RAZORPAY (online) or CASH",
+  })
   @IsOptional()
   @IsEnum(PaymentGateway)
   gateway?: PaymentGateway;
 
-  @ApiPropertyOptional({ description: "Created on/after (ISO date or date-time)" })
+  @ApiPropertyOptional({
+    description: "Created on/after (ISO date or date-time)",
+  })
   @IsOptional()
   @IsISO8601()
   from?: string;
 
-  @ApiPropertyOptional({ description: "Created before the end of this day (ISO date) or this instant" })
+  @ApiPropertyOptional({
+    description:
+      "Created before the end of this day (ISO date) or this instant",
+  })
   @IsOptional()
   @IsISO8601()
   to?: string;

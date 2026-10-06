@@ -38,7 +38,10 @@ export class NotificationEventsListener implements OnModuleInit {
 
   onModuleInit(): void {
     this.events.on("ride.transitioned", async (event) => {
-      const drafts = planRideNotifications(event, await this.context(event.ride));
+      const drafts = planRideNotifications(
+        event,
+        await this.context(event.ride),
+      );
       if (drafts.length) await this.notifications.notify(drafts);
     });
 
@@ -52,12 +55,21 @@ export class NotificationEventsListener implements OnModuleInit {
       if (!ride) return;
       const snapshot = rideSnapshot(ride);
       await this.notifications.notify([
-        planArrivingNotification(snapshot, event.etaSeconds, await this.context(snapshot)),
+        planArrivingNotification(
+          snapshot,
+          event.etaSeconds,
+          await this.context(snapshot),
+        ),
       ]);
     });
 
     this.events.on("ride.payment_updated", async (event) => {
-      const drafts = planPaymentNotifications(event.ride, event.paymentStatus, event.amount, event.method);
+      const drafts = planPaymentNotifications(
+        event.ride,
+        event.paymentStatus,
+        event.amount,
+        event.method,
+      );
       if (drafts.length) await this.notifications.notify(drafts);
     });
 
@@ -90,7 +102,8 @@ export class NotificationEventsListener implements OnModuleInit {
               recipientRole: UserRole.DRIVER,
               type: NotificationType.DRIVER_REINSTATED,
               title: "Account reinstated",
-              message: "Your driver account is active again. Go online to receive rides.",
+              message:
+                "Your driver account is active again. Go online to receive rides.",
               referenceId: event.driverId,
               data: { driverId: event.driverId },
             },
@@ -105,7 +118,8 @@ export class NotificationEventsListener implements OnModuleInit {
               recipientRole: UserRole.DRIVER,
               type: NotificationType.DRIVER_APPROVED,
               title: "You're approved!",
-              message: "Your documents are verified. Go online to start receiving rides.",
+              message:
+                "Your documents are verified. Go online to start receiving rides.",
               referenceId: event.driverId,
               data: { driverId: event.driverId },
             }
@@ -128,8 +142,12 @@ export class NotificationEventsListener implements OnModuleInit {
         {
           userId: event.userId,
           recipientRole: UserRole.DRIVER,
-          type: event.approved ? NotificationType.DRIVER_UPDATE_APPROVED : NotificationType.DRIVER_UPDATE_REJECTED,
-          title: event.approved ? `${event.label} updated` : `${event.label} update not approved`,
+          type: event.approved
+            ? NotificationType.DRIVER_UPDATE_APPROVED
+            : NotificationType.DRIVER_UPDATE_REJECTED,
+          title: event.approved
+            ? `${event.label} updated`
+            : `${event.label} update not approved`,
           message: event.approved
             ? `Your ${event.label.toLowerCase()} change was verified and is now on your profile.`
             : event.reason
@@ -143,19 +161,31 @@ export class NotificationEventsListener implements OnModuleInit {
 
     // Belt and braces with the app's own unregister call on sign out.
     this.events.on("auth.logged_out", async (event) => {
-      if (event.deviceId) await this.deviceTokens.deactivateDevice(event.userId, event.deviceId);
+      if (event.deviceId)
+        await this.deviceTokens.deactivateDevice(event.userId, event.deviceId);
     });
 
     this.events.on("auth.sessions_revoked", async (event) => {
-      await this.deviceTokens.deactivateAllForUser(event.userId, event.exceptDeviceId);
+      await this.deviceTokens.deactivateAllForUser(
+        event.userId,
+        event.exceptDeviceId,
+      );
     });
   }
 
   private async context(ride: RideSnapshot): Promise<RideNotificationContext> {
     if (!ride.driverUserId) return {};
     const [driverUser, rideDoc] = await Promise.all([
-      this.userModel.findById(ride.driverUserId).select("firstName").lean().exec(),
-      this.rideModel.findById(ride.rideId).select("vehicle.registrationNumber").lean().exec(),
+      this.userModel
+        .findById(ride.driverUserId)
+        .select("firstName")
+        .lean()
+        .exec(),
+      this.rideModel
+        .findById(ride.rideId)
+        .select("vehicle.registrationNumber")
+        .lean()
+        .exec(),
     ]);
     return {
       driverName: driverUser?.firstName,

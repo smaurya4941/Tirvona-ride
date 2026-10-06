@@ -9,16 +9,36 @@ import type { HydratedDocument } from "mongoose";
  */
 @Schema({ timestamps: true, collection: "ratings" })
 export class Rating {
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "Ride", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "Ride",
+    immutable: true,
+  })
   rideId!: Types.ObjectId;
 
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "User", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "User",
+    immutable: true,
+  })
   customerId!: Types.ObjectId;
 
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "DriverProfile", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "DriverProfile",
+    immutable: true,
+  })
   driverId!: Types.ObjectId;
 
-  @Prop({ required: true, type: SchemaTypes.ObjectId, ref: "User", immutable: true })
+  @Prop({
+    required: true,
+    type: SchemaTypes.ObjectId,
+    ref: "User",
+    immutable: true,
+  })
   driverUserId!: Types.ObjectId;
 
   @Prop({
@@ -26,7 +46,10 @@ export class Rating {
     min: 1,
     max: 5,
     immutable: true,
-    validate: { validator: Number.isInteger, message: "rating must be a whole number" },
+    validate: {
+      validator: Number.isInteger,
+      message: "rating must be a whole number",
+    },
   })
   rating!: number;
 

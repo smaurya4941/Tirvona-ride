@@ -1,15 +1,24 @@
 import { Logger, Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { MongooseModule } from "@nestjs/mongoose";
-import type { PlacesFallbackName, PlacesProviderName } from "../../config/environment";
+import type {
+  PlacesFallbackName,
+  PlacesProviderName,
+} from "../../config/environment";
 import { PlacesController } from "./places.controller";
 import { PlacesService } from "./places.service";
 import { PopularPlacesService } from "./popular-places.service";
 import { SavedPlacesService } from "./saved-places.service";
-import { PopularPlace, PopularPlaceSchema } from "./schemas/popular-place.schema";
+import {
+  PopularPlace,
+  PopularPlaceSchema,
+} from "./schemas/popular-place.schema";
 import { SavedPlace, SavedPlaceSchema } from "./schemas/saved-place.schema";
 import { FallbackGeocodingProvider } from "./providers/fallback.provider";
-import { DisabledGeocodingProvider, GeocodingProvider } from "./providers/geocoding.provider";
+import {
+  DisabledGeocodingProvider,
+  GeocodingProvider,
+} from "./providers/geocoding.provider";
 import { GooglePlacesProvider } from "./providers/google-places.provider";
 import { NominatimProvider } from "./providers/nominatim.provider";
 import { PhotonProvider } from "./providers/photon.provider";
@@ -29,21 +38,31 @@ import { PhotonProvider } from "./providers/photon.provider";
       provide: GeocodingProvider,
       inject: [ConfigService],
       useFactory: (config: ConfigService): GeocodingProvider => {
-        const provider = config.getOrThrow<PlacesProviderName>("placesProvider");
+        const provider =
+          config.getOrThrow<PlacesProviderName>("placesProvider");
         // Photon for search-as-you-type; Nominatim covers its outages and
         // resolves osm: ids (Photon has no lookup endpoint).
-        const osm = () => new FallbackGeocodingProvider(new PhotonProvider(config), new NominatimProvider(config));
+        const osm = () =>
+          new FallbackGeocodingProvider(
+            new PhotonProvider(config),
+            new NominatimProvider(config),
+          );
         const logger = new Logger(PlacesModule.name);
         if (provider === "google") {
           const google = new GooglePlacesProvider(config);
-          if (config.getOrThrow<PlacesFallbackName>("placesFallback") === "none") {
+          if (
+            config.getOrThrow<PlacesFallbackName>("placesFallback") === "none"
+          ) {
             logger.log("Place search: Google Places (no fallback)");
             return google;
           }
           logger.log("Place search: Google Places with OpenStreetMap fallback");
           return new FallbackGeocodingProvider(google, osm(), {
-            failureThreshold: config.getOrThrow<number>("placesFailureThreshold"),
-            cooldownMs: config.getOrThrow<number>("placesFailureCooldownSeconds") * 1000,
+            failureThreshold: config.getOrThrow<number>(
+              "placesFailureThreshold",
+            ),
+            cooldownMs:
+              config.getOrThrow<number>("placesFailureCooldownSeconds") * 1000,
           });
         }
         logger.log(`Place search: ${provider}`);

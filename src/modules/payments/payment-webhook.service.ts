@@ -3,13 +3,23 @@ import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
 import { createHash } from "node:crypto";
-import { ApiException, apiBadRequest } from "../../common/exceptions/api.exception";
+import {
+  ApiException,
+  apiBadRequest,
+} from "../../common/exceptions/api.exception";
 import { PaymentEventSource } from "./interfaces/payment-status";
 import { PaymentsService } from "./payments.service";
 import { RefundsService } from "./refunds.service";
 import { verifyWebhookSignature } from "./razorpay/razorpay-signature";
-import type { RazorpayPayment, RazorpayRefund, RazorpayWebhookBody } from "./razorpay/razorpay.types";
-import { PaymentWebhookEvent, WebhookEventStatus } from "./schemas/payment-webhook-event.schema";
+import type {
+  RazorpayPayment,
+  RazorpayRefund,
+  RazorpayWebhookBody,
+} from "./razorpay/razorpay.types";
+import {
+  PaymentWebhookEvent,
+  WebhookEventStatus,
+} from "./schemas/payment-webhook-event.schema";
 
 export interface WebhookResult {
   status: WebhookEventStatus | "DUPLICATE";
@@ -41,7 +51,8 @@ export class PaymentWebhookService {
   private readonly webhookSecret: string;
 
   constructor(
-    @InjectModel(PaymentWebhookEvent.name) private readonly eventModel: Model<PaymentWebhookEvent>,
+    @InjectModel(PaymentWebhookEvent.name)
+    private readonly eventModel: Model<PaymentWebhookEvent>,
     private readonly payments: PaymentsService,
     private readonly refunds: RefundsService,
     config: ConfigService,
@@ -49,7 +60,11 @@ export class PaymentWebhookService {
     this.webhookSecret = config.get<string>("razorpayWebhookSecret") ?? "";
   }
 
-  async handle(rawBody: Buffer | undefined, signature: string | undefined, eventIdHeader?: string): Promise<WebhookResult> {
+  async handle(
+    rawBody: Buffer | undefined,
+    signature: string | undefined,
+    eventIdHeader?: string,
+  ): Promise<WebhookResult> {
     if (!this.webhookSecret)
       // 503 → Razorpay keeps retrying until the secret is configured.
       throw new ApiException(
@@ -57,22 +72,38 @@ export class PaymentWebhookService {
         "Webhook secret is not configured",
         "PAYMENT_GATEWAY_NOT_CONFIGURED",
       );
-    if (!rawBody?.length) throw apiBadRequest("Empty webhook body", "PAYMENT_WEBHOOK_INVALID");
+    if (!rawBody?.length)
+      throw apiBadRequest("Empty webhook body", "PAYMENT_WEBHOOK_INVALID");
     if (!verifyWebhookSignature(rawBody, signature, this.webhookSecret)) {
       this.logger.warn("Rejected a webhook with an invalid signature");
-      throw apiBadRequest("Invalid webhook signature", "PAYMENT_WEBHOOK_INVALID");
+      throw apiBadRequest(
+        "Invalid webhook signature",
+        "PAYMENT_WEBHOOK_INVALID",
+      );
     }
 
     let body: RazorpayWebhookBody;
     try {
       body = JSON.parse(rawBody.toString("utf8")) as RazorpayWebhookBody;
     } catch {
-      throw apiBadRequest("Webhook body is not JSON", "PAYMENT_WEBHOOK_INVALID");
+      throw apiBadRequest(
+        "Webhook body is not JSON",
+        "PAYMENT_WEBHOOK_INVALID",
+      );
     }
-    if (typeof body?.event !== "string" || typeof body.payload !== "object" || body.payload === null)
-      throw apiBadRequest("Unrecognised webhook body", "PAYMENT_WEBHOOK_INVALID");
+    if (
+      typeof body?.event !== "string" ||
+      typeof body.payload !== "object" ||
+      body.payload === null
+    )
+      throw apiBadRequest(
+        "Unrecognised webhook body",
+        "PAYMENT_WEBHOOK_INVALID",
+      );
 
-    const eventId = eventIdHeader?.trim() || `sha256:${createHash("sha256").update(rawBody).digest("hex")}`;
+    const eventId =
+      eventIdHeader?.trim() ||
+      `sha256:${createHash("sha256").update(rawBody).digest("hex")}`;
     const paymentEntity = body.payload.payment?.entity;
     const refundEntity = body.payload.refund?.entity;
 
@@ -86,7 +117,8 @@ export class PaymentWebhookService {
             eventId,
             event: body.event,
             status: WebhookEventStatus.RECEIVED,
-            razorpayOrderId: paymentEntity?.order_id ?? body.payload.order?.entity.id,
+            razorpayOrderId:
+              paymentEntity?.order_id ?? body.payload.order?.entity.id,
             razorpayPaymentId: paymentEntity?.id ?? refundEntity?.payment_id,
           },
           $inc: { deliveries: 1 },
@@ -94,7 +126,11 @@ export class PaymentWebhookService {
         { upsert: true, returnDocument: "before" },
       )
       .exec();
-    if (previous && previous.status !== WebhookEventStatus.FAILED && previous.status !== WebhookEventStatus.RECEIVED)
+    if (
+      previous &&
+      previous.status !== WebhookEventStatus.FAILED &&
+      previous.status !== WebhookEventStatus.RECEIVED
+    )
       return { status: "DUPLICATE", event: body.event };
 
     let outcome: { status: WebhookEventStatus; detail?: string };
@@ -106,10 +142,15 @@ export class PaymentWebhookService {
         // Razorpay's facts contradict ours (amount/order mismatch, reused id):
         // retrying will not help — keep it for a human.
         outcome = { status: WebhookEventStatus.FLAGGED, detail };
-        this.logger.error(`Webhook ${body.event} ${eventId} flagged: ${detail}`);
+        this.logger.error(
+          `Webhook ${body.event} ${eventId} flagged: ${detail}`,
+        );
       } else {
         await this.mark(eventId, WebhookEventStatus.FAILED, detail);
-        this.logger.error(`Webhook ${body.event} ${eventId} failed; Razorpay will retry`, (error as Error).stack);
+        this.logger.error(
+          `Webhook ${body.event} ${eventId} failed; Razorpay will retry`,
+          (error as Error).stack,
+        );
         throw error;
       }
     }
@@ -117,41 +158,81 @@ export class PaymentWebhookService {
     return { status: outcome.status, event: body.event };
   }
 
-  private async route(body: RazorpayWebhookBody): Promise<{ status: WebhookEventStatus; detail?: string }> {
-    if (!HANDLED_EVENTS.has(body.event)) return { status: WebhookEventStatus.IGNORED, detail: "Unhandled event" };
+  private async route(
+    body: RazorpayWebhookBody,
+  ): Promise<{ status: WebhookEventStatus; detail?: string }> {
+    if (!HANDLED_EVENTS.has(body.event))
+      return { status: WebhookEventStatus.IGNORED, detail: "Unhandled event" };
 
     if (body.event.startsWith("refund.")) {
       const refund = body.payload.refund?.entity;
-      if (!refund) return { status: WebhookEventStatus.IGNORED, detail: "No refund entity" };
+      if (!refund)
+        return {
+          status: WebhookEventStatus.IGNORED,
+          detail: "No refund entity",
+        };
       return this.onRefund(refund, body.event);
     }
 
     const gatewayPayment = body.payload.payment?.entity;
     if (!gatewayPayment?.order_id)
-      return { status: WebhookEventStatus.IGNORED, detail: "Payment without an order" };
+      return {
+        status: WebhookEventStatus.IGNORED,
+        detail: "Payment without an order",
+      };
     return this.onPayment(gatewayPayment);
   }
 
-  private async onPayment(gatewayPayment: RazorpayPayment): Promise<{ status: WebhookEventStatus; detail?: string }> {
+  private async onPayment(
+    gatewayPayment: RazorpayPayment,
+  ): Promise<{ status: WebhookEventStatus; detail?: string }> {
     const payment = await this.payments.findByOrderId(gatewayPayment.order_id!);
     // Not one of ours (e.g. another integration on the same Razorpay account).
-    if (!payment) return { status: WebhookEventStatus.IGNORED, detail: "Unknown order" };
-    const updated = await this.payments.applyGatewayPayment(payment, gatewayPayment, PaymentEventSource.WEBHOOK);
-    return { status: WebhookEventStatus.PROCESSED, detail: `payment ${updated._id.toString()} → ${updated.status}` };
+    if (!payment)
+      return { status: WebhookEventStatus.IGNORED, detail: "Unknown order" };
+    const updated = await this.payments.applyGatewayPayment(
+      payment,
+      gatewayPayment,
+      PaymentEventSource.WEBHOOK,
+    );
+    return {
+      status: WebhookEventStatus.PROCESSED,
+      detail: `payment ${updated._id.toString()} → ${updated.status}`,
+    };
   }
 
-  private async onRefund(refund: RazorpayRefund, event: string): Promise<{ status: WebhookEventStatus; detail?: string }> {
+  private async onRefund(
+    refund: RazorpayRefund,
+    event: string,
+  ): Promise<{ status: WebhookEventStatus; detail?: string }> {
     // refund.failed carries the entity already in status "failed"; trust the event name too.
-    const entity: RazorpayRefund = event === "refund.failed" ? { ...refund, status: "failed" } : refund;
-    const synced = await this.refunds.syncFromGateway(entity, PaymentEventSource.WEBHOOK);
+    const entity: RazorpayRefund =
+      event === "refund.failed" ? { ...refund, status: "failed" } : refund;
+    const synced = await this.refunds.syncFromGateway(
+      entity,
+      PaymentEventSource.WEBHOOK,
+    );
     // Not a Ride payment (e.g. the main Tirvona app on the same Razorpay account).
-    if (!synced) return { status: WebhookEventStatus.IGNORED, detail: "Unknown payment" };
-    return { status: WebhookEventStatus.PROCESSED, detail: `refund ${synced._id.toString()} → ${synced.status}` };
+    if (!synced)
+      return { status: WebhookEventStatus.IGNORED, detail: "Unknown payment" };
+    return {
+      status: WebhookEventStatus.PROCESSED,
+      detail: `refund ${synced._id.toString()} → ${synced.status}`,
+    };
   }
 
-  private async mark(eventId: string, status: WebhookEventStatus, detail?: string): Promise<void> {
+  private async mark(
+    eventId: string,
+    status: WebhookEventStatus,
+    detail?: string,
+  ): Promise<void> {
     await this.eventModel
-      .updateOne({ eventId }, { $set: { status, ...(detail ? { detail: detail.slice(0, 500) } : {}) } })
+      .updateOne(
+        { eventId },
+        {
+          $set: { status, ...(detail ? { detail: detail.slice(0, 500) } : {}) },
+        },
+      )
       .exec();
   }
 }

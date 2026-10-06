@@ -3,7 +3,11 @@ import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model, QueryFilter, UpdateQuery } from "mongoose";
 import { Types } from "mongoose";
-import { ApiException, apiBadRequest, apiNotFound } from "../../common/exceptions/api.exception";
+import {
+  ApiException,
+  apiBadRequest,
+  apiNotFound,
+} from "../../common/exceptions/api.exception";
 import { toPaise, toRupees } from "../../common/utils/money";
 import { DriverProfile } from "../drivers/schemas/driver-profile.schema";
 import { EarningsService } from "../earnings/earnings.service";
@@ -18,7 +22,11 @@ import {
 import { RideStatus } from "../rides/ride-state-machine";
 import type { RideDocument } from "../rides/schemas/ride.schema";
 import { User } from "../users/schemas/user.schema";
-import type { PaymentFailureDto, PaymentHistoryQueryDto, VerifyPaymentDto } from "./dto/payment.dto";
+import type {
+  PaymentFailureDto,
+  PaymentHistoryQueryDto,
+  VerifyPaymentDto,
+} from "./dto/payment.dto";
 import { finalFareView } from "../rides/ride-view.service";
 import {
   CASH_METHOD,
@@ -37,12 +45,19 @@ import type {
   PaymentReceiptView,
   PaymentView,
 } from "./interfaces/payment-views";
-import { RazorpayGateway, RazorpayGatewayError } from "./razorpay/razorpay.gateway";
+import {
+  RazorpayGateway,
+  RazorpayGatewayError,
+} from "./razorpay/razorpay.gateway";
 import { RefundsService } from "./refunds.service";
 import { verifyPaymentSignature } from "./razorpay/razorpay-signature";
 import type { RazorpayPayment } from "./razorpay/razorpay.types";
 import { Payment } from "./schemas/payment.schema";
-import type { PaymentAttempt, PaymentDocument, PaymentEvent } from "./schemas/payment.schema";
+import type {
+  PaymentAttempt,
+  PaymentDocument,
+  PaymentEvent,
+} from "./schemas/payment.schema";
 
 // Razorpay's smallest chargeable amount (₹1).
 const MIN_AMOUNT_PAISE = 100;
@@ -54,11 +69,15 @@ const MAX_EVENTS = 100;
 
 const isDuplicateKey = (error: unknown, index?: string): boolean => {
   const mongoError = error as { code?: number; message?: string } | undefined;
-  return mongoError?.code === 11000 && (!index || (mongoError.message ?? "").includes(index));
+  return (
+    mongoError?.code === 11000 &&
+    (!index || (mongoError.message ?? "").includes(index))
+  );
 };
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-const nameOf = (user?: { firstName?: string; lastName?: string } | null): string =>
-  [user?.firstName, user?.lastName].filter(Boolean).join(" ");
+const nameOf = (
+  user?: { firstName?: string; lastName?: string } | null,
+): string => [user?.firstName, user?.lastName].filter(Boolean).join(" ");
 
 /**
  * Ride payments with Razorpay Standard Checkout.
@@ -84,7 +103,8 @@ export class PaymentsService {
   constructor(
     @InjectModel(Payment.name) private readonly paymentModel: Model<Payment>,
     @InjectModel(User.name) private readonly userModel: Model<User>,
-    @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
+    @InjectModel(DriverProfile.name)
+    private readonly driverModel: Model<DriverProfile>,
     private readonly gateway: RazorpayGateway,
     private readonly rides: RidePaymentStateService,
     private readonly earnings: EarningsService,
@@ -93,7 +113,8 @@ export class PaymentsService {
   ) {
     this.keySecret = config.get<string>("razorpayKeySecret") ?? "";
     this.brandName = config.getOrThrow<string>("paymentBrandName");
-    this.orderReuseMs = config.getOrThrow<number>("paymentOrderReuseMinutes") * 60_000;
+    this.orderReuseMs =
+      config.getOrThrow<number>("paymentOrderReuseMinutes") * 60_000;
   }
 
   // ── Customer: start / retry ───────────────────────────────────────────
@@ -117,9 +138,13 @@ export class PaymentsService {
 
     // Razorpay may already hold a payment for this ride that we have not
     // confirmed. Resolve that first: a new order now could charge twice.
-    if (payment.processingPaymentId || effectivePaymentStatus(ride) === RidePaymentStatus.PROCESSING) {
+    if (
+      payment.processingPaymentId ||
+      effectivePaymentStatus(ride) === RidePaymentStatus.PROCESSING
+    ) {
       payment = await this.reconcile(payment, PaymentEventSource.SYSTEM);
-      if (SETTLED_PAYMENT_STATUSES.includes(payment.status)) throw this.alreadyPaid(payment);
+      if (SETTLED_PAYMENT_STATUSES.includes(payment.status))
+        throw this.alreadyPaid(payment);
       if (payment.processingPaymentId)
         throw new ApiException(
           HttpStatus.CONFLICT,
@@ -163,9 +188,13 @@ export class PaymentsService {
       await this.afterCapture(payment);
       throw this.alreadyPaid(payment);
     }
-    if (payment.processingPaymentId || effectivePaymentStatus(ride) === RidePaymentStatus.PROCESSING) {
+    if (
+      payment.processingPaymentId ||
+      effectivePaymentStatus(ride) === RidePaymentStatus.PROCESSING
+    ) {
       payment = await this.reconcile(payment, PaymentEventSource.SYSTEM);
-      if (SETTLED_PAYMENT_STATUSES.includes(payment.status)) throw this.alreadyPaid(payment);
+      if (SETTLED_PAYMENT_STATUSES.includes(payment.status))
+        throw this.alreadyPaid(payment);
       if (payment.processingPaymentId) throw this.onlinePaymentPending(payment);
     }
 
@@ -176,7 +205,10 @@ export class PaymentsService {
           _id: payment._id,
           status: { $in: OPEN_PAYMENT_STATUSES },
           processingPaymentId: { $exists: false },
-          $or: [{ orderLockUntil: { $exists: false } }, { orderLockUntil: { $lte: now } }],
+          $or: [
+            { orderLockUntil: { $exists: false } },
+            { orderLockUntil: { $lte: now } },
+          ],
         },
         {
           $set: {
@@ -186,7 +218,13 @@ export class PaymentsService {
             amountPaise,
             paidAt: now,
           },
-          $unset: { methodDetails: 1, failureCode: 1, failureReason: 1, processingSince: 1, orderLockUntil: 1 },
+          $unset: {
+            methodDetails: 1,
+            failureCode: 1,
+            failureReason: 1,
+            processingSince: 1,
+            orderLockUntil: 1,
+          },
           $push: {
             events: {
               $each: [
@@ -219,10 +257,15 @@ export class PaymentsService {
       throw this.onlinePaymentPending(current ?? payment);
     }
 
-    this.logger.log(`Payment ${settled._id.toString()} settled in CASH for ride ${settled.rideCode} (${amountPaise}p)`);
+    this.logger.log(
+      `Payment ${settled._id.toString()} settled in CASH for ride ${settled.rideCode} (${amountPaise}p)`,
+    );
     await this.afterCapture(settled);
     // The ride's payment status moved to SUCCESS just now: show that one.
-    return this.view(settled, (await this.rides.findById(settled.rideId)) ?? ride);
+    return this.view(
+      settled,
+      (await this.rides.findById(settled.rideId)) ?? ride,
+    );
   }
 
   // ── Customer: verify the checkout result ──────────────────────────────
@@ -237,41 +280,76 @@ export class PaymentsService {
    *  4.   Razorpay confirms the payment belongs to the order and the amount
    *       and currency equal the ride's final fare — then it is captured.
    */
-  async verify(customerUserId: string, dto: VerifyPaymentDto): Promise<PaymentView> {
+  async verify(
+    customerUserId: string,
+    dto: VerifyPaymentDto,
+  ): Promise<PaymentView> {
     this.assertGateway();
     let payment = await this.findForCustomer(customerUserId, dto.paymentId);
 
-    const attempt = payment.attempts.find((entry) => entry.orderId === dto.razorpayOrderId);
+    const attempt = payment.attempts.find(
+      (entry) => entry.orderId === dto.razorpayOrderId,
+    );
     if (!attempt)
-      throw apiBadRequest("This payment does not belong to this ride", "PAYMENT_ORDER_MISMATCH");
+      throw apiBadRequest(
+        "This payment does not belong to this ride",
+        "PAYMENT_ORDER_MISMATCH",
+      );
 
-    if (!verifyPaymentSignature(dto.razorpayOrderId, dto.razorpayPaymentId, dto.razorpaySignature, this.keySecret)) {
+    if (
+      !verifyPaymentSignature(
+        dto.razorpayOrderId,
+        dto.razorpayPaymentId,
+        dto.razorpaySignature,
+        this.keySecret,
+      )
+    ) {
       await this.pushEvent(payment._id, {
         type: "SIGNATURE_INVALID",
         source: PaymentEventSource.VERIFY,
         razorpayOrderId: dto.razorpayOrderId,
         razorpayPaymentId: dto.razorpayPaymentId,
       });
-      this.logger.warn(`Invalid checkout signature for payment ${payment._id.toString()}`);
-      throw apiBadRequest("Payment verification failed", "PAYMENT_SIGNATURE_INVALID");
+      this.logger.warn(
+        `Invalid checkout signature for payment ${payment._id.toString()}`,
+      );
+      throw apiBadRequest(
+        "Payment verification failed",
+        "PAYMENT_SIGNATURE_INVALID",
+      );
     }
 
     // Idempotent fast path: the same success reported again.
-    if (SETTLED_PAYMENT_STATUSES.includes(payment.status) && payment.razorpayPaymentId === dto.razorpayPaymentId) {
+    if (
+      SETTLED_PAYMENT_STATUSES.includes(payment.status) &&
+      payment.razorpayPaymentId === dto.razorpayPaymentId
+    ) {
       await this.afterCapture(payment);
       return this.view(payment);
     }
 
     const reused = await this.paymentModel
-      .exists({ razorpayPaymentId: dto.razorpayPaymentId, _id: { $ne: payment._id } })
+      .exists({
+        razorpayPaymentId: dto.razorpayPaymentId,
+        _id: { $ne: payment._id },
+      })
       .exec();
-    if (reused) throw new ApiException(HttpStatus.CONFLICT, "This payment was already used", "PAYMENT_ID_REUSED");
+    if (reused)
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        "This payment was already used",
+        "PAYMENT_ID_REUSED",
+      );
 
     let gatewayPayment: RazorpayPayment;
     try {
       gatewayPayment = await this.gateway.fetchPayment(dto.razorpayPaymentId);
     } catch (error) {
-      if (error instanceof RazorpayGatewayError && error.transient && OPEN_PAYMENT_STATUSES.includes(payment.status)) {
+      if (
+        error instanceof RazorpayGatewayError &&
+        error.transient &&
+        OPEN_PAYMENT_STATUSES.includes(payment.status)
+      ) {
         // The signature proves Razorpay issued this payment for our order,
         // but we could not confirm its state. Park it; the webhook or the
         // reconciler finishes the job. The app shows "confirming payment".
@@ -284,11 +362,22 @@ export class PaymentsService {
         );
         return this.view(payment);
       }
-      throw this.gatewayFailure(error, "Could not verify the payment. Please try again.");
+      throw this.gatewayFailure(
+        error,
+        "Could not verify the payment. Please try again.",
+      );
     }
 
-    payment = await this.applyGatewayPayment(payment, gatewayPayment, PaymentEventSource.VERIFY, dto.razorpaySignature);
-    if (SETTLED_PAYMENT_STATUSES.includes(payment.status) && payment.razorpayPaymentId !== dto.razorpayPaymentId)
+    payment = await this.applyGatewayPayment(
+      payment,
+      gatewayPayment,
+      PaymentEventSource.VERIFY,
+      dto.razorpaySignature,
+    );
+    if (
+      SETTLED_PAYMENT_STATUSES.includes(payment.status) &&
+      payment.razorpayPaymentId !== dto.razorpayPaymentId
+    )
       throw this.alreadyPaid(payment);
     return this.view(payment);
   }
@@ -298,9 +387,16 @@ export class PaymentsService {
    * FAILED so the app can offer "Try again", but never overrides a payment
    * Razorpay is still processing or has captured.
    */
-  async reportFailure(customerUserId: string, paymentId: string, dto: PaymentFailureDto): Promise<PaymentView> {
+  async reportFailure(
+    customerUserId: string,
+    paymentId: string,
+    dto: PaymentFailureDto,
+  ): Promise<PaymentView> {
     const payment = await this.findForCustomer(customerUserId, paymentId);
-    if (!OPEN_PAYMENT_STATUSES.includes(payment.status) || payment.processingPaymentId) {
+    if (
+      !OPEN_PAYMENT_STATUSES.includes(payment.status) ||
+      payment.processingPaymentId
+    ) {
       await this.pushEvent(payment._id, {
         type: "CLIENT_FAILURE_IGNORED",
         source: PaymentEventSource.CUSTOMER,
@@ -310,14 +406,19 @@ export class PaymentsService {
       });
       return this.view(payment);
     }
-    const knownOrder = payment.attempts.some((attempt) => attempt.orderId === dto.razorpayOrderId)
+    const knownOrder = payment.attempts.some(
+      (attempt) => attempt.orderId === dto.razorpayOrderId,
+    )
       ? dto.razorpayOrderId
       : undefined;
     const updated = await this.settleFailed(payment, {
       orderId: knownOrder,
       razorpayPaymentId: dto.razorpayPaymentId,
-      code: dto.code ?? (dto.cancelled ? "PAYMENT_CANCELLED" : "PAYMENT_FAILED"),
-      reason: dto.cancelled ? "Payment was cancelled" : dto.description || "Payment failed",
+      code:
+        dto.code ?? (dto.cancelled ? "PAYMENT_CANCELLED" : "PAYMENT_FAILED"),
+      reason: dto.cancelled
+        ? "Payment was cancelled"
+        : dto.description || "Payment failed",
       source: PaymentEventSource.CUSTOMER,
       fromClient: true,
     });
@@ -326,7 +427,10 @@ export class PaymentsService {
 
   // ── Customer reads ────────────────────────────────────────────────────
 
-  async receipt(customerUserId: string, paymentId: string): Promise<PaymentReceiptView> {
+  async receipt(
+    customerUserId: string,
+    paymentId: string,
+  ): Promise<PaymentReceiptView> {
     let payment = await this.findForCustomer(customerUserId, paymentId);
     // Opportunistic sync: an app returning from checkout after being killed
     // finds its payment settled here even before the webhook arrives.
@@ -334,26 +438,48 @@ export class PaymentsService {
       this.gateway.isConfigured &&
       OPEN_PAYMENT_STATUSES.includes(payment.status) &&
       payment.attempts.length > 0 &&
-      (!payment.lastReconciledAt || Date.now() - payment.lastReconciledAt.getTime() > READ_RECONCILE_INTERVAL_MS)
+      (!payment.lastReconciledAt ||
+        Date.now() - payment.lastReconciledAt.getTime() >
+          READ_RECONCILE_INTERVAL_MS)
     )
       payment = await this.reconcile(payment, PaymentEventSource.RECONCILE);
     else if (
       this.gateway.isConfigured &&
       (payment.refundPendingPaise ?? 0) > 0 &&
-      (!payment.lastReconciledAt || Date.now() - payment.lastReconciledAt.getTime() > READ_RECONCILE_INTERVAL_MS)
+      (!payment.lastReconciledAt ||
+        Date.now() - payment.lastReconciledAt.getTime() >
+          READ_RECONCILE_INTERVAL_MS)
     ) {
-      await this.paymentModel.updateOne({ _id: payment._id }, { $set: { lastReconciledAt: new Date() } }).exec();
+      await this.paymentModel
+        .updateOne(
+          { _id: payment._id },
+          { $set: { lastReconciledAt: new Date() } },
+        )
+        .exec();
       await this.refunds.syncPayment(payment._id, PaymentEventSource.RECONCILE);
-      payment = (await this.paymentModel.findById(payment._id).exec()) ?? payment;
+      payment =
+        (await this.paymentModel.findById(payment._id).exec()) ?? payment;
     }
 
     const ride = await this.rides.findById(payment.rideId);
     const [customer, driverProfile] = await Promise.all([
-      this.userModel.findById(payment.customerId).select("firstName lastName phone").lean().exec(),
-      this.driverModel.findById(payment.driverId).select("userId").lean().exec(),
+      this.userModel
+        .findById(payment.customerId)
+        .select("firstName lastName phone")
+        .lean()
+        .exec(),
+      this.driverModel
+        .findById(payment.driverId)
+        .select("userId")
+        .lean()
+        .exec(),
     ]);
     const driverUser = driverProfile
-      ? await this.userModel.findById(driverProfile.userId).select("firstName lastName").lean().exec()
+      ? await this.userModel
+          .findById(driverProfile.userId)
+          .select("firstName lastName")
+          .lean()
+          .exec()
       : null;
 
     const view = this.view(payment, ride ?? undefined);
@@ -364,7 +490,11 @@ export class PaymentsService {
             id: ride._id.toString(),
             rideCode: ride.rideCode,
             rideType: ride.rideType,
-            pickup: { address: ride.pickup.address, latitude: ride.pickup.latitude, longitude: ride.pickup.longitude },
+            pickup: {
+              address: ride.pickup.address,
+              latitude: ride.pickup.latitude,
+              longitude: ride.pickup.longitude,
+            },
             destination: {
               address: ride.destination.address,
               latitude: ride.destination.latitude,
@@ -411,7 +541,10 @@ export class PaymentsService {
               finalFare: toRupees(payment.amountPaise),
             },
           },
-      customer: { name: nameOf(customer) || "Customer", phone: customer?.phone },
+      customer: {
+        name: nameOf(customer) || "Customer",
+        phone: customer?.phone,
+      },
       driver: driverUser ? { name: nameOf(driverUser) || "Driver" } : null,
       refunds: await this.refunds.forCustomer(payment._id),
       vehicle: ride?.vehicle
@@ -429,8 +562,16 @@ export class PaymentsService {
   async history(
     customerUserId: string,
     query: PaymentHistoryQueryDto,
-  ): Promise<{ items: PaymentHistoryItem[]; page: number; limit: number; total: number; hasMore: boolean }> {
-    const filter: QueryFilter<Payment> = { customerId: new Types.ObjectId(customerUserId) };
+  ): Promise<{
+    items: PaymentHistoryItem[];
+    page: number;
+    limit: number;
+    total: number;
+    hasMore: boolean;
+  }> {
+    const filter: QueryFilter<Payment> = {
+      customerId: new Types.ObjectId(customerUserId),
+    };
     if (query.status) filter.status = query.status;
     const [payments, total] = await Promise.all([
       this.paymentModel
@@ -441,7 +582,9 @@ export class PaymentsService {
         .exec(),
       this.paymentModel.countDocuments(filter).exec(),
     ]);
-    const rides = await this.rides.findManyByIds(payments.map((payment) => payment.rideId));
+    const rides = await this.rides.findManyByIds(
+      payments.map((payment) => payment.rideId),
+    );
     const rideById = new Map(rides.map((ride) => [ride._id.toString(), ride]));
     return {
       items: payments.map((payment) => {
@@ -474,7 +617,9 @@ export class PaymentsService {
     source: PaymentEventSource,
     signature?: string,
   ): Promise<PaymentDocument> {
-    const attempt = payment.attempts.find((entry) => entry.orderId === gatewayPayment.order_id);
+    const attempt = payment.attempts.find(
+      (entry) => entry.orderId === gatewayPayment.order_id,
+    );
     if (!attempt) {
       await this.pushEvent(payment._id, {
         type: "ORDER_MISMATCH",
@@ -482,7 +627,10 @@ export class PaymentsService {
         razorpayOrderId: gatewayPayment.order_id ?? undefined,
         razorpayPaymentId: gatewayPayment.id,
       });
-      throw apiBadRequest("This payment does not belong to this ride", "PAYMENT_ORDER_MISMATCH");
+      throw apiBadRequest(
+        "This payment does not belong to this ride",
+        "PAYMENT_ORDER_MISMATCH",
+      );
     }
     if (
       gatewayPayment.amount !== attempt.amountPaise ||
@@ -500,7 +648,10 @@ export class PaymentsService {
         `Amount mismatch on payment ${payment._id.toString()}: Razorpay ${gatewayPayment.amount} ${gatewayPayment.currency}, ` +
           `expected ${payment.amountPaise} ${payment.currency}`,
       );
-      throw apiBadRequest("The paid amount does not match the ride fare", "PAYMENT_AMOUNT_MISMATCH");
+      throw apiBadRequest(
+        "The paid amount does not match the ride fare",
+        "PAYMENT_AMOUNT_MISMATCH",
+      );
     }
 
     // Already settled by another payment on this ride.
@@ -508,17 +659,25 @@ export class PaymentsService {
       if (payment.razorpayPaymentId === gatewayPayment.id) {
         await this.afterCapture(payment);
         // Razorpay reports more refunded than we know of: pull its refunds.
-        if ((gatewayPayment.amount_refunded ?? 0) > (payment.refundAmountPaise ?? 0) + (payment.refundPendingPaise ?? 0)) {
+        if (
+          (gatewayPayment.amount_refunded ?? 0) >
+          (payment.refundAmountPaise ?? 0) + (payment.refundPendingPaise ?? 0)
+        ) {
           await this.refunds.syncPayment(payment._id, source);
-          return (await this.paymentModel.findById(payment._id).exec()) ?? payment;
+          return (
+            (await this.paymentModel.findById(payment._id).exec()) ?? payment
+          );
         }
         return payment;
       }
-      if (gatewayPayment.status === "captured" || gatewayPayment.status === "refunded") {
+      if (
+        gatewayPayment.status === "captured" ||
+        gatewayPayment.status === "refunded"
+      ) {
         await this.recordDuplicate(payment, gatewayPayment, source);
-        if ((gatewayPayment.amount_refunded ?? 0) > 0) await this.refunds.syncPayment(payment._id, source);
-      }
-      else if (gatewayPayment.status === "authorized")
+        if ((gatewayPayment.amount_refunded ?? 0) > 0)
+          await this.refunds.syncPayment(payment._id, source);
+      } else if (gatewayPayment.status === "authorized")
         // Deliberately not captured: Razorpay auto-refunds an uncaptured
         // authorisation, so the customer is never charged twice.
         await this.pushEvent(payment._id, {
@@ -535,19 +694,31 @@ export class PaymentsService {
         return this.settleCaptured(payment, gatewayPayment, source, signature);
       case "refunded": {
         // Captured, then refunded (e.g. in the dashboard) before we heard of it.
-        const captured = await this.settleCaptured(payment, gatewayPayment, source, signature);
+        const captured = await this.settleCaptured(
+          payment,
+          gatewayPayment,
+          source,
+          signature,
+        );
         await this.refunds.syncPayment(captured._id, source);
-        return (await this.paymentModel.findById(captured._id).exec()) ?? captured;
+        return (
+          (await this.paymentModel.findById(captured._id).exec()) ?? captured
+        );
       }
       case "authorized": {
         try {
-          const captured = await this.gateway.capturePayment(gatewayPayment.id, payment.amountPaise, payment.currency);
+          const captured = await this.gateway.capturePayment(
+            gatewayPayment.id,
+            payment.amountPaise,
+            payment.currency,
+          );
           return this.settleCaptured(payment, captured, source, signature);
         } catch (error) {
           // "already captured" (auto-capture raced us) → re-read and settle.
           try {
             const latest = await this.gateway.fetchPayment(gatewayPayment.id);
-            if (latest.status === "captured") return this.settleCaptured(payment, latest, source, signature);
+            if (latest.status === "captured")
+              return this.settleCaptured(payment, latest, source, signature);
           } catch {
             // fall through to PROCESSING
           }
@@ -573,7 +744,13 @@ export class PaymentsService {
           source,
         });
       case "created":
-        return this.markProcessing(payment, attempt.orderId, gatewayPayment.id, source, "Payment created at Razorpay");
+        return this.markProcessing(
+          payment,
+          attempt.orderId,
+          gatewayPayment.id,
+          source,
+          "Payment created at Razorpay",
+        );
     }
   }
 
@@ -582,8 +759,15 @@ export class PaymentsService {
    * it. Used for stuck PROCESSING payments, receipts, and before opening a
    * new order. Never throws for gateway trouble — it just tries later.
    */
-  async reconcile(payment: PaymentDocument, source: PaymentEventSource): Promise<PaymentDocument> {
-    if (!this.gateway.isConfigured || !OPEN_PAYMENT_STATUSES.includes(payment.status)) return payment;
+  async reconcile(
+    payment: PaymentDocument,
+    source: PaymentEventSource,
+  ): Promise<PaymentDocument> {
+    if (
+      !this.gateway.isConfigured ||
+      !OPEN_PAYMENT_STATUSES.includes(payment.status)
+    )
+      return payment;
 
     const orderIds = [...payment.attempts]
       .filter((attempt) => attempt.status !== PaymentAttemptStatus.PAID)
@@ -592,24 +776,35 @@ export class PaymentsService {
       .map((attempt) => attempt.orderId);
     const seen: RazorpayPayment[] = [];
     try {
-      for (const orderId of orderIds) seen.push(...(await this.gateway.fetchOrderPayments(orderId)));
+      for (const orderId of orderIds)
+        seen.push(...(await this.gateway.fetchOrderPayments(orderId)));
     } catch (error) {
-      this.logger.warn(`Reconcile of payment ${payment._id.toString()} deferred: ${(error as Error).message}`);
+      this.logger.warn(
+        `Reconcile of payment ${payment._id.toString()} deferred: ${(error as Error).message}`,
+      );
       return payment;
     }
     // Stamped only once Razorpay answered, so a failed attempt never delays the next one.
-    await this.paymentModel.updateOne({ _id: payment._id }, { $set: { lastReconciledAt: new Date() } }).exec();
+    await this.paymentModel
+      .updateOne(
+        { _id: payment._id },
+        { $set: { lastReconciledAt: new Date() } },
+      )
+      .exec();
 
     try {
       const settled =
-        seen.find((entry) => entry.status === "captured" || entry.status === "refunded") ??
-        seen.find((entry) => entry.status === "authorized");
-      if (settled) return await this.applyGatewayPayment(payment, settled, source);
+        seen.find(
+          (entry) => entry.status === "captured" || entry.status === "refunded",
+        ) ?? seen.find((entry) => entry.status === "authorized");
+      if (settled)
+        return await this.applyGatewayPayment(payment, settled, source);
 
       const inFlight = payment.processingPaymentId
         ? seen.find((entry) => entry.id === payment.processingPaymentId)
         : undefined;
-      if (inFlight && inFlight.status === "failed") return await this.applyGatewayPayment(payment, inFlight, source);
+      if (inFlight && inFlight.status === "failed")
+        return await this.applyGatewayPayment(payment, inFlight, source);
     } catch (error) {
       this.logger.error(
         `Reconcile of payment ${payment._id.toString()} flagged: ${(error as Error).message}`,
@@ -648,7 +843,9 @@ export class PaymentsService {
     try {
       const ride = await this.rides.findById(payment.rideId);
       if (!ride?.completedAt) {
-        this.logger.error(`Payment ${payment._id.toString()} is captured but its ride is missing or not completed`);
+        this.logger.error(
+          `Payment ${payment._id.toString()} is captured but its ride is missing or not completed`,
+        );
         return;
       }
       const { earning } = await this.earnings.recordForPayment({
@@ -663,14 +860,25 @@ export class PaymentsService {
         rideCompletedAt: ride.completedAt,
         // The driver earns on the full trip fare. With a promo the captured
         // amount is fare − discount; the platform funds the difference.
-        grossFarePaise: ride.fare.finalFare !== undefined ? toPaise(ride.fare.finalFare) : payment.amountPaise,
-        promoDiscountPaise: ride.fare.discount ? toPaise(ride.fare.discount) : 0,
+        grossFarePaise:
+          ride.fare.finalFare !== undefined
+            ? toPaise(ride.fare.finalFare)
+            : payment.amountPaise,
+        promoDiscountPaise: ride.fare.discount
+          ? toPaise(ride.fare.discount)
+          : 0,
         currency: payment.currency,
-        paymentMode: payment.gateway === PaymentGateway.CASH ? PaymentMode.CASH : PaymentMode.ONLINE,
+        paymentMode:
+          payment.gateway === PaymentGateway.CASH
+            ? PaymentMode.CASH
+            : PaymentMode.ONLINE,
         paymentMethod: payment.method,
       });
       await this.paymentModel
-        .updateOne({ _id: payment._id, earningId: { $exists: false } }, { $set: { earningId: earning._id } })
+        .updateOne(
+          { _id: payment._id, earningId: { $exists: false } },
+          { $set: { earningId: earning._id } },
+        )
         .exec();
       payment.earningId = earning._id;
     } catch (error) {
@@ -690,12 +898,18 @@ export class PaymentsService {
   }
 
   /** Payments Razorpay may have settled without telling us yet (reconciler). */
-  async findStaleProcessing(olderThan: Date, limit: number): Promise<PaymentDocument[]> {
+  async findStaleProcessing(
+    olderThan: Date,
+    limit: number,
+  ): Promise<PaymentDocument[]> {
     return this.paymentModel
       .find({
         status: { $in: [PaymentStatus.CREATED, PaymentStatus.AUTHORIZED] },
         processingSince: { $lte: olderThan },
-        $or: [{ lastReconciledAt: { $exists: false } }, { lastReconciledAt: { $lte: olderThan } }],
+        $or: [
+          { lastReconciledAt: { $exists: false } },
+          { lastReconciledAt: { $lte: olderThan } },
+        ],
       })
       .sort({ processingSince: 1 })
       .limit(limit)
@@ -707,7 +921,11 @@ export class PaymentsService {
    * flight for — e.g. the app died after checkout and the webhook was lost.
    * Only recent orders, and each at most once per `checkedBefore` window.
    */
-  async findOpenOrdersToCheck(checkedBefore: Date, raisedAfter: Date, limit: number): Promise<PaymentDocument[]> {
+  async findOpenOrdersToCheck(
+    checkedBefore: Date,
+    raisedAfter: Date,
+    limit: number,
+  ): Promise<PaymentDocument[]> {
     return this.paymentModel
       .find({
         gateway: PaymentGateway.RAZORPAY,
@@ -715,8 +933,13 @@ export class PaymentsService {
         processingPaymentId: { $exists: false },
         // An order raised in the horizon, and not in the last few minutes
         // (the customer may still be in checkout).
-        attempts: { $elemMatch: { createdAt: { $gte: raisedAfter, $lte: checkedBefore } } },
-        $or: [{ lastReconciledAt: { $exists: false } }, { lastReconciledAt: { $lte: checkedBefore } }],
+        attempts: {
+          $elemMatch: { createdAt: { $gte: raisedAfter, $lte: checkedBefore } },
+        },
+        $or: [
+          { lastReconciledAt: { $exists: false } },
+          { lastReconciledAt: { $lte: checkedBefore } },
+        ],
       })
       .sort({ lastReconciledAt: 1, _id: 1 })
       .limit(limit)
@@ -731,10 +954,16 @@ export class PaymentsService {
     return this.paymentModel.findOne({ "attempts.orderId": orderId }).exec();
   }
 
-  async findByRazorpayPaymentId(razorpayPaymentId: string): Promise<PaymentDocument | null> {
+  async findByRazorpayPaymentId(
+    razorpayPaymentId: string,
+  ): Promise<PaymentDocument | null> {
     return this.paymentModel
       .findOne({
-        $or: [{ razorpayPaymentId }, { "attempts.razorpayPaymentId": razorpayPaymentId }, { processingPaymentId: razorpayPaymentId }],
+        $or: [
+          { razorpayPaymentId },
+          { "attempts.razorpayPaymentId": razorpayPaymentId },
+          { processingPaymentId: razorpayPaymentId },
+        ],
       })
       .exec();
   }
@@ -751,14 +980,28 @@ export class PaymentsService {
       );
     const status = effectivePaymentStatus(ride);
     if (PAID_RIDE_PAYMENT_STATUSES.includes(status))
-      throw new ApiException(HttpStatus.CONFLICT, "This ride is already paid", "PAYMENT_ALREADY_COMPLETED", {
-        paymentId: ride.payment?.paymentId.toString(),
-        paymentStatus: status,
-      });
-    if (!PAYABLE_RIDE_PAYMENT_STATUSES.includes(status) || !ride.driverId || !ride.driverUserId)
-      throw new ApiException(HttpStatus.CONFLICT, "This ride has nothing to pay", "PAYMENT_NOT_PAYABLE", {
-        paymentStatus: status,
-      });
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        "This ride is already paid",
+        "PAYMENT_ALREADY_COMPLETED",
+        {
+          paymentId: ride.payment?.paymentId.toString(),
+          paymentStatus: status,
+        },
+      );
+    if (
+      !PAYABLE_RIDE_PAYMENT_STATUSES.includes(status) ||
+      !ride.driverId ||
+      !ride.driverUserId
+    )
+      throw new ApiException(
+        HttpStatus.CONFLICT,
+        "This ride has nothing to pay",
+        "PAYMENT_NOT_PAYABLE",
+        {
+          paymentStatus: status,
+        },
+      );
     // With a promo the customer owes the discounted amount (Phase 7); the
     // driver is still credited on the full fare (see ensureEarning).
     const fare = ride.fare.payableFare ?? ride.fare.finalFare;
@@ -771,12 +1014,20 @@ export class PaymentsService {
     return toPaise(fare);
   }
 
-  private async findOrCreateForRide(ride: RideDocument, amountPaise: number): Promise<PaymentDocument> {
-    const existing = await this.paymentModel.findOne({ rideId: ride._id }).exec();
+  private async findOrCreateForRide(
+    ride: RideDocument,
+    amountPaise: number,
+  ): Promise<PaymentDocument> {
+    const existing = await this.paymentModel
+      .findOne({ rideId: ride._id })
+      .exec();
     if (existing) {
       // The final fare is frozen at completion; this only heals a record
       // created before an ops correction, and never touches a paid one.
-      if (existing.amountPaise !== amountPaise && OPEN_PAYMENT_STATUSES.includes(existing.status)) {
+      if (
+        existing.amountPaise !== amountPaise &&
+        OPEN_PAYMENT_STATUSES.includes(existing.status)
+      ) {
         const healed = await this.paymentModel
           .findOneAndUpdate(
             { _id: existing._id, status: { $in: OPEN_PAYMENT_STATUSES } },
@@ -799,11 +1050,19 @@ export class PaymentsService {
         amountPaise,
         currency: ride.fare.currency || "INR",
         status: PaymentStatus.CREATED,
-        events: [{ type: "PAYMENT_OPENED", source: PaymentEventSource.CUSTOMER, at: new Date() }],
+        events: [
+          {
+            type: "PAYMENT_OPENED",
+            source: PaymentEventSource.CUSTOMER,
+            at: new Date(),
+          },
+        ],
       });
     } catch (error) {
       if (!isDuplicateKey(error, "uniq_payment_per_ride")) throw error;
-      const winner = await this.paymentModel.findOne({ rideId: ride._id }).exec();
+      const winner = await this.paymentModel
+        .findOne({ rideId: ride._id })
+        .exec();
       if (!winner) throw error;
       return winner;
     }
@@ -815,15 +1074,26 @@ export class PaymentsService {
     amountPaise: number,
   ): Promise<{ payment: PaymentDocument; attempt: PaymentAttempt }> {
     let payment = initial;
-    const reusable = (candidate: PaymentDocument): PaymentAttempt | undefined => {
+    const reusable = (
+      candidate: PaymentDocument,
+    ): PaymentAttempt | undefined => {
       const latest = candidate.attempts[candidate.attempts.length - 1];
-      if (!latest || latest.status === PaymentAttemptStatus.PAID || latest.amountPaise !== amountPaise) return undefined;
+      if (
+        !latest ||
+        latest.status === PaymentAttemptStatus.PAID ||
+        latest.amountPaise !== amountPaise
+      )
+        return undefined;
       const createdAt = latest.createdAt?.getTime() ?? 0;
       return Date.now() - createdAt < this.orderReuseMs ? latest : undefined;
     };
 
     const existing = reusable(payment);
-    if (existing) return { payment: await this.reopen(payment, existing), attempt: existing };
+    if (existing)
+      return {
+        payment: await this.reopen(payment, existing),
+        attempt: existing,
+      };
 
     // Serialise order creation: a double tap must not raise two orders.
     const waitUntil = Date.now() + ORDER_LOCK_WAIT_MS;
@@ -833,7 +1103,10 @@ export class PaymentsService {
           {
             _id: payment._id,
             status: { $in: OPEN_PAYMENT_STATUSES },
-            $or: [{ orderLockUntil: { $exists: false } }, { orderLockUntil: { $lte: new Date() } }],
+            $or: [
+              { orderLockUntil: { $exists: false } },
+              { orderLockUntil: { $lte: new Date() } },
+            ],
           },
           { $set: { orderLockUntil: new Date(Date.now() + ORDER_LOCK_MS) } },
           { returnDocument: "after" },
@@ -846,9 +1119,11 @@ export class PaymentsService {
       await sleep(200);
       const latest = await this.paymentModel.findById(payment._id).exec();
       if (!latest) throw apiNotFound("Payment not found", "PAYMENT_NOT_FOUND");
-      if (SETTLED_PAYMENT_STATUSES.includes(latest.status)) throw this.alreadyPaid(latest);
+      if (SETTLED_PAYMENT_STATUSES.includes(latest.status))
+        throw this.alreadyPaid(latest);
       const raised = reusable(latest);
-      if (raised) return { payment: await this.reopen(latest, raised), attempt: raised };
+      if (raised)
+        return { payment: await this.reopen(latest, raised), attempt: raised };
       if (Date.now() > waitUntil)
         throw new ApiException(
           HttpStatus.CONFLICT,
@@ -860,7 +1135,8 @@ export class PaymentsService {
 
     try {
       const raised = reusable(payment);
-      if (raised) return { payment: await this.reopen(payment, raised), attempt: raised };
+      if (raised)
+        return { payment: await this.reopen(payment, raised), attempt: raised };
 
       let order;
       try {
@@ -876,7 +1152,10 @@ export class PaymentsService {
           },
         });
       } catch (error) {
-        throw this.gatewayFailure(error, "Could not start the payment. Please try again.");
+        throw this.gatewayFailure(
+          error,
+          "Could not start the payment. Please try again.",
+        );
       }
       if (order.amount !== amountPaise || order.currency !== payment.currency)
         throw new ApiException(
@@ -885,7 +1164,11 @@ export class PaymentsService {
           "PAYMENT_GATEWAY_ERROR",
         );
 
-      const attempt: PaymentAttempt = { orderId: order.id, amountPaise, status: PaymentAttemptStatus.CREATED };
+      const attempt: PaymentAttempt = {
+        orderId: order.id,
+        amountPaise,
+        status: PaymentAttemptStatus.CREATED,
+      };
       // Only while still open: a cash settlement may have won meanwhile.
       const updated = await this.paymentModel
         .findOneAndUpdate(
@@ -913,26 +1196,45 @@ export class PaymentsService {
         .exec();
       if (!updated) {
         const current = await this.paymentModel.findById(payment._id).exec();
-        if (current && SETTLED_PAYMENT_STATUSES.includes(current.status)) throw this.alreadyPaid(current);
+        if (current && SETTLED_PAYMENT_STATUSES.includes(current.status))
+          throw this.alreadyPaid(current);
         throw apiNotFound("Payment not found", "PAYMENT_NOT_FOUND");
       }
-      this.logger.log(`Razorpay order ${order.id} for ride ${payment.rideCode} (${amountPaise}p)`);
-      return { payment: updated, attempt: updated.attempts[updated.attempts.length - 1] };
+      this.logger.log(
+        `Razorpay order ${order.id} for ride ${payment.rideCode} (${amountPaise}p)`,
+      );
+      return {
+        payment: updated,
+        attempt: updated.attempts[updated.attempts.length - 1],
+      };
     } finally {
       await this.paymentModel
-        .updateOne({ _id: payment._id, orderLockUntil: { $exists: true } }, { $unset: { orderLockUntil: 1 } })
+        .updateOne(
+          { _id: payment._id, orderLockUntil: { $exists: true } },
+          { $unset: { orderLockUntil: 1 } },
+        )
         .exec();
     }
   }
 
   /** A retry on an existing order: the payment is open again. */
-  private async reopen(payment: PaymentDocument, attempt: PaymentAttempt): Promise<PaymentDocument> {
-    if (payment.status !== PaymentStatus.FAILED && payment.razorpayOrderId === attempt.orderId) return payment;
+  private async reopen(
+    payment: PaymentDocument,
+    attempt: PaymentAttempt,
+  ): Promise<PaymentDocument> {
+    if (
+      payment.status !== PaymentStatus.FAILED &&
+      payment.razorpayOrderId === attempt.orderId
+    )
+      return payment;
     const updated = await this.paymentModel
       .findOneAndUpdate(
         { _id: payment._id, status: { $in: OPEN_PAYMENT_STATUSES } },
         {
-          $set: { status: PaymentStatus.CREATED, razorpayOrderId: attempt.orderId },
+          $set: {
+            status: PaymentStatus.CREATED,
+            razorpayOrderId: attempt.orderId,
+          },
           $unset: { failureCode: 1, failureReason: 1 },
         },
         { returnDocument: "after" },
@@ -974,7 +1276,13 @@ export class PaymentsService {
           { _id: payment._id, status: { $in: OPEN_PAYMENT_STATUSES } },
           {
             $set: set,
-            $unset: { failureCode: 1, failureReason: 1, processingSince: 1, processingPaymentId: 1, orderLockUntil: 1 },
+            $unset: {
+              failureCode: 1,
+              failureReason: 1,
+              processingSince: 1,
+              processingPaymentId: 1,
+              orderLockUntil: 1,
+            },
             $push: {
               events: {
                 $each: [
@@ -994,12 +1302,19 @@ export class PaymentsService {
               },
             },
           },
-          { returnDocument: "after", arrayFilters: [{ "paid.orderId": gatewayPayment.order_id }] },
+          {
+            returnDocument: "after",
+            arrayFilters: [{ "paid.orderId": gatewayPayment.order_id }],
+          },
         )
         .exec();
     } catch (error) {
       if (isDuplicateKey(error, "uniq_razorpay_payment_id"))
-        throw new ApiException(HttpStatus.CONFLICT, "This payment was already used", "PAYMENT_ID_REUSED");
+        throw new ApiException(
+          HttpStatus.CONFLICT,
+          "This payment was already used",
+          "PAYMENT_ID_REUSED",
+        );
       throw error;
     }
 
@@ -1014,7 +1329,8 @@ export class PaymentsService {
     // Someone else settled it first (verify vs webhook race).
     const current = await this.paymentModel.findById(payment._id).exec();
     if (!current) throw apiNotFound("Payment not found", "PAYMENT_NOT_FOUND");
-    if (current.razorpayPaymentId === gatewayPayment.id) await this.afterCapture(current);
+    if (current.razorpayPaymentId === gatewayPayment.id)
+      await this.afterCapture(current);
     else if (SETTLED_PAYMENT_STATUSES.includes(current.status))
       await this.recordDuplicate(current, gatewayPayment, source);
     return current;
@@ -1056,13 +1372,22 @@ export class PaymentsService {
       failureCode: failure.code,
       failureReason: failure.reason,
     };
-    const options: { returnDocument: "after"; arrayFilters?: Record<string, unknown>[] } = { returnDocument: "after" };
+    const options: {
+      returnDocument: "after";
+      arrayFilters?: Record<string, unknown>[];
+    } = { returnDocument: "after" };
     if (failure.orderId) {
       set["attempts.$[failed].status"] = PaymentAttemptStatus.FAILED;
       set["attempts.$[failed].failureCode"] = failure.code;
       set["attempts.$[failed].failureReason"] = failure.reason;
-      if (failure.razorpayPaymentId) set["attempts.$[failed].razorpayPaymentId"] = failure.razorpayPaymentId;
-      options.arrayFilters = [{ "failed.orderId": failure.orderId, "failed.status": { $ne: PaymentAttemptStatus.PAID } }];
+      if (failure.razorpayPaymentId)
+        set["attempts.$[failed].razorpayPaymentId"] = failure.razorpayPaymentId;
+      options.arrayFilters = [
+        {
+          "failed.orderId": failure.orderId,
+          "failed.status": { $ne: PaymentAttemptStatus.PAID },
+        },
+      ];
     }
     const update: UpdateQuery<Payment> = {
       $set: set,
@@ -1070,20 +1395,31 @@ export class PaymentsService {
       $push: { events: { $each: [event], $slice: -MAX_EVENTS } },
     };
     const updated = await this.paymentModel
-      .findOneAndUpdate({ _id: payment._id, status: { $in: OPEN_PAYMENT_STATUSES } }, update, options)
+      .findOneAndUpdate(
+        { _id: payment._id, status: { $in: OPEN_PAYMENT_STATUSES } },
+        update,
+        options,
+      )
       .exec();
-    if (!updated) return (await this.paymentModel.findById(payment._id).exec()) ?? payment;
+    if (!updated)
+      return (await this.paymentModel.findById(payment._id).exec()) ?? payment;
 
     await this.rides.apply({
       rideId: updated.rideId,
       // A client report can only fail a ride Razorpay is not processing.
       from: failure.fromClient
         ? [RidePaymentStatus.PENDING, RidePaymentStatus.ORDER_CREATED]
-        : [RidePaymentStatus.PENDING, RidePaymentStatus.ORDER_CREATED, RidePaymentStatus.PROCESSING],
+        : [
+            RidePaymentStatus.PENDING,
+            RidePaymentStatus.ORDER_CREATED,
+            RidePaymentStatus.PROCESSING,
+          ],
       to: RidePaymentStatus.FAILED,
       payment: { paymentId: updated._id, failureReason: failure.reason },
     });
-    this.logger.log(`Payment ${updated._id.toString()} FAILED via ${failure.source}: ${failure.code}`);
+    this.logger.log(
+      `Payment ${updated._id.toString()} FAILED via ${failure.source}: ${failure.code}`,
+    );
     return updated;
   }
 
@@ -1100,7 +1436,9 @@ export class PaymentsService {
         { _id: payment._id, status: { $in: OPEN_PAYMENT_STATUSES } },
         {
           $set: {
-            status: authorized ? PaymentStatus.AUTHORIZED : PaymentStatus.CREATED,
+            status: authorized
+              ? PaymentStatus.AUTHORIZED
+              : PaymentStatus.CREATED,
             processingPaymentId: razorpayPaymentId,
             "attempts.$[seen].status": PaymentAttemptStatus.ATTEMPTED,
             "attempts.$[seen].razorpayPaymentId": razorpayPaymentId,
@@ -1108,21 +1446,40 @@ export class PaymentsService {
           $min: { processingSince: new Date() },
           $push: {
             events: {
-              $each: [{ type: "PAYMENT_PROCESSING", source, at: new Date(), razorpayOrderId: orderId, razorpayPaymentId, detail }],
+              $each: [
+                {
+                  type: "PAYMENT_PROCESSING",
+                  source,
+                  at: new Date(),
+                  razorpayOrderId: orderId,
+                  razorpayPaymentId,
+                  detail,
+                },
+              ],
               $slice: -MAX_EVENTS,
             },
           },
         },
         {
           returnDocument: "after",
-          arrayFilters: [{ "seen.orderId": orderId, "seen.status": { $ne: PaymentAttemptStatus.PAID } }],
+          arrayFilters: [
+            {
+              "seen.orderId": orderId,
+              "seen.status": { $ne: PaymentAttemptStatus.PAID },
+            },
+          ],
         },
       )
       .exec();
-    if (!updated) return (await this.paymentModel.findById(payment._id).exec()) ?? payment;
+    if (!updated)
+      return (await this.paymentModel.findById(payment._id).exec()) ?? payment;
     await this.rides.apply({
       rideId: updated.rideId,
-      from: [RidePaymentStatus.PENDING, RidePaymentStatus.ORDER_CREATED, RidePaymentStatus.FAILED],
+      from: [
+        RidePaymentStatus.PENDING,
+        RidePaymentStatus.ORDER_CREATED,
+        RidePaymentStatus.FAILED,
+      ],
       to: RidePaymentStatus.PROCESSING,
       payment: { paymentId: updated._id },
       clear: ["failureReason"],
@@ -1137,7 +1494,10 @@ export class PaymentsService {
   ): Promise<void> {
     const result = await this.paymentModel
       .updateOne(
-        { _id: payment._id, "duplicateCaptures.razorpayPaymentId": { $ne: gatewayPayment.id } },
+        {
+          _id: payment._id,
+          "duplicateCaptures.razorpayPaymentId": { $ne: gatewayPayment.id },
+        },
         {
           $push: {
             duplicateCaptures: {
@@ -1154,7 +1514,8 @@ export class PaymentsService {
                   at: new Date(),
                   razorpayOrderId: gatewayPayment.order_id ?? undefined,
                   razorpayPaymentId: gatewayPayment.id,
-                  detail: "Ride already paid — refund this payment from the Razorpay dashboard",
+                  detail:
+                    "Ride already paid — refund this payment from the Razorpay dashboard",
                 },
               ],
               $slice: -MAX_EVENTS,
@@ -1169,18 +1530,34 @@ export class PaymentsService {
       );
   }
 
-  async pushEvent(paymentId: Types.ObjectId, event: Omit<PaymentEvent, "at"> & { at?: Date }): Promise<void> {
+  async pushEvent(
+    paymentId: Types.ObjectId,
+    event: Omit<PaymentEvent, "at"> & { at?: Date },
+  ): Promise<void> {
     await this.paymentModel
       .updateOne(
         { _id: paymentId },
-        { $push: { events: { $each: [{ ...event, at: event.at ?? new Date() }], $slice: -MAX_EVENTS } } },
+        {
+          $push: {
+            events: {
+              $each: [{ ...event, at: event.at ?? new Date() }],
+              $slice: -MAX_EVENTS,
+            },
+          },
+        },
       )
       .exec();
   }
 
-  private async findForCustomer(customerUserId: string, paymentId: string): Promise<PaymentDocument> {
+  private async findForCustomer(
+    customerUserId: string,
+    paymentId: string,
+  ): Promise<PaymentDocument> {
     const payment = await this.paymentModel
-      .findOne({ _id: new Types.ObjectId(paymentId), customerId: new Types.ObjectId(customerUserId) })
+      .findOne({
+        _id: new Types.ObjectId(paymentId),
+        customerId: new Types.ObjectId(customerUserId),
+      })
       .exec();
     if (!payment) throw apiNotFound("Payment not found", "PAYMENT_NOT_FOUND");
     return payment;
@@ -1191,7 +1568,11 @@ export class PaymentsService {
     attempt: PaymentAttempt,
     customerUserId: string,
   ): Promise<CheckoutView> {
-    const customer = await this.userModel.findById(customerUserId).select("firstName lastName phone email").lean().exec();
+    const customer = await this.userModel
+      .findById(customerUserId)
+      .select("firstName lastName phone email")
+      .lean()
+      .exec();
     const ride = await this.rides.findById(payment.rideId);
     return {
       payment: this.view(payment, ride ?? undefined),
@@ -1253,7 +1634,9 @@ export class PaymentsService {
       failureReason: payment.failureReason,
       paidAt: payment.paidAt,
       refund:
-        payment.refundAmountPaise !== undefined || (payment.refundPendingPaise ?? 0) > 0 || payment.refundStatus
+        payment.refundAmountPaise !== undefined ||
+        (payment.refundPendingPaise ?? 0) > 0 ||
+        payment.refundStatus
           ? {
               refundId: payment.refundId,
               amount: toRupees(payment.refundAmountPaise ?? 0),
@@ -1286,15 +1669,25 @@ export class PaymentsService {
   }
 
   private alreadyPaid(payment: PaymentDocument): ApiException {
-    return new ApiException(HttpStatus.CONFLICT, "This ride is already paid", "PAYMENT_ALREADY_COMPLETED", {
-      paymentId: payment._id.toString(),
-    });
+    return new ApiException(
+      HttpStatus.CONFLICT,
+      "This ride is already paid",
+      "PAYMENT_ALREADY_COMPLETED",
+      {
+        paymentId: payment._id.toString(),
+      },
+    );
   }
 
   private gatewayFailure(error: unknown, message: string): ApiException {
     if (error instanceof ApiException) return error;
-    this.logger.warn(`Razorpay call failed: ${error instanceof Error ? error.message : String(error)}`);
-    const clientError = error instanceof RazorpayGatewayError && error.status !== undefined && error.status < 500;
+    this.logger.warn(
+      `Razorpay call failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    const clientError =
+      error instanceof RazorpayGatewayError &&
+      error.status !== undefined &&
+      error.status < 500;
     return new ApiException(
       clientError ? HttpStatus.BAD_REQUEST : HttpStatus.BAD_GATEWAY,
       message,

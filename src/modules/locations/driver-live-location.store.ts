@@ -37,7 +37,11 @@ export class DriverLiveLocationStore {
   latest(driverId: string, maxAgeMs?: number): LiveLocation | undefined {
     const location = this.entries.get(driverId)?.location;
     if (!location) return undefined;
-    if (maxAgeMs !== undefined && Date.now() - location.receivedAt.getTime() > maxAgeMs) return undefined;
+    if (
+      maxAgeMs !== undefined &&
+      Date.now() - location.receivedAt.getTime() > maxAgeMs
+    )
+      return undefined;
     return location;
   }
 
@@ -45,9 +49,17 @@ export class DriverLiveLocationStore {
    * Token-bucket of one: true (and the clock advances) when at least
    * `minIntervalMs` passed since the last accepted fix of this driver.
    */
-  tryAccept(driverId: string, minIntervalMs: number, now = Date.now()): boolean {
+  tryAccept(
+    driverId: string,
+    minIntervalMs: number,
+    now = Date.now(),
+  ): boolean {
     const entry = this.entry(driverId);
-    if (entry.lastAcceptedAt !== undefined && now - entry.lastAcceptedAt < minIntervalMs) return false;
+    if (
+      entry.lastAcceptedAt !== undefined &&
+      now - entry.lastAcceptedAt < minIntervalMs
+    )
+      return false;
     entry.lastAcceptedAt = now;
     return true;
   }
@@ -58,9 +70,17 @@ export class DriverLiveLocationStore {
   }
 
   /** True (and the clock advances) when a trail checkpoint is due. */
-  checkpointDue(driverId: string, intervalMs: number, now = Date.now()): boolean {
+  checkpointDue(
+    driverId: string,
+    intervalMs: number,
+    now = Date.now(),
+  ): boolean {
     const entry = this.entry(driverId);
-    if (entry.lastCheckpointAt !== undefined && now - entry.lastCheckpointAt < intervalMs) return false;
+    if (
+      entry.lastCheckpointAt !== undefined &&
+      now - entry.lastCheckpointAt < intervalMs
+    )
+      return false;
     entry.lastCheckpointAt = now;
     return true;
   }
@@ -88,8 +108,12 @@ export class DriverLiveLocationStore {
     if (now - this.lastEvictionAt < 60_000) return;
     this.lastEvictionAt = now;
     for (const [driverId, entry] of this.entries) {
-      const lastActivity = Math.max(entry.lastAcceptedAt ?? 0, entry.location?.receivedAt.getTime() ?? 0);
-      if (now - lastActivity > DriverLiveLocationStore.IDLE_TTL_MS) this.entries.delete(driverId);
+      const lastActivity = Math.max(
+        entry.lastAcceptedAt ?? 0,
+        entry.location?.receivedAt.getTime() ?? 0,
+      );
+      if (now - lastActivity > DriverLiveLocationStore.IDLE_TTL_MS)
+        this.entries.delete(driverId);
     }
   }
 }

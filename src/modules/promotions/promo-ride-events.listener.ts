@@ -26,11 +26,23 @@ export class PromoRideEventsListener implements OnModuleInit {
   async handle(event: RideTransitionedEvent): Promise<void> {
     if (!event.ride.promoCode) return;
     if (event.to === RideStatus.COMPLETED) {
-      if (await this.promotions.redeem(event.ride.rideId, event.ride.promoDiscount ?? 0))
-        this.logger.log(`Promo ${event.ride.promoCode} redeemed on ride ${event.ride.rideCode}`);
-    } else if (event.to === RideStatus.CANCELLED || event.to === RideStatus.NO_DRIVER_AVAILABLE) {
+      if (
+        await this.promotions.redeem(
+          event.ride.rideId,
+          event.ride.promoDiscount ?? 0,
+        )
+      )
+        this.logger.log(
+          `Promo ${event.ride.promoCode} redeemed on ride ${event.ride.rideCode}`,
+        );
+    } else if (
+      event.to === RideStatus.CANCELLED ||
+      event.to === RideStatus.NO_DRIVER_AVAILABLE
+    ) {
       if (await this.promotions.release(event.ride.rideId))
-        this.logger.log(`Promo ${event.ride.promoCode} released from ride ${event.ride.rideCode}`);
+        this.logger.log(
+          `Promo ${event.ride.promoCode} released from ride ${event.ride.rideCode}`,
+        );
     }
   }
 }

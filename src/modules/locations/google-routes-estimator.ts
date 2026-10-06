@@ -4,13 +4,15 @@ import type { GeoCoordinates } from "./geo";
 import { NoRouteFoundError, RouteProviderError } from "./route-estimator";
 import type { RouteEstimate, RouteEstimator } from "./route-estimator";
 
-export const GOOGLE_ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
+export const GOOGLE_ROUTES_URL =
+  "https://routes.googleapis.com/directions/v2:computeRoutes";
 
 /**
  * Only what Tirvona uses. The field mask is also the bill: asking for more
  * (tolls, legs, advisories) moves requests to a pricier SKU.
  */
-const FIELD_MASK = "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline";
+const FIELD_MASK =
+  "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline";
 
 export type RoutesTravelMode = "DRIVE" | "TWO_WHEELER";
 
@@ -27,10 +29,14 @@ interface GoogleErrorBody {
   error?: { status?: string; message?: string };
 }
 
-const waypoint = ({ latitude, longitude }: GeoCoordinates) => ({ location: { latLng: { latitude, longitude } } });
+const waypoint = ({ latitude, longitude }: GeoCoordinates) => ({
+  location: { latLng: { latitude, longitude } },
+});
 
 /** "1234s" / "12.5s" → whole seconds. */
-export function parseDurationSeconds(value: string | undefined): number | undefined {
+export function parseDurationSeconds(
+  value: string | undefined,
+): number | undefined {
   const match = /^(\d+(?:\.\d+)?)s$/.exec(value ?? "");
   return match ? Math.round(Number(match[1])) : undefined;
 }
@@ -61,13 +67,19 @@ export class GoogleRoutesEstimator implements RouteEstimator {
     return Boolean(this.apiKey);
   }
 
-  async estimate(origin: GeoCoordinates, destination: GeoCoordinates): Promise<RouteEstimate> {
-    if (!this.isConfigured) throw new RouteProviderError("GOOGLE_ROUTES_API_KEY is not set", false);
+  async estimate(
+    origin: GeoCoordinates,
+    destination: GeoCoordinates,
+  ): Promise<RouteEstimate> {
+    if (!this.isConfigured)
+      throw new RouteProviderError("GOOGLE_ROUTES_API_KEY is not set", false);
     const body = {
       origin: waypoint(origin),
       destination: waypoint(destination),
       travelMode: this.travelMode,
-      routingPreference: this.trafficAware ? "TRAFFIC_AWARE" : "TRAFFIC_UNAWARE",
+      routingPreference: this.trafficAware
+        ? "TRAFFIC_AWARE"
+        : "TRAFFIC_UNAWARE",
       computeAlternativeRoutes: false,
       polylineQuality: "OVERVIEW",
       polylineEncoding: "ENCODED_POLYLINE",
@@ -91,13 +103,21 @@ export class GoogleRoutesEstimator implements RouteEstimator {
       });
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      throw new RouteProviderError(`Google Routes unreachable: ${reason}`, true);
+      throw new RouteProviderError(
+        `Google Routes unreachable: ${reason}`,
+        true,
+      );
     }
 
     if (!response.ok) {
-      const detail = ((await response.json().catch(() => ({}))) as GoogleErrorBody).error;
+      const detail = (
+        (await response.json().catch(() => ({}))) as GoogleErrorBody
+      ).error;
       throw new RouteProviderError(
-        `Google Routes ${response.status} ${detail?.status ?? ""}: ${detail?.message ?? "request failed"}`.slice(0, 300),
+        `Google Routes ${response.status} ${detail?.status ?? ""}: ${detail?.message ?? "request failed"}`.slice(
+          0,
+          300,
+        ),
         response.status === 429 || response.status >= 500,
       );
     }
@@ -106,7 +126,10 @@ export class GoogleRoutesEstimator implements RouteEstimator {
     try {
       payload = (await response.json()) as ComputeRoutesResponse;
     } catch {
-      throw new RouteProviderError("Google Routes returned malformed JSON", true);
+      throw new RouteProviderError(
+        "Google Routes returned malformed JSON",
+        true,
+      );
     }
 
     // No route (island, closed road network) comes back as `{}`.
@@ -116,7 +139,10 @@ export class GoogleRoutesEstimator implements RouteEstimator {
     // distanceMeters is omitted (proto default) when it is 0.
     const distanceMeters = route.distanceMeters ?? 0;
     if (durationSeconds === undefined || !Number.isFinite(distanceMeters))
-      throw new RouteProviderError("Google Routes answer is missing distance or duration", true);
+      throw new RouteProviderError(
+        "Google Routes answer is missing distance or duration",
+        true,
+      );
 
     const polyline = route.polyline?.encodedPolyline;
     return {

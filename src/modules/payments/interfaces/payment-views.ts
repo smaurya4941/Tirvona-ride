@@ -1,7 +1,11 @@
 import type { RidePaymentStatus } from "../../rides/ride-payment-status";
 import type { RideFinalFareView } from "../../rides/ride-view.service";
 import type { AdjustmentView } from "../../earnings/interfaces/earning-views";
-import type { PaymentAttemptStatus, PaymentEventSource, PaymentStatus } from "./payment-status";
+import type {
+  PaymentAttemptStatus,
+  PaymentEventSource,
+  PaymentStatus,
+} from "./payment-status";
 import type {
   PaymentRefundState,
   RefundDriverImpact,
@@ -105,7 +109,13 @@ export interface PaymentReceiptView extends PaymentView {
   customer: { name: string; phone?: string };
   driver: { name: string } | null;
   refunds: CustomerRefundView[];
-  vehicle: { vehicleType: string; registrationNumber: string; make?: string; model?: string; color?: string } | null;
+  vehicle: {
+    vehicleType: string;
+    registrationNumber: string;
+    make?: string;
+    model?: string;
+    color?: string;
+  } | null;
 }
 
 export interface PaymentHistoryItem extends PaymentView {
@@ -125,7 +135,8 @@ export interface AdminPaymentPerson {
 
 export interface AdminPaymentListItem extends PaymentView {
   customer: AdminPaymentPerson | null;
-  driver: (AdminPaymentPerson & { driverId: string; driverCode: string }) | null;
+  driver:
+    (AdminPaymentPerson & { driverId: string; driverCode: string }) | null;
   attempts: number;
   needsAttention: boolean;
 }

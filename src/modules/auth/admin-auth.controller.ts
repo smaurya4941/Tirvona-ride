@@ -1,4 +1,11 @@
-import { Body, Controller, HttpCode, HttpStatus, Ip, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Ip,
+  Post,
+} from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
 import { Public } from "../../common/decorators/public.decorator";
 import { ok } from "../../common/http/api-response";
@@ -23,7 +30,10 @@ export class AdminAuthController {
   @Post("login")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Admin sign-in (ADMIN accounts only)" })
-  async login(@Body() dto: LoginDto, @Ip() ip: string): Promise<ApiSuccessBody<AuthSession>> {
+  async login(
+    @Body() dto: LoginDto,
+    @Ip() ip: string,
+  ): Promise<ApiSuccessBody<AuthSession>> {
     return ok(
       await this.auth.loginAdmin(dto, {
         deviceId: dto.deviceId,

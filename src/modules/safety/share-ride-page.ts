@@ -20,7 +20,11 @@ const mapsLink = (latitude: number, longitude: number): string =>
 
 const time = (value: Date | undefined, timeZone: string): string =>
   value
-    ? new Intl.DateTimeFormat("en-IN", { hour: "2-digit", minute: "2-digit", timeZone }).format(value)
+    ? new Intl.DateTimeFormat("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone,
+      }).format(value)
     : "";
 
 const STYLE = `
@@ -64,10 +68,15 @@ ${body}
 </html>`;
 }
 
-export function renderSharedRidePage(view: SharedRideView, timeZone: string): string {
+export function renderSharedRidePage(
+  view: SharedRideView,
+  timeZone: string,
+): string {
   const driver = view.driver
     ? `<p class="label">Driver</p><p class="value">${escapeHtml(view.driver.firstName)}${
-        view.driver.ratingAverage ? ` · ★ ${view.driver.ratingAverage.toFixed(1)}` : ""
+        view.driver.ratingAverage
+          ? ` · ★ ${view.driver.ratingAverage.toFixed(1)}`
+          : ""
       }</p>`
     : "";
   const vehicle = view.vehicle
@@ -105,5 +114,8 @@ export function renderShareErrorPage(expired: boolean): string {
   const message = expired
     ? "The ride has ended, so its live status is no longer shared."
     : "Check that you opened the full link, or ask the rider to share it again.";
-  return layout(title, `<section class="card"><h1 class="status">${title}</h1><p class="muted">${message}</p></section>`);
+  return layout(
+    title,
+    `<section class="card"><h1 class="status">${title}</h1><p class="muted">${message}</p></section>`,
+  );
 }

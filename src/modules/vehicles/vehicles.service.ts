@@ -1,16 +1,17 @@
 import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
-import { apiConflict, apiNotFound } from "../../common/exceptions/api.exception";
-import { removeFile, storeUpload } from "../../common/http/file-upload";
+import {
+  apiConflict,
+  apiNotFound,
+} from "../../common/exceptions/api.exception";
+import { StorageService } from "../storage/storage.service";
 import { DocumentStatus } from "../../common/types/document-status.enum";
 import { DriversService } from "../drivers/drivers.service";
 import { CreateVehicleDto } from "./dto/create-vehicle.dto";
 import { UpdateVehicleDto } from "./dto/update-vehicle.dto";
 import { UploadVehicleDocumentDto } from "./dto/upload-vehicle-document.dto";
-import {
-  VehicleDocument as VehicleDocumentModel,
-} from "./schemas/vehicle-document.schema";
+import { VehicleDocument as VehicleDocumentModel } from "./schemas/vehicle-document.schema";
 import type { VehicleDocumentDocument } from "./schemas/vehicle-document.schema";
 import { Vehicle } from "./schemas/vehicle.schema";
 import type { VehicleDocument } from "./schemas/vehicle.schema";
@@ -41,6 +42,7 @@ export class VehiclesService {
     @InjectModel(VehicleDocumentModel.name)
     private readonly documentModel: Model<VehicleDocumentModel>,
     private readonly drivers: DriversService,
+    private readonly storage: StorageService,
   ) {}
 
   toSummary(vehicle: VehicleDocument): VehicleSummary {
@@ -57,7 +59,10 @@ export class VehiclesService {
     };
   }
 
-  async create(userId: string, dto: CreateVehicleDto): Promise<VehicleDocument> {
+  async create(
+    userId: string,
+    dto: CreateVehicleDto,
+  ): Promise<VehicleDocument> {
     const driver = await this.drivers.getByUserId(userId);
     this.drivers.assertEditable(driver);
 
@@ -71,7 +76,10 @@ export class VehiclesService {
     // One driver account, one vehicle. To drive another vehicle the driver
     // sends a change request (POST /drivers/me/change-requests/vehicle),
     // which an admin reviews.
-    if (await this.vehicleModel.exists({ driverId: driver._id, isActive: true })) throw vehicleLimitReached();
+    if (
+      await this.vehicleModel.exists({ driverId: driver._id, isActive: true })
+    )
+      throw vehicleLimitReached();
 
     try {
       return await this.vehicleModel.create({
@@ -87,18 +95,31 @@ export class VehiclesService {
     } catch (error) {
       // Two concurrent requests: the partial unique index on driverId lets
       // only one through.
-      const keyPattern = (error as { code?: number; keyPattern?: Record<string, unknown> }).keyPattern;
-      if ((error as { code?: number }).code === 11000 && keyPattern && "driverId" in keyPattern) throw vehicleLimitReached();
+      const keyPattern = (
+        error as { code?: number; keyPattern?: Record<string, unknown> }
+      ).keyPattern;
+      if (
+        (error as { code?: number }).code === 11000 &&
+        keyPattern &&
+        "driverId" in keyPattern
+      )
+        throw vehicleLimitReached();
       throw error;
     }
   }
 
   async findMine(userId: string): Promise<VehicleDocument[]> {
     const driver = await this.drivers.getByUserId(userId);
-    return this.vehicleModel.find({ driverId: driver._id }).sort({ createdAt: -1 }).exec();
+    return this.vehicleModel
+      .find({ driverId: driver._id })
+      .sort({ createdAt: -1 })
+      .exec();
   }
 
-  async findOneOwned(userId: string, vehicleId: string): Promise<VehicleDocument> {
+  async findOneOwned(
+    userId: string,
+    vehicleId: string,
+  ): Promise<VehicleDocument> {
     const driver = await this.drivers.getByUserId(userId);
     return this.ownedVehicle(driver._id.toString(), vehicleId);
   }
@@ -173,7 +194,7 @@ export class VehiclesService {
   ): Promise<VehicleDocumentDocument> {
     const vehicle = await this.findOwnedForEdit(userId, vehicleId);
 
-    const filePath = await storeUpload(file, "vehicles", vehicle._id.toString());
+    const filePath = await this.storage.put(file, { segment: "vehicles", ownerId: vehicle._id.toString() });
     try {
       const existing = await this.documentModel
         .findOne({ vehicleId: vehicle._id, documentType: dto.documentType })
@@ -186,7 +207,7 @@ export class VehiclesService {
         existing.verifiedBy = undefined;
         existing.verifiedAt = undefined;
         await existing.save();
-        await removeFile(previousPath);
+        await this.storage.remove(previousPath);
         return existing;
       }
 
@@ -198,7 +219,7 @@ export class VehiclesService {
         status: DocumentStatus.PENDING,
       });
     } catch (error) {
-      await removeFile(filePath);
+      await this.storage.remove(filePath);
       throw error;
     }
   }

@@ -8,7 +8,10 @@ import { API_DEFAULT_VERSION, API_PREFIX, configureApp } from "./app.setup";
 async function bootstrap(): Promise<void> {
   // rawBody: the Razorpay webhook signature is computed over the exact bytes
   // Razorpay sent, not over a re-serialised JSON object.
-  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+    rawBody: true,
+  });
   app.useLogger(app.get(Logger));
   configureApp(app);
 

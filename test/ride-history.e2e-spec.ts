@@ -11,7 +11,10 @@ import { Types } from "mongoose";
 import request from "supertest";
 import type { App } from "supertest/types";
 import { PushGateway } from "../src/modules/notifications/push/push.gateway";
-import type { PushMessage, PushResult } from "../src/modules/notifications/push/push.gateway";
+import type {
+  PushMessage,
+  PushResult,
+} from "../src/modules/notifications/push/push.gateway";
 
 /**
  * GET /rides — the app's "Your rides" list: pages plus a requestedAt window
@@ -20,15 +23,27 @@ import type { PushMessage, PushResult } from "../src/modules/notifications/push/
 
 const PASSWORD = "Password@123";
 const PHONES = { customer: "+919860000001", other: "+919860000002" };
-const PREM_MANDIR = { address: "Prem Mandir, Vrindavan", latitude: 27.5714, longitude: 77.6716 };
-const BANKE_BIHARI = { address: "Banke Bihari Temple, Vrindavan", latitude: 27.5806, longitude: 77.7006 };
+const PREM_MANDIR = {
+  address: "Prem Mandir, Vrindavan",
+  latitude: 27.5714,
+  longitude: 77.6716,
+};
+const BANKE_BIHARI = {
+  address: "Banke Bihari Temple, Vrindavan",
+  latitude: 27.5806,
+  longitude: 77.7006,
+};
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
 class FakePush extends PushGateway {
   readonly isConfigured = false;
   async send(tokens: string[], _message: PushMessage): Promise<PushResult[]> {
-    return tokens.map((token) => ({ token, delivered: false, tokenInvalid: false }));
+    return tokens.map((token) => ({
+      token,
+      delivered: false,
+      tokenInvalid: false,
+    }));
   }
 }
 
@@ -52,12 +67,20 @@ describe("Ride history filter & pagination (e2e)", () => {
   const seeded = new Map<string, Date>();
 
   const api = () => request(app.getHttpServer());
-  const as = (who: keyof typeof PHONES) => ({ Authorization: `Bearer ${tokens[who]}` });
-  const history = async (who: keyof typeof PHONES, query: Record<string, string | number>) =>
-    (await api().get("/api/v1/rides").query(query).set(as(who)).expect(200)).body.data as HistoryPage;
+  const as = (who: keyof typeof PHONES) => ({
+    Authorization: `Bearer ${tokens[who]}`,
+  });
+  const history = async (
+    who: keyof typeof PHONES,
+    query: Record<string, string | number>,
+  ) =>
+    (await api().get("/api/v1/rides").query(query).set(as(who)).expect(200))
+      .body.data as HistoryPage;
 
   beforeAll(async () => {
-    mongo = await MongoMemoryServer.create({ instance: { launchTimeout: 60_000 } });
+    mongo = await MongoMemoryServer.create({
+      instance: { launchTimeout: 60_000 },
+    });
     workDir = await mkdtemp(join(tmpdir(), "tirvona-ride-history-"));
     process.chdir(workDir);
     Object.assign(process.env, {
@@ -95,8 +118,16 @@ describe("Ride history filter & pagination (e2e)", () => {
     const { UserRole } = await import("../src/common/types/user-role.enum");
     const users = app.get(UsersService, { strict: false });
     for (const who of Object.keys(PHONES) as Array<keyof typeof PHONES>) {
-      await users.create({ phone: PHONES[who], password: PASSWORD, role: UserRole.CUSTOMER, firstName: who });
-      const response = await api().post("/api/v1/auth/login").send({ phone: PHONES[who], password: PASSWORD }).expect(200);
+      await users.create({
+        phone: PHONES[who],
+        password: PASSWORD,
+        role: UserRole.CUSTOMER,
+        firstName: who,
+      });
+      const response = await api()
+        .post("/api/v1/auth/login")
+        .send({ phone: PHONES[who], password: PASSWORD })
+        .expect(200);
       tokens[who] = response.body.data.accessToken as string;
     }
 
@@ -105,10 +136,16 @@ describe("Ride history filter & pagination (e2e)", () => {
     const booked = await api()
       .post("/api/v1/rides")
       .set(as("customer"))
-      .send({ rideType: "AUTO", pickup: PREM_MANDIR, destination: BANKE_BIHARI })
+      .send({
+        rideType: "AUTO",
+        pickup: PREM_MANDIR,
+        destination: BANKE_BIHARI,
+      })
       .expect(201);
     const rides = db.collection("rides");
-    const template = await rides.findOne({ _id: new Types.ObjectId(booked.body.data.id as string) });
+    const template = await rides.findOne({
+      _id: new Types.ObjectId(booked.body.data.id as string),
+    });
     await rides.deleteMany({});
     const copy = (customerId: unknown, code: string, requestedAt: Date) => ({
       ...template,
@@ -155,39 +192,75 @@ describe("Ride history filter & pagination (e2e)", () => {
   });
 
   it("filters by a requestedAt window: start inclusive, end exclusive", async () => {
-    const sinceYesterday = await history("customer", { startDate: new Date(now - DAY).toISOString(), limit: 50 });
-    const expected = [...seeded].filter(([, at]) => at.getTime() >= now - DAY).map(([code]) => code);
+    const sinceYesterday = await history("customer", {
+      startDate: new Date(now - DAY).toISOString(),
+      limit: 50,
+    });
+    const expected = [...seeded]
+      .filter(([, at]) => at.getTime() >= now - DAY)
+      .map(([code]) => code);
     expect(sinceYesterday.items.map((ride) => ride.rideCode)).toEqual(expected);
     expect(sinceYesterday.total).toBe(expected.length);
 
     const third = seeded.get("TRHIST0003")!;
     const fifth = seeded.get("TRHIST0005")!;
-    const window = await history("customer", { startDate: fifth.toISOString(), endDate: third.toISOString() });
-    expect(window.items.map((ride) => ride.rideCode)).toEqual(["TRHIST0004", "TRHIST0005"]);
+    const window = await history("customer", {
+      startDate: fifth.toISOString(),
+      endDate: third.toISOString(),
+    });
+    expect(window.items.map((ride) => ride.rideCode)).toEqual([
+      "TRHIST0004",
+      "TRHIST0005",
+    ]);
 
     // Same instant written with an IST offset.
-    const ist = new Date(fifth.getTime() + 5.5 * HOUR).toISOString().replace("Z", "+05:30");
-    const viaIst = await history("customer", { startDate: ist, endDate: third.toISOString() });
+    const ist = new Date(fifth.getTime() + 5.5 * HOUR)
+      .toISOString()
+      .replace("Z", "+05:30");
+    const viaIst = await history("customer", {
+      startDate: ist,
+      endDate: third.toISOString(),
+    });
     expect(viaIst.total).toBe(2);
 
-    const paged = await history("customer", { startDate: new Date(now - DAY).toISOString(), limit: 3, page: 2 });
-    expect(paged.items.map((ride) => ride.rideCode)).toEqual(expected.slice(3, 6));
+    const paged = await history("customer", {
+      startDate: new Date(now - DAY).toISOString(),
+      limit: 3,
+      page: 2,
+    });
+    expect(paged.items.map((ride) => ride.rideCode)).toEqual(
+      expected.slice(3, 6),
+    );
     expect(paged.hasMore).toBe(expected.length > 6);
 
-    const empty = await history("customer", { endDate: new Date(now - 30 * DAY).toISOString() });
+    const empty = await history("customer", {
+      endDate: new Date(now - 30 * DAY).toISOString(),
+    });
     expect(empty).toMatchObject({ items: [], total: 0, hasMore: false });
   });
 
   it("rejects malformed or inverted ranges", async () => {
     const bad = async (query: Record<string, string>) =>
-      (await api().get("/api/v1/rides").query(query).set(as("customer")).expect(400)).body;
+      (
+        await api()
+          .get("/api/v1/rides")
+          .query(query)
+          .set(as("customer"))
+          .expect(400)
+      ).body;
     await bad({ startDate: "yesterday" });
     await bad({ startDate: "2026-13-01T00:00:00Z" });
     // No offset: the server cannot know whose midnight that is.
     await bad({ startDate: "2026-09-24T00:00:00.000" });
-    const inverted = await bad({ startDate: "2026-09-25T00:00:00Z", endDate: "2026-09-24T00:00:00Z" });
+    const inverted = await bad({
+      startDate: "2026-09-25T00:00:00Z",
+      endDate: "2026-09-24T00:00:00Z",
+    });
     expect(inverted.code).toBe("RIDE_HISTORY_RANGE_INVALID");
-    await bad({ startDate: "2026-09-25T00:00:00Z", endDate: "2026-09-25T00:00:00Z" });
+    await bad({
+      startDate: "2026-09-25T00:00:00Z",
+      endDate: "2026-09-25T00:00:00Z",
+    });
     await bad({ from: "2026-09-25T00:00:00Z" });
   });
 });

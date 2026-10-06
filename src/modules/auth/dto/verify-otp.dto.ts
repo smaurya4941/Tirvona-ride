@@ -5,7 +5,10 @@ import { DeviceInfoDto } from "./device.dto";
 import { OTP_CODE_PATTERN } from "./otp-code.dto";
 
 export class VerifyOtpDto extends DeviceInfoDto {
-  @ApiProperty({ example: "+919812345678", description: "E.164; a 10-digit Indian mobile is accepted" })
+  @ApiProperty({
+    example: "+919812345678",
+    description: "E.164; a 10-digit Indian mobile is accepted",
+  })
   @IsMobileNumber()
   phone!: string;
 
@@ -13,7 +16,9 @@ export class VerifyOtpDto extends DeviceInfoDto {
   @Matches(OTP_CODE_PATTERN, { message: "otp must be a 6-digit code" })
   otp!: string;
 
-  @ApiProperty({ description: "verificationId returned by POST /auth/register" })
+  @ApiProperty({
+    description: "verificationId returned by POST /auth/register",
+  })
   @IsString()
   @Length(16, 128)
   verificationId!: string;

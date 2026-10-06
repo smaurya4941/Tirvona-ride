@@ -14,7 +14,13 @@ import {
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from "@nestjs/swagger";
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from "@nestjs/swagger";
 import { memoryStorage } from "multer";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -25,8 +31,14 @@ import { ParseObjectIdPipe } from "../../common/pipes/parse-object-id.pipe";
 import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
 import type { AutocompleteResult, ResolvedPlace } from "../places/places.types";
-import { CIRCUIT_COVER_RULE, CircuitPackagesService } from "./circuit-packages.service";
-import type { CircuitPackageAdminView, RoutePreviewView } from "./circuit-packages.service";
+import {
+  CIRCUIT_COVER_RULE,
+  CircuitPackagesService,
+} from "./circuit-packages.service";
+import type {
+  CircuitPackageAdminView,
+  RoutePreviewView,
+} from "./circuit-packages.service";
 import {
   AdminPlaceResolveQueryDto,
   AdminPlaceSearchQueryDto,
@@ -46,31 +58,47 @@ export class AdminCircuitPackagesController {
   constructor(private readonly packages: CircuitPackagesService) {}
 
   @Get("places/autocomplete")
-  @ApiOperation({ summary: "Search places for a stop (same provider as the rider app)" })
-  async searchPlaces(@Query() query: AdminPlaceSearchQueryDto): Promise<ApiSuccessBody<AutocompleteResult>> {
+  @ApiOperation({
+    summary: "Search places for a stop (same provider as the rider app)",
+  })
+  async searchPlaces(
+    @Query() query: AdminPlaceSearchQueryDto,
+  ): Promise<ApiSuccessBody<AutocompleteResult>> {
     return ok(await this.packages.placeSearch(query.q, query.sessionToken));
   }
 
   @Get("places/resolve")
-  @ApiOperation({ summary: "Coordinates and address of a place picked from the search" })
-  async resolvePlace(@Query() query: AdminPlaceResolveQueryDto): Promise<ApiSuccessBody<ResolvedPlace>> {
+  @ApiOperation({
+    summary: "Coordinates and address of a place picked from the search",
+  })
+  async resolvePlace(
+    @Query() query: AdminPlaceResolveQueryDto,
+  ): Promise<ApiSuccessBody<ResolvedPlace>> {
     return ok(await this.packages.placeResolve(query.id, query.sessionToken));
   }
 
   @Get("cover-rule")
-  @ApiOperation({ summary: "What a cover image must be (the panel checks before uploading; the server re-checks the bytes)" })
+  @ApiOperation({
+    summary:
+      "What a cover image must be (the panel checks before uploading; the server re-checks the bytes)",
+  })
   coverRule(): ApiSuccessBody<typeof CIRCUIT_COVER_RULE> {
     return ok(CIRCUIT_COVER_RULE);
   }
 
   @Get()
   @ApiOperation({ summary: "Every package, any status" })
-  async list(@Query() query: ListCircuitPackagesQueryDto): Promise<ApiSuccessBody<CircuitPackageAdminView[]>> {
+  async list(
+    @Query() query: ListCircuitPackagesQueryDto,
+  ): Promise<ApiSuccessBody<CircuitPackageAdminView[]>> {
     return ok(await this.packages.list(query));
   }
 
   @Post()
-  @ApiOperation({ summary: "Create a package as a DRAFT (incomplete drafts are allowed; publishing is validated)" })
+  @ApiOperation({
+    summary:
+      "Create a package as a DRAFT (incomplete drafts are allowed; publishing is validated)",
+  })
   async create(
     @Body() dto: CreateCircuitPackageDto,
     @CurrentUser() admin: AuthenticatedUser,
@@ -80,14 +108,18 @@ export class AdminCircuitPackagesController {
 
   @Get(":id")
   @ApiOperation({ summary: "One package with what still blocks publishing" })
-  async findOne(@Param("id", ParseObjectIdPipe) id: string): Promise<ApiSuccessBody<CircuitPackageAdminView>> {
+  async findOne(
+    @Param("id", ParseObjectIdPipe) id: string,
+  ): Promise<ApiSuccessBody<CircuitPackageAdminView>> {
     return ok(await this.packages.getAdmin(id));
   }
 
   @Patch(":id")
   @ApiOperation({
-    summary: "Edit a package. Existing bookings keep the terms they were booked on.",
-    description: "Stops are replaced as a whole. A live package must stay publishable.",
+    summary:
+      "Edit a package. Existing bookings keep the terms they were booked on.",
+    description:
+      "Stops are replaced as a whole. A live package must stay publishable.",
   })
   async update(
     @Param("id", ParseObjectIdPipe) id: string,
@@ -98,18 +130,26 @@ export class AdminCircuitPackagesController {
   }
 
   @Patch(":id/status")
-  @ApiOperation({ summary: "DRAFT → ACTIVE (runs every publishing rule), ACTIVE ⇄ INACTIVE, → ARCHIVED" })
+  @ApiOperation({
+    summary:
+      "DRAFT → ACTIVE (runs every publishing rule), ACTIVE ⇄ INACTIVE, → ARCHIVED",
+  })
   async setStatus(
     @Param("id", ParseObjectIdPipe) id: string,
     @Body() dto: SetCircuitPackageStatusDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApiSuccessBody<CircuitPackageAdminView>> {
-    return ok(await this.packages.setStatus(id, dto.status, admin.userId, dto.reason));
+    return ok(
+      await this.packages.setStatus(id, dto.status, admin.userId, dto.reason),
+    );
   }
 
   @Post(":id/route-preview")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Stop → stop distance and time, with a warning when the included distance is too low" })
+  @ApiOperation({
+    summary:
+      "Stop → stop distance and time, with a warning when the included distance is too low",
+  })
   async routePreview(
     @Param("id", ParseObjectIdPipe) id: string,
     @Body() dto: RoutePreviewDto,
@@ -118,17 +158,33 @@ export class AdminCircuitPackagesController {
   }
 
   @Put(":id/cover")
-  @ApiOperation({ summary: "Set or replace the cover image (multipart field `file`)" })
+  @ApiOperation({
+    summary: "Set or replace the cover image (multipart field `file`)",
+  })
   @ApiConsumes("multipart/form-data")
-  @ApiBody({ schema: { type: "object", properties: { file: { type: "string", format: "binary" } } } })
-  @UseInterceptors(FileInterceptor("file", { storage: memoryStorage(), limits: { fileSize: CIRCUIT_COVER_RULE.maxBytes, files: 1 } }))
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: { file: { type: "string", format: "binary" } },
+    },
+  })
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: memoryStorage(),
+      limits: { fileSize: CIRCUIT_COVER_RULE.maxBytes, files: 1 },
+    }),
+  )
   async setCover(
     @Param("id", ParseObjectIdPipe) id: string,
     @CurrentUser() admin: AuthenticatedUser,
     @UploadedFile() file?: Express.Multer.File,
   ): Promise<ApiSuccessBody<CircuitPackageAdminView>> {
     if (!file?.buffer?.length)
-      throw apiBadRequest("Choose an image to upload", "CIRCUIT_PACKAGE_INVALID_IMAGE", { hint: CIRCUIT_COVER_RULE.hint });
+      throw apiBadRequest(
+        "Choose an image to upload",
+        "CIRCUIT_PACKAGE_INVALID_IMAGE",
+        { hint: CIRCUIT_COVER_RULE.hint },
+      );
     return ok(await this.packages.setCover(id, file, admin.userId));
   }
 
@@ -144,7 +200,9 @@ export class AdminCircuitPackagesController {
 
   @Delete(":id")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Delete an unused draft (anything else is archived instead)" })
+  @ApiOperation({
+    summary: "Delete an unused draft (anything else is archived instead)",
+  })
   async remove(
     @Param("id", ParseObjectIdPipe) id: string,
     @CurrentUser() admin: AuthenticatedUser,

@@ -1,7 +1,10 @@
 import { calculateCircuitFare } from "./circuit-pricing";
 import type { CircuitFareBreakdown } from "./circuit-pricing";
 import { activeStop } from "./circuit-ride.types";
-import type { CircuitExceptionType, CircuitStopStatus } from "./circuit-ride.types";
+import type {
+  CircuitExceptionType,
+  CircuitStopStatus,
+} from "./circuit-ride.types";
 import type { RideCircuit } from "./schemas/ride-circuit.schema";
 
 export interface CircuitStopView {
@@ -61,7 +64,12 @@ export interface CircuitView {
     extraBlocks: number;
     completedBy: string;
   };
-  exception?: { type: CircuitExceptionType; stopOrder: number; note?: string; reportedAt: Date };
+  exception?: {
+    type: CircuitExceptionType;
+    stopOrder: number;
+    note?: string;
+    reportedAt: Date;
+  };
   cancellationPolicy?: string;
   endedEarlyReason?: string;
 }
@@ -81,7 +89,11 @@ const stopView = (stop: RideCircuit["stops"][number]): CircuitStopView => ({
 });
 
 /** Seconds the circuit has run: from RIDE_STARTED to now, or to completion. */
-export function elapsedSeconds(startedAt: Date | undefined, completedAt: Date | undefined, now: Date): number {
+export function elapsedSeconds(
+  startedAt: Date | undefined,
+  completedAt: Date | undefined,
+  now: Date,
+): number {
   if (!startedAt) return 0;
   const end = completedAt ?? now;
   return Math.max(0, Math.round((end.getTime() - startedAt.getTime()) / 1000));
@@ -92,10 +104,13 @@ export function circuitView(
   ride: { startedAt?: Date; completedAt?: Date },
   now: Date = new Date(),
 ): CircuitView {
-  const stops = [...circuit.stops].sort((a, b) => a.order - b.order).map(stopView);
+  const stops = [...circuit.stops]
+    .sort((a, b) => a.order - b.order)
+    .map(stopView);
   const elapsed = elapsedSeconds(ride.startedAt, ride.completedAt, now);
   const distance = circuit.usage?.distanceMeters ?? 0;
-  const current = ride.startedAt && !ride.completedAt ? activeStop(stops) : undefined;
+  const current =
+    ride.startedAt && !ride.completedAt ? activeStop(stops) : undefined;
   return {
     packageId: circuit.packageId.toString(),
     packageCode: circuit.packageCode,
@@ -105,7 +120,8 @@ export function circuitView(
     stops,
     currentStop: current,
     currentStopOrder: circuit.currentStopOrder,
-    readyToComplete: stops.length > 0 && circuit.currentStopOrder > stops.length,
+    readyToComplete:
+      stops.length > 0 && circuit.currentStopOrder > stops.length,
     pricing: {
       basePrice: circuit.pricing.basePrice,
       includedDistanceMeters: circuit.pricing.includedDistanceMeters,
@@ -118,7 +134,8 @@ export function circuitView(
       distanceReliable: circuit.usage?.reliable ?? true,
       elapsedSeconds: elapsed,
       remainingSeconds: circuit.pricing.includedDurationSeconds - elapsed,
-      remainingDistanceMeters: circuit.pricing.includedDistanceMeters - distance,
+      remainingDistanceMeters:
+        circuit.pricing.includedDistanceMeters - distance,
       serverTime: now,
     },
     projected: calculateCircuitFare(circuit.pricing, distance, elapsed),

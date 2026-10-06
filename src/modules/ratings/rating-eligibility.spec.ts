@@ -21,8 +21,14 @@ describe("ratingEligibility", () => {
   });
 
   it("a refund afterwards does not take the right to rate away", () => {
-    for (const paymentStatus of [RidePaymentStatus.REFUNDED, RidePaymentStatus.PARTIALLY_REFUNDED])
-      expect(ratingEligibility({ ...paidRide, paymentStatus }, false, 30, now).canRate).toBe(true);
+    for (const paymentStatus of [
+      RidePaymentStatus.REFUNDED,
+      RidePaymentStatus.PARTIALLY_REFUNDED,
+    ])
+      expect(
+        ratingEligibility({ ...paidRide, paymentStatus }, false, 30, now)
+          .canRate,
+      ).toBe(true);
   });
 
   it.each([
@@ -32,29 +38,39 @@ describe("ratingEligibility", () => {
     [RidePaymentStatus.FAILED],
     [RidePaymentStatus.NOT_REQUIRED],
   ])("rejects an unpaid ride (%s)", (paymentStatus) => {
-    expect(ratingEligibility({ ...paidRide, paymentStatus }, false, 30, now).reason).toBe(
-      RatingBlocker.PAYMENT_NOT_VERIFIED,
-    );
+    expect(
+      ratingEligibility({ ...paidRide, paymentStatus }, false, 30, now).reason,
+    ).toBe(RatingBlocker.PAYMENT_NOT_VERIFIED);
   });
 
-  it.each([RideStatus.CANCELLED, RideStatus.RIDE_STARTED, RideStatus.SEARCHING, RideStatus.NO_DRIVER_AVAILABLE])(
-    "rejects a ride that is %s",
-    (status) => {
-      expect(ratingEligibility({ ...paidRide, status }, false, 30, now).reason).toBe(RatingBlocker.RIDE_NOT_COMPLETED);
-    },
-  );
+  it.each([
+    RideStatus.CANCELLED,
+    RideStatus.RIDE_STARTED,
+    RideStatus.SEARCHING,
+    RideStatus.NO_DRIVER_AVAILABLE,
+  ])("rejects a ride that is %s", (status) => {
+    expect(
+      ratingEligibility({ ...paidRide, status }, false, 30, now).reason,
+    ).toBe(RatingBlocker.RIDE_NOT_COMPLETED);
+  });
 
   it("rejects a second rating before anything else", () => {
-    expect(ratingEligibility(paidRide, true, 30, now).reason).toBe(RatingBlocker.ALREADY_RATED);
+    expect(ratingEligibility(paidRide, true, 30, now).reason).toBe(
+      RatingBlocker.ALREADY_RATED,
+    );
   });
 
   it("closes after the window", () => {
-    expect(ratingEligibility(paidRide, false, 1, new Date("2026-09-22T10:00:01Z")).reason).toBe(
-      RatingBlocker.WINDOW_CLOSED,
-    );
+    expect(
+      ratingEligibility(paidRide, false, 1, new Date("2026-09-22T10:00:01Z"))
+        .reason,
+    ).toBe(RatingBlocker.WINDOW_CLOSED);
   });
 
   it("needs a driver", () => {
-    expect(ratingEligibility({ ...paidRide, driverId: undefined }, false, 30, now).reason).toBe(RatingBlocker.NO_DRIVER);
+    expect(
+      ratingEligibility({ ...paidRide, driverId: undefined }, false, 30, now)
+        .reason,
+    ).toBe(RatingBlocker.NO_DRIVER);
   });
 });

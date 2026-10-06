@@ -9,10 +9,16 @@ import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
 import { AuditLogService } from "../audit/audit-log.service";
 import { distanceLimitsProblem } from "../ride-config/distance-policy";
-import { UpdatePlatformSettingsDto, UpdateRideDistanceConfigDto } from "../ride-config/dto/ride-config.dto";
+import {
+  UpdatePlatformSettingsDto,
+  UpdateRideDistanceConfigDto,
+} from "../ride-config/dto/ride-config.dto";
 import { PlatformSettingsService } from "../ride-config/platform-settings.service";
 import type { PlatformSettingsView } from "../ride-config/platform-settings.service";
-import { DISTANCE_LIMITS, RADIUS_LIMITS } from "../ride-config/ride-config.limits";
+import {
+  DISTANCE_LIMITS,
+  RADIUS_LIMITS,
+} from "../ride-config/ride-config.limits";
 import { RideDistanceConfigService } from "../ride-config/ride-distance-config.service";
 import type { RideDistanceConfigView } from "../ride-config/ride-distance-config.service";
 import { RideTypesService } from "../ride-types/ride-types.service";
@@ -37,7 +43,8 @@ export interface PlatformSettingsResponse {
   settings: PlatformSettingsView | null;
 }
 
-const hasChanges = (dto: object): boolean => Object.values(dto).some((value) => value !== undefined);
+const hasChanges = (dto: object): boolean =>
+  Object.values(dto).some((value) => value !== undefined);
 
 @ApiTags("Admin · Configuration")
 @ApiBearerAuth()
@@ -54,9 +61,14 @@ export class AdminRideConfigController {
   // ── Trip distance limits, per ride type ───────────────────────────────
 
   @Get("ride-distance-config")
-  @ApiOperation({ summary: "Every ride type with its minimum / maximum trip distance" })
+  @ApiOperation({
+    summary: "Every ride type with its minimum / maximum trip distance",
+  })
   async list(): Promise<ApiSuccessBody<RideDistanceConfigList>> {
-    const [rideTypes, configs] = await Promise.all([this.rideTypes.listAll(), this.distanceConfigs.listAll()]);
+    const [rideTypes, configs] = await Promise.all([
+      this.rideTypes.listAll(),
+      this.distanceConfigs.listAll(),
+    ]);
     const byType = new Map(configs.map((config) => [config.rideType, config]));
     const items = rideTypes.map((rideType): RideDistanceConfigRow => {
       const config = byType.get(rideType.code) ?? null;
@@ -71,7 +83,9 @@ export class AdminRideConfigController {
 
   @Get("ride-distance-config/:rideType")
   @ApiOperation({ summary: "One ride type's trip distance limits" })
-  async get(@Param("rideType", ParseRideTypeCodePipe) code: string): Promise<ApiSuccessBody<RideDistanceConfigRow>> {
+  async get(
+    @Param("rideType", ParseRideTypeCodePipe) code: string,
+  ): Promise<ApiSuccessBody<RideDistanceConfigRow>> {
     return ok(await this.row(code));
   }
 
@@ -85,19 +99,37 @@ export class AdminRideConfigController {
     @Body() dto: UpdateRideDistanceConfigDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApiSuccessBody<RideDistanceConfigRow>> {
-    if (!hasChanges(dto)) throw apiBadRequest("Provide a minimum and/or maximum distance", "VALIDATION_FAILED");
+    if (!hasChanges(dto))
+      throw apiBadRequest(
+        "Provide a minimum and/or maximum distance",
+        "VALIDATION_FAILED",
+      );
     const rideType = await this.rideTypes.getByCode(code);
-    const { before, after } = await this.distanceConfigs.save(code, dto, admin.userId);
+    const { before, after } = await this.distanceConfigs.save(
+      code,
+      dto,
+      admin.userId,
+    );
     await this.audit.record({
       adminId: admin.userId,
-      action: before ? "ride_distance_config.update" : "ride_distance_config.create",
+      action: before
+        ? "ride_distance_config.update"
+        : "ride_distance_config.create",
       targetType: "RIDE_DISTANCE_CONFIG",
       targetId: code,
       targetLabel: rideType.displayName,
       metadata: {
         version: after.version,
-        before: before ? { minDistanceMeters: before.minDistanceMeters, maxDistanceKm: before.maxDistanceKm } : null,
-        after: { minDistanceMeters: after.minDistanceMeters, maxDistanceKm: after.maxDistanceKm },
+        before: before
+          ? {
+              minDistanceMeters: before.minDistanceMeters,
+              maxDistanceKm: before.maxDistanceKm,
+            }
+          : null,
+        after: {
+          minDistanceMeters: after.minDistanceMeters,
+          maxDistanceKm: after.maxDistanceKm,
+        },
       },
     });
     return ok(await this.row(code));
@@ -106,20 +138,27 @@ export class AdminRideConfigController {
   // ── Platform ride & matching settings ─────────────────────────────────
 
   @Get("platform-settings")
-  @ApiOperation({ summary: "Matching radius and nearby-drivers radius (global)" })
+  @ApiOperation({
+    summary: "Matching radius and nearby-drivers radius (global)",
+  })
   async getSettings(): Promise<ApiSuccessBody<PlatformSettingsResponse>> {
     return ok(await this.settingsResponse());
   }
 
   @Patch("platform-settings")
   @ApiOperation({
-    summary: "Change the matching radius and/or the nearby-drivers radius (km). Live on the next search; no restart.",
+    summary:
+      "Change the matching radius and/or the nearby-drivers radius (km). Live on the next search; no restart.",
   })
   async updateSettings(
     @Body() dto: UpdatePlatformSettingsDto,
     @CurrentUser() admin: AuthenticatedUser,
   ): Promise<ApiSuccessBody<PlatformSettingsResponse>> {
-    if (!hasChanges(dto)) throw apiBadRequest("Provide a matching radius and/or a nearby drivers radius", "VALIDATION_FAILED");
+    if (!hasChanges(dto))
+      throw apiBadRequest(
+        "Provide a matching radius and/or a nearby drivers radius",
+        "VALIDATION_FAILED",
+      );
     const { before, after } = await this.platform.update(dto, admin.userId);
     await this.audit.record({
       adminId: admin.userId,
@@ -130,9 +169,15 @@ export class AdminRideConfigController {
       metadata: {
         version: after.version,
         before: before
-          ? { matchingRadiusKm: before.matchingRadiusKm, nearbyDriversRadiusKm: before.nearbyDriversRadiusKm }
+          ? {
+              matchingRadiusKm: before.matchingRadiusKm,
+              nearbyDriversRadiusKm: before.nearbyDriversRadiusKm,
+            }
           : null,
-        after: { matchingRadiusKm: after.matchingRadiusKm, nearbyDriversRadiusKm: after.nearbyDriversRadiusKm },
+        after: {
+          matchingRadiusKm: after.matchingRadiusKm,
+          nearbyDriversRadiusKm: after.nearbyDriversRadiusKm,
+        },
       },
     });
     return ok(await this.settingsResponse());
@@ -150,6 +195,9 @@ export class AdminRideConfigController {
 
   private async settingsResponse(): Promise<PlatformSettingsResponse> {
     const settings = await this.platform.find();
-    return { limits: RADIUS_LIMITS, settings: settings ? this.platform.toView(settings) : null };
+    return {
+      limits: RADIUS_LIMITS,
+      settings: settings ? this.platform.toView(settings) : null,
+    };
   }
 }

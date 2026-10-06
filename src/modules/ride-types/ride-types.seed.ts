@@ -6,7 +6,9 @@ import type { RideType } from "./schemas/ride-type.schema";
  * Inserted on first boot only (`$setOnInsert`) — once a row exists, admins
  * own it and a redeploy never overwrites their edits.
  */
-export const DEFAULT_RIDE_TYPES: Array<Omit<RideType, "isActive"> & { isActive: boolean }> = [
+export const DEFAULT_RIDE_TYPES: Array<
+  Omit<RideType, "isActive"> & { isActive: boolean }
+> = [
   {
     code: RideTypeCode.BIKE,
     displayName: "Bike",

@@ -4,8 +4,14 @@ import { InjectModel } from "@nestjs/mongoose";
 import type { Model } from "mongoose";
 import { Types } from "mongoose";
 import type { GeoPoint } from "../../common/schemas/geo-point.schema";
-import { DriverProfile, DriverStatus } from "../drivers/schemas/driver-profile.schema";
-import { DRIVER_ENGAGED_STATUSES, RideStatus } from "../rides/ride-state-machine";
+import {
+  DriverProfile,
+  DriverStatus,
+} from "../drivers/schemas/driver-profile.schema";
+import {
+  DRIVER_ENGAGED_STATUSES,
+  RideStatus,
+} from "../rides/ride-state-machine";
 import { Ride } from "../rides/schemas/ride.schema";
 import type { DriverLocationFixDto } from "./dto/driver-location-fix.dto";
 import { DriverLiveLocationStore } from "./driver-live-location.store";
@@ -85,22 +91,36 @@ export class DriverLocationService {
   private readonly averageSpeedMps: number;
 
   constructor(
-    @InjectModel(DriverProfile.name) private readonly driverModel: Model<DriverProfile>,
+    @InjectModel(DriverProfile.name)
+    private readonly driverModel: Model<DriverProfile>,
     @InjectModel(Ride.name) private readonly rideModel: Model<Ride>,
     @InjectModel(DriverLocationCheckpoint.name)
     private readonly checkpointModel: Model<DriverLocationCheckpoint>,
     private readonly store: DriverLiveLocationStore,
     config: ConfigService,
   ) {
-    this.staleMs = config.getOrThrow<number>("driverLocationStaleSeconds") * 1000;
-    this.persistIntervalMs = config.getOrThrow<number>("driverLocationPersistIntervalSeconds") * 1000;
-    this.persistDistanceMeters = config.getOrThrow<number>("driverLocationPersistDistanceMeters");
-    this.minIntervalMs = config.getOrThrow<number>("driverLocationMinIntervalMs");
-    this.maxAccuracyMeters = config.getOrThrow<number>("driverLocationMaxAccuracyMeters");
-    this.maxFixAgeMs = config.getOrThrow<number>("driverLocationMaxFixAgeSeconds") * 1000;
-    this.arrivingRadiusMeters = config.getOrThrow<number>("driverArrivingRadiusMeters");
-    this.checkpointIntervalMs = config.getOrThrow<number>("rideCheckpointIntervalSeconds") * 1000;
-    this.averageSpeedMps = config.getOrThrow<number>("routeAverageSpeedKmph") / 3.6;
+    this.staleMs =
+      config.getOrThrow<number>("driverLocationStaleSeconds") * 1000;
+    this.persistIntervalMs =
+      config.getOrThrow<number>("driverLocationPersistIntervalSeconds") * 1000;
+    this.persistDistanceMeters = config.getOrThrow<number>(
+      "driverLocationPersistDistanceMeters",
+    );
+    this.minIntervalMs = config.getOrThrow<number>(
+      "driverLocationMinIntervalMs",
+    );
+    this.maxAccuracyMeters = config.getOrThrow<number>(
+      "driverLocationMaxAccuracyMeters",
+    );
+    this.maxFixAgeMs =
+      config.getOrThrow<number>("driverLocationMaxFixAgeSeconds") * 1000;
+    this.arrivingRadiusMeters = config.getOrThrow<number>(
+      "driverArrivingRadiusMeters",
+    );
+    this.checkpointIntervalMs =
+      config.getOrThrow<number>("rideCheckpointIntervalSeconds") * 1000;
+    this.averageSpeedMps =
+      config.getOrThrow<number>("routeAverageSpeedKmph") / 3.6;
   }
 
   /** How old a stored location may be for the driver to still be matchable. */
@@ -108,24 +128,36 @@ export class DriverLocationService {
     return this.staleMs;
   }
 
-  async ingest(driverId: string, fix: DriverLocationFixDto, options: IngestOptions): Promise<LocationIngestResult> {
+  async ingest(
+    driverId: string,
+    fix: DriverLocationFixDto,
+    options: IngestOptions,
+  ): Promise<LocationIngestResult> {
     const now = new Date();
     const recordedAt = this.clampRecordedAt(fix.recordedAt, now);
-    if (now.getTime() - recordedAt.getTime() > this.maxFixAgeMs) return { accepted: false, reason: "STALE_FIX" };
+    if (now.getTime() - recordedAt.getTime() > this.maxFixAgeMs)
+      return { accepted: false, reason: "STALE_FIX" };
     if (fix.accuracy !== undefined && fix.accuracy > this.maxAccuracyMeters)
       return { accepted: false, reason: "LOW_ACCURACY" };
-    if (options.enforceRateLimit && !this.store.tryAccept(driverId, this.minIntervalMs, now.getTime()))
+    if (
+      options.enforceRateLimit &&
+      !this.store.tryAccept(driverId, this.minIntervalMs, now.getTime())
+    )
       return { accepted: false, reason: "RATE_LIMITED" };
 
     const driver = await this.driverModel
       .findById(driverId)
-      .select("driverStatus isOnline currentRideId currentLocation locationUpdatedAt")
+      .select(
+        "driverStatus isOnline currentRideId currentLocation locationUpdatedAt",
+      )
       .lean()
       .exec();
     if (!driver) return { accepted: false, reason: "DRIVER_NOT_FOUND" };
-    if (driver.driverStatus !== DriverStatus.APPROVED) return { accepted: false, reason: "DRIVER_NOT_APPROVED" };
+    if (driver.driverStatus !== DriverStatus.APPROVED)
+      return { accepted: false, reason: "DRIVER_NOT_APPROVED" };
     if (!driver.isOnline) return { accepted: false, reason: "DRIVER_OFFLINE" };
-    if (fix.rideId && !driver.currentRideId?.equals(fix.rideId)) return { accepted: false, reason: "RIDE_MISMATCH" };
+    if (fix.rideId && !driver.currentRideId?.equals(fix.rideId))
+      return { accepted: false, reason: "RIDE_MISMATCH" };
 
     const location: LiveLocation = {
       latitude: fix.latitude,
@@ -146,7 +178,8 @@ export class DriverLocationService {
       .select("status pickup arrivingNotifiedAt")
       .lean()
       .exec();
-    if (!ride || !DRIVER_ENGAGED_STATUSES.includes(ride.status)) return { accepted: true, location, persisted };
+    if (!ride || !DRIVER_ENGAGED_STATUSES.includes(ride.status))
+      return { accepted: true, location, persisted };
 
     const rideId = ride._id.toString();
     const arriving =
@@ -155,12 +188,29 @@ export class DriverLocationService {
         : undefined;
 
     if (
-      (ride.status === RideStatus.DRIVER_ACCEPTED || ride.status === RideStatus.RIDE_STARTED) &&
-      this.store.checkpointDue(driverId, this.checkpointIntervalMs, now.getTime())
+      (ride.status === RideStatus.DRIVER_ACCEPTED ||
+        ride.status === RideStatus.RIDE_STARTED) &&
+      this.store.checkpointDue(
+        driverId,
+        this.checkpointIntervalMs,
+        now.getTime(),
+      )
     )
-      await this.writeCheckpoint(ride._id, driver._id, CheckpointKind.TRIP, location, CheckpointSource.LIVE);
+      await this.writeCheckpoint(
+        ride._id,
+        driver._id,
+        CheckpointKind.TRIP,
+        location,
+        CheckpointSource.LIVE,
+      );
 
-    return { accepted: true, location, persisted, relay: { rideId, status: ride.status }, arriving };
+    return {
+      accepted: true,
+      location,
+      persisted,
+      relay: { rideId, status: ride.status },
+      arriving,
+    };
   }
 
   /**
@@ -168,11 +218,21 @@ export class DriverLocationService {
    * fix if one is fresh, otherwise the last persisted position; silently skips
    * when neither exists. Never throws — it must not fail a ride action.
    */
-  async recordCheckpoint(rideId: Types.ObjectId, driverId: Types.ObjectId, kind: CheckpointKind): Promise<void> {
+  async recordCheckpoint(
+    rideId: Types.ObjectId,
+    driverId: Types.ObjectId,
+    kind: CheckpointKind,
+  ): Promise<void> {
     try {
       const live = this.store.latest(driverId.toString(), this.staleMs);
       if (live) {
-        await this.writeCheckpoint(rideId, driverId, kind, live, CheckpointSource.LIVE);
+        await this.writeCheckpoint(
+          rideId,
+          driverId,
+          kind,
+          live,
+          CheckpointSource.LIVE,
+        );
       } else {
         const driver = await this.driverModel
           .findById(driverId)
@@ -185,11 +245,18 @@ export class DriverLocationService {
           rideId,
           driverId,
           kind,
-          { ...fromGeoJsonPoint(driver.currentLocation), recordedAt: at, receivedAt: at },
+          {
+            ...fromGeoJsonPoint(driver.currentLocation),
+            recordedAt: at,
+            receivedAt: at,
+          },
           CheckpointSource.LAST_KNOWN,
         );
       }
-      if (kind === CheckpointKind.COMPLETED || kind === CheckpointKind.CANCELLED)
+      if (
+        kind === CheckpointKind.COMPLETED ||
+        kind === CheckpointKind.CANCELLED
+      )
         this.store.resetCheckpointClock(driverId.toString());
     } catch (error) {
       this.logger.error(
@@ -199,10 +266,22 @@ export class DriverLocationService {
     }
   }
 
-  async checkpoints(rideId: Types.ObjectId): Promise<
-    Array<{ kind: CheckpointKind; latitude: number; longitude: number; source: CheckpointSource; recordedAt: Date }>
+  async checkpoints(
+    rideId: Types.ObjectId,
+  ): Promise<
+    Array<{
+      kind: CheckpointKind;
+      latitude: number;
+      longitude: number;
+      source: CheckpointSource;
+      recordedAt: Date;
+    }>
   > {
-    const rows = await this.checkpointModel.find({ rideId }).sort({ recordedAt: 1, _id: 1 }).lean().exec();
+    const rows = await this.checkpointModel
+      .find({ rideId })
+      .sort({ recordedAt: 1, _id: 1 })
+      .lean()
+      .exec();
     return rows.map((row) => ({
       kind: row.kind,
       ...fromGeoJsonPoint(row.location),
@@ -224,15 +303,28 @@ export class DriverLocationService {
     const rows = await this.checkpointModel
       .find({
         rideId,
-        $or: [{ kind: CheckpointKind.STARTED }, { kind: CheckpointKind.TRIP, recordedAt: { $gte: startedAt } }],
+        $or: [
+          { kind: CheckpointKind.STARTED },
+          { kind: CheckpointKind.TRIP, recordedAt: { $gte: startedAt } },
+        ],
       })
       .sort({ recordedAt: 1, _id: 1 })
       .lean()
       .exec();
-    const trail = rows.map((row) => ({ ...fromGeoJsonPoint(row.location), recordedAt: row.recordedAt }));
+    const trail = rows.map((row) => ({
+      ...fromGeoJsonPoint(row.location),
+      recordedAt: row.recordedAt,
+    }));
     const live = this.store.latest(driverId.toString(), this.staleMs);
-    if (live && (!trail.length || live.recordedAt > trail[trail.length - 1].recordedAt))
-      trail.push({ latitude: live.latitude, longitude: live.longitude, recordedAt: live.recordedAt });
+    if (
+      live &&
+      (!trail.length || live.recordedAt > trail[trail.length - 1].recordedAt)
+    )
+      trail.push({
+        latitude: live.latitude,
+        longitude: live.longitude,
+        recordedAt: live.recordedAt,
+      });
     return trail;
   }
 
@@ -242,13 +334,27 @@ export class DriverLocationService {
    */
   async lastKnown(
     driverId: Types.ObjectId,
-  ): Promise<(GeoCoordinates & { heading?: number; updatedAt: Date }) | undefined> {
+  ): Promise<
+    (GeoCoordinates & { heading?: number; updatedAt: Date }) | undefined
+  > {
     const live = this.store.latest(driverId.toString(), this.staleMs);
     if (live)
-      return { latitude: live.latitude, longitude: live.longitude, heading: live.heading, updatedAt: live.receivedAt };
-    const driver = await this.driverModel.findById(driverId).select("currentLocation locationUpdatedAt").lean().exec();
+      return {
+        latitude: live.latitude,
+        longitude: live.longitude,
+        heading: live.heading,
+        updatedAt: live.receivedAt,
+      };
+    const driver = await this.driverModel
+      .findById(driverId)
+      .select("currentLocation locationUpdatedAt")
+      .lean()
+      .exec();
     if (!driver?.currentLocation) return undefined;
-    return { ...fromGeoJsonPoint(driver.currentLocation), updatedAt: driver.locationUpdatedAt ?? new Date(0) };
+    return {
+      ...fromGeoJsonPoint(driver.currentLocation),
+      updatedAt: driver.locationUpdatedAt ?? new Date(0),
+    };
   }
 
   /**
@@ -258,8 +364,19 @@ export class DriverLocationService {
    */
   positionFor(
     driverId: string,
-    persisted: { currentLocation?: GeoPoint | null; locationUpdatedAt?: Date | null },
-  ): (GeoCoordinates & { heading?: number; speed?: number; updatedAt: Date; source: "live" | "saved"; fresh: boolean }) | undefined {
+    persisted: {
+      currentLocation?: GeoPoint | null;
+      locationUpdatedAt?: Date | null;
+    },
+  ):
+    | (GeoCoordinates & {
+        heading?: number;
+        speed?: number;
+        updatedAt: Date;
+        source: "live" | "saved";
+        fresh: boolean;
+      })
+    | undefined {
     const live = this.store.latest(driverId, this.staleMs);
     if (live)
       return {
@@ -284,7 +401,11 @@ export class DriverLocationService {
   /** Called when a driver goes online with coordinates via REST. */
   remember(driverId: string, coordinates: GeoCoordinates): void {
     const now = new Date();
-    this.store.save(driverId, { ...coordinates, recordedAt: now, receivedAt: now });
+    this.store.save(driverId, {
+      ...coordinates,
+      recordedAt: now,
+      receivedAt: now,
+    });
   }
 
   forget(driverId: string): void {
@@ -292,7 +413,11 @@ export class DriverLocationService {
   }
 
   private async persistIfDue(
-    driver: { _id: Types.ObjectId; currentLocation?: DriverProfile["currentLocation"]; locationUpdatedAt?: Date },
+    driver: {
+      _id: Types.ObjectId;
+      currentLocation?: DriverProfile["currentLocation"];
+      locationUpdatedAt?: Date;
+    },
     location: LiveLocation,
     now: Date,
   ): Promise<boolean> {
@@ -333,15 +458,32 @@ export class DriverLocationService {
     // Exactly-once across fixes and API instances: the first writer wins.
     const claimed = await this.rideModel
       .updateOne(
-        { _id: rideId, status: RideStatus.DRIVER_ACCEPTED, arrivingNotifiedAt: { $exists: false } },
+        {
+          _id: rideId,
+          status: RideStatus.DRIVER_ACCEPTED,
+          arrivingNotifiedAt: { $exists: false },
+        },
         { $set: { arrivingNotifiedAt: new Date() } },
       )
       .exec();
     if (claimed.modifiedCount !== 1) return undefined;
 
-    await this.writeCheckpoint(rideId, driverId, CheckpointKind.ARRIVING, location, CheckpointSource.LIVE);
-    const speed = location.speed && location.speed > 1 ? location.speed : this.averageSpeedMps;
-    return { rideId: rideId.toString(), distanceMeters, etaSeconds: Math.max(30, Math.round(distanceMeters / speed)) };
+    await this.writeCheckpoint(
+      rideId,
+      driverId,
+      CheckpointKind.ARRIVING,
+      location,
+      CheckpointSource.LIVE,
+    );
+    const speed =
+      location.speed && location.speed > 1
+        ? location.speed
+        : this.averageSpeedMps;
+    return {
+      rideId: rideId.toString(),
+      distanceMeters,
+      etaSeconds: Math.max(30, Math.round(distanceMeters / speed)),
+    };
   }
 
   private async writeCheckpoint(
@@ -366,6 +508,8 @@ export class DriverLocationService {
 
   private clampRecordedAt(recordedAt: Date | undefined, now: Date): Date {
     if (!recordedAt || Number.isNaN(recordedAt.getTime())) return now;
-    return recordedAt.getTime() > now.getTime() + MAX_CLOCK_SKEW_MS ? now : recordedAt;
+    return recordedAt.getTime() > now.getTime() + MAX_CLOCK_SKEW_MS
+      ? now
+      : recordedAt;
   }
 }
