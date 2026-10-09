@@ -19,6 +19,8 @@ import type { AuthenticatedUser } from "../../common/types/jwt-payload";
 import { UserRole } from "../../common/types/user-role.enum";
 import {
   CancelRideDto,
+  CompleteRideDto,
+  CompleteWithoutOtpDto,
   CreateRideDto,
   ListRidesQueryDto,
   NearbyDriversQueryDto,
@@ -269,14 +271,60 @@ export class RidesController {
     return ok(await this.lifecycle.start(user.userId, id, dto.otp));
   }
 
-  @Post(":id/complete")
+  @Post(":id/request-end")
   @HttpCode(HttpStatus.OK)
   @Roles(UserRole.DRIVER)
-  @ApiOperation({ summary: "Complete the trip; records the final fare" })
-  async complete(
+  @ApiOperation({
+    summary:
+      "Ask to end the trip: freezes the fare and shows the rider the end-of-trip OTP",
+  })
+  async requestEnd(
     @CurrentUser() user: AuthenticatedUser,
     @Param("id", ParseObjectIdPipe) id: string,
   ): Promise<ApiSuccessBody<DriverRideView>> {
-    return ok(await this.lifecycle.complete(user.userId, id));
+    return ok(await this.lifecycle.requestEnd(user.userId, id));
+  }
+
+  @Post(":id/cancel-end")
+  @HttpCode(HttpStatus.OK)
+  @Roles(UserRole.DRIVER)
+  @ApiOperation({ summary: "Take the end request back; the trip continues" })
+  async cancelEnd(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", ParseObjectIdPipe) id: string,
+  ): Promise<ApiSuccessBody<DriverRideView>> {
+    return ok(await this.lifecycle.cancelEnd(user.userId, id));
+  }
+
+  @Post(":id/complete")
+  @HttpCode(HttpStatus.OK)
+  @Roles(UserRole.DRIVER)
+  @ApiOperation({
+    summary:
+      "Complete the trip with the rider's end-of-trip OTP; records the final fare",
+  })
+  async complete(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", ParseObjectIdPipe) id: string,
+    @Body() dto: CompleteRideDto,
+  ): Promise<ApiSuccessBody<DriverRideView>> {
+    return ok(await this.lifecycle.complete(user.userId, id, dto.otp));
+  }
+
+  @Post(":id/complete-without-otp")
+  @HttpCode(HttpStatus.OK)
+  @Roles(UserRole.DRIVER)
+  @ApiOperation({
+    summary:
+      "Rider not responding: complete after the wait, flagged for review",
+  })
+  async completeWithoutOtp(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param("id", ParseObjectIdPipe) id: string,
+    @Body() dto: CompleteWithoutOtpDto,
+  ): Promise<ApiSuccessBody<DriverRideView>> {
+    return ok(
+      await this.lifecycle.completeWithoutOtp(user.userId, id, dto.reason),
+    );
   }
 }

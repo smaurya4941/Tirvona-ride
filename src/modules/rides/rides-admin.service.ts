@@ -15,8 +15,13 @@ import { CancellationsService } from "../cancellations/cancellations.service";
 import type { CancellationView } from "../cancellations/cancellations.service";
 import { CancellationFeeStatus } from "../cancellations/schemas/cancellation.schemas";
 import { User } from "../users/schemas/user.schema";
+import {
+  REVIEW_COMPLETION_MODES,
+  RideCompletionMode,
+} from "./ride-completion";
 import { RideDispatchService } from "./ride-dispatch.service";
 import { rideConflict, rideNotFound } from "./ride-errors";
+import { RideLifecycleService } from "./ride-lifecycle.service";
 import {
   CUSTOMER_CANCELLABLE_STATUSES,
   DRIVER_ENGAGED_STATUSES,
@@ -29,7 +34,7 @@ import { RideViewService } from "./ride-view.service";
 import type { RideView } from "./ride-view.service";
 import type { Page } from "./rides.service";
 import { Ride } from "./schemas/ride.schema";
-import type { RideVehicle } from "./schemas/ride.schema";
+import type { RideDocument, RideVehicle } from "./schemas/ride.schema";
 
 interface PersonRef {
   id: string;
@@ -37,9 +42,21 @@ interface PersonRef {
   phone: string;
 }
 
+/** How the trip ended and whether support should look at it. */
+export interface AdminRideEndInfo {
+  requestedAt?: Date;
+  mode?: RideCompletionMode;
+  note?: string;
+  farFromDestination: boolean;
+  distanceToDestinationMeters?: number;
+  /** Ended without the rider's code, or far from the booked drop-off. */
+  needsReview: boolean;
+}
+
 export interface AdminRideListItem extends RideView {
   customer: PersonRef | null;
   driver: (PersonRef & { driverId: string; driverCode: string }) | null;
+  end: AdminRideEndInfo;
 }
 
 export interface AdminRideDetail {
@@ -55,6 +72,12 @@ export interface AdminRideDetail {
       attempts: number;
       expiresAt?: Date;
       verifiedAt?: Date;
+    };
+    /** The end-of-trip OTP (never the code itself) and how the trip ended. */
+    end: AdminRideEndInfo & {
+      otpAttempts: number;
+      otpExpiresAt?: Date;
+      otpVerifiedAt?: Date;
     };
     vehicle?: Omit<RideVehicle, "vehicleId"> & { vehicleId?: string };
     createdAt: Date;
@@ -111,6 +134,30 @@ export interface AdminRideListQuery {
   status?: RideStatus;
   rideType?: string;
   search?: string;
+  needsReview?: boolean;
+}
+
+/** Ended without the rider's code, or further than the radius from the drop-off. */
+const NEEDS_REVIEW_FILTER: QueryFilter<Ride> = {
+  $or: [
+    { completionMode: { $in: [...REVIEW_COMPLETION_MODES] } },
+    { "endCheck.farFromDestination": true },
+  ],
+};
+
+export function endInfo(ride: RideDocument): AdminRideEndInfo {
+  const far = ride.endCheck?.farFromDestination ?? false;
+  return {
+    requestedAt: ride.endRequestedAt,
+    mode: ride.completionMode,
+    note: ride.completionNote,
+    farFromDestination: far,
+    distanceToDestinationMeters: ride.endCheck?.distanceToDestinationMeters,
+    needsReview:
+      far ||
+      (ride.completionMode !== undefined &&
+        REVIEW_COMPLETION_MODES.includes(ride.completionMode)),
+  };
 }
 
 const escapeRegex = (value: string): string =>
@@ -134,6 +181,7 @@ export class RidesAdminService {
     private readonly locations: DriverLocationService,
     private readonly dispatch: RideDispatchService,
     private readonly cancellations: CancellationsService,
+    private readonly lifecycle: RideLifecycleService,
     config: ConfigService,
   ) {
     this.timeZone = config.getOrThrow<string>("appTimeZone");
@@ -143,6 +191,8 @@ export class RidesAdminService {
     const filter: QueryFilter<Ride> = {};
     if (query.status) filter.status = query.status;
     if (query.rideType) filter.rideType = query.rideType;
+    // $and, because the search below also uses $or.
+    if (query.needsReview) filter.$and = [NEEDS_REVIEW_FILTER];
     if (query.search) {
       const term = query.search.trim();
       if (Types.ObjectId.isValid(term) && /^[0-9a-f]{24}$/i.test(term))
@@ -212,6 +262,7 @@ export class RidesAdminService {
           : undefined;
         return {
           ...this.views.base(ride),
+          end: endInfo(ride),
           customer: customer
             ? {
                 id: customer._id.toString(),
@@ -297,6 +348,12 @@ export class RidesAdminService {
           attempts: ride.otpAttempts,
           expiresAt: ride.otpExpiresAt,
           verifiedAt: ride.otpVerifiedAt,
+        },
+        end: {
+          ...endInfo(ride),
+          otpAttempts: ride.endOtpAttempts,
+          otpExpiresAt: ride.endOtpExpiresAt,
+          otpVerifiedAt: ride.endOtpVerifiedAt,
         },
         vehicle: ride.vehicle
           ? {
@@ -414,6 +471,20 @@ export class RidesAdminService {
       await this.matching.release(ride.driverId, ride._id);
       this.dispatch.kick();
     }
+    return this.detail(rideId);
+  }
+
+  /**
+   * Ops escape hatch for a trip that cannot be ended normally (rider
+   * unreachable, driver's app down). The same pricing and payment flow as a
+   * driver ending it; recorded as ADMIN with the note.
+   */
+  async complete(
+    rideId: string,
+    adminUserId: string,
+    note: string,
+  ): Promise<AdminRideDetail> {
+    await this.lifecycle.completeAsAdmin(adminUserId, rideId, note);
     return this.detail(rideId);
   }
 

@@ -18,7 +18,8 @@ Each push carries a bundled sound, chosen by notification type (`pushSoundFor` i
 |---|---|---|
 | `ride_request` (triple double-ring, ~4 s) | `tirvona_ride_requests_v2` | a new ride offer for a driver |
 | `ride_update` (two-note chime) | `tirvona_rides_v3` | everything else (ride progress, payments, account) |
-| `sos_alert` (siren, ~3 s) | `tirvona_sos_v2` | SOS created/updated |
+| `sos_alert` (siren, ~3 s) | `tirvona_sos_v2` | SOS created/updated, safety team (admin) only |
+| `silent` (no sound, no vibration) | `tirvona_sos_silent_v1` | SOS created/updated, sent to the rider or driver who pressed SOS, so nobody else in the vehicle can tell |
 
 - Android plays the channel's sound and cannot change it once the channel exists on a phone, so the channels are new ids. `MainActivity.kt` creates them at start-up and deletes the old `tirvona_rides` channel. The Dart side (`alert_sounds.dart`) creates the same channels and uses them for notifications shown while the app is open.
 - `res/raw/keep.xml` stops the release resource shrinker from deleting the sounds (they are only referenced by name). Without it a release build has no sound at all.

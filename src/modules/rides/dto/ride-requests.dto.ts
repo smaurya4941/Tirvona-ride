@@ -94,6 +94,29 @@ export class StartRideDto {
   otp!: string;
 }
 
+export class CompleteRideDto {
+  @ApiPropertyOptional({
+    example: "4821",
+    description:
+      "The end-of-trip code the rider sees after the driver asked to end the trip",
+  })
+  @IsOptional()
+  @Matches(/^\d{4}$/, {
+    message: "otp must be the 4-digit code shown to the customer",
+  })
+  otp?: string;
+}
+
+export class CompleteWithoutOtpDto {
+  @ApiProperty({
+    example: "Rider left the vehicle and is not answering",
+    description: "Why the trip is ended without the rider's code (kept for review)",
+  })
+  @IsString()
+  @Length(5, 240)
+  reason!: string;
+}
+
 export class ListRidesQueryDto {
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()

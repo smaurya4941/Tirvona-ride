@@ -294,18 +294,26 @@ export class DriverLocationService {
    * The on-trip trail for the trip meter: the STARTED checkpoint, every TRIP
    * sample taken after the start, and the driver's current fix as the drop
    * point. Pickup-leg samples (DRIVER_ACCEPTED) are excluded.
+   *
+   * `until` cuts the trail at a moment (the instant the driver asked to end
+   * the trip): time spent waiting for the rider's end-of-trip code is not part
+   * of the trip, so neither the samples nor the live fix after it count.
    */
   async tripTrail(
     rideId: Types.ObjectId,
     driverId: Types.ObjectId,
     startedAt: Date,
+    until?: Date,
   ): Promise<Array<GeoCoordinates & { recordedAt: Date }>> {
     const rows = await this.checkpointModel
       .find({
         rideId,
         $or: [
           { kind: CheckpointKind.STARTED },
-          { kind: CheckpointKind.TRIP, recordedAt: { $gte: startedAt } },
+          {
+            kind: CheckpointKind.TRIP,
+            recordedAt: { $gte: startedAt, ...(until && { $lte: until }) },
+          },
         ],
       })
       .sort({ recordedAt: 1, _id: 1 })
@@ -318,6 +326,7 @@ export class DriverLocationService {
     const live = this.store.latest(driverId.toString(), this.staleMs);
     if (
       live &&
+      (!until || live.recordedAt <= until) &&
       (!trail.length || live.recordedAt > trail[trail.length - 1].recordedAt)
     )
       trail.push({

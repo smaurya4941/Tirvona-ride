@@ -232,7 +232,10 @@ export class NotificationsService {
       return;
     }
 
-    const sound = pushSoundFor(notification.type);
+    const sound = pushSoundFor(
+      notification.type,
+      notification.recipientRole,
+    );
     const results = await this.push.send(tokens, {
       title: notification.title,
       body: notification.message,

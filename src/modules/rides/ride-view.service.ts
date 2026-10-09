@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import type { Model, Types } from "mongoose";
 import { DriverProfile } from "../drivers/schemas/driver-profile.schema";
@@ -11,6 +12,8 @@ import type { UserDocument } from "../users/schemas/user.schema";
 import { circuitView } from "../circuit-rides/circuit-view";
 import type { CircuitView } from "../circuit-rides/circuit-view";
 import { RideKind } from "../circuit-rides/circuit-ride.types";
+import { overrideAvailableAt } from "./ride-completion";
+import type { RideCompletionMode } from "./ride-completion";
 import { effectivePaymentStatus } from "./ride-payment-status";
 import type { RidePaymentStatus } from "./ride-payment-status";
 import { DRIVER_ENGAGED_STATUSES, RideStatus } from "./ride-state-machine";
@@ -129,7 +132,11 @@ export interface RideView {
   acceptedAt?: Date;
   arrivedAt?: Date;
   startedAt?: Date;
+  /** The driver asked to end the trip; the fare is priced to this moment. */
+  endRequestedAt?: Date;
   completedAt?: Date;
+  /** How the trip ended (OTP, driver override, admin, SOS). */
+  completionMode?: RideCompletionMode;
   cancelledAt?: Date;
   expiredAt?: Date;
   /** Only while SEARCHING — lets the app show how long it will keep trying. */
@@ -168,14 +175,31 @@ export interface RideDriverInfo {
   };
 }
 
+/** START: shown once the driver arrived. END: shown once the driver asked to end the trip. */
+export type RideOtpPurpose = "START" | "END";
+
 export interface CustomerRideView extends RideView {
   driver?: RideDriverInfo;
-  /** Present only in DRIVER_ARRIVED, only for the ride's own customer. */
-  otp?: { code: string; expiresAt?: Date };
+  /**
+   * The code the customer reads to the driver: the start code in
+   * DRIVER_ARRIVED, the end-of-trip code in RIDE_STARTED once the driver
+   * asked to end it. Only ever in the ride's own customer's view.
+   */
+  otp?: { code: string; expiresAt?: Date; purpose: RideOtpPurpose };
+}
+
+/** The driver's side of the end-of-trip code (never the code itself). */
+export interface DriverEndOtpView {
+  requestedAt: Date;
+  expiresAt?: Date;
+  /** From this moment "rider not responding" can complete the trip. */
+  overrideAvailableAt: Date;
 }
 
 export interface DriverRideView extends RideView {
   customer: { name: string; phone?: string };
+  /** Present while the driver has asked to end the trip and it is not yet completed. */
+  endOtp?: DriverEndOtpView;
   /** Respond before this or the request moves to another driver. */
   assignmentExpiresAt?: Date;
   /** Approximate straight-line distance from the driver to the pickup. */
@@ -199,13 +223,20 @@ const SHOWS_DRIVER: readonly RideStatus[] = [
 
 @Injectable()
 export class RideViewService {
+  private readonly overrideWaitSeconds: number;
+
   constructor(
     @InjectModel(User.name) private readonly userModel: Model<User>,
     @InjectModel(DriverProfile.name)
     private readonly driverModel: Model<DriverProfile>,
     private readonly locations: LocationsService,
     private readonly driverLocations: DriverLocationService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.overrideWaitSeconds = config.getOrThrow<number>(
+      "rideEndOverrideWaitSeconds",
+    );
+  }
 
   base(ride: RideDocument): RideView {
     return {
@@ -263,7 +294,9 @@ export class RideViewService {
       acceptedAt: ride.acceptedAt,
       arrivedAt: ride.arrivedAt,
       startedAt: ride.startedAt,
+      endRequestedAt: ride.endRequestedAt,
       completedAt: ride.completedAt,
+      completionMode: ride.completionMode,
       cancelledAt: ride.cancelledAt,
       expiredAt: ride.expiredAt,
       searchExpiresAt:
@@ -318,7 +351,21 @@ export class RideViewService {
       else if (view.driver) view.driver.phone = "";
     }
     if (ride.status === RideStatus.DRIVER_ARRIVED && ride.otpCode)
-      view.otp = { code: ride.otpCode, expiresAt: ride.otpExpiresAt };
+      view.otp = {
+        code: ride.otpCode,
+        expiresAt: ride.otpExpiresAt,
+        purpose: "START",
+      };
+    else if (
+      ride.status === RideStatus.RIDE_STARTED &&
+      ride.endRequestedAt &&
+      ride.endOtpCode
+    )
+      view.otp = {
+        code: ride.endOtpCode,
+        expiresAt: ride.endOtpExpiresAt,
+        purpose: "END",
+      };
     return view;
   }
 
@@ -341,6 +388,17 @@ export class RideViewService {
           : (customer?.firstName ?? "Customer"),
         phone: engaged ? customer?.phone : undefined,
       },
+      endOtp:
+        ride.status === RideStatus.RIDE_STARTED && ride.endRequestedAt
+          ? {
+              requestedAt: ride.endRequestedAt,
+              expiresAt: ride.endOtpExpiresAt,
+              overrideAvailableAt: overrideAvailableAt(
+                ride.endRequestedAt,
+                this.overrideWaitSeconds,
+              ),
+            }
+          : undefined,
       assignmentExpiresAt:
         ride.status === RideStatus.DRIVER_ASSIGNED
           ? ride.assignmentExpiresAt

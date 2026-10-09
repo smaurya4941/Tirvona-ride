@@ -257,6 +257,25 @@ export function planArrivingNotification(
 }
 
 /**
+ * The driver asked to end the trip: the customer is told to read the
+ * end-of-trip OTP to them. A fresh code (expiry, restart after "continue
+ * trip") has a new stateVersion, so it notifies again; a replay does not.
+ */
+export function planEndOtpNotification(
+  ride: RideSnapshot,
+  context: RideNotificationContext = {},
+): NotificationDraft {
+  return draft(
+    ride,
+    { userId: ride.customerId, role: UserRole.CUSTOMER },
+    NotificationType.RIDE_END_OTP,
+    "Share your end-of-trip OTP",
+    `${context.driverName ?? "Your driver"} is ending the trip. Open the app and read the OTP to your driver to complete it.`,
+    `END_OTP:v${ride.stateVersion}`,
+  );
+}
+
+/**
  * Payment outcomes: the customer is told success/failure, the driver that
  * they were paid — or, for cash, to collect the fare from the customer.
  */

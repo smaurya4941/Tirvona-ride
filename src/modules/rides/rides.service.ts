@@ -537,18 +537,24 @@ export class RidesService {
     return this.rideModel
       .findOne({ ...filter, customerId: new Types.ObjectId(customerUserId) })
       .sort({ requestedAt: -1 })
-      .select("+otpCode")
+      .select("+otpCode +endOtpCode")
       .exec();
   }
 
-  /** settle() re-reads without +otpCode; re-fetch when the OTP must be shown. */
+  /** settle() re-reads without the OTPs; re-fetch when an OTP must be shown. */
   private async settleWithOtp(ride: RideDocument): Promise<RideDocument> {
     const settled = await this.dispatch.settle(ride);
-    if (settled === ride || settled.status !== RideStatus.DRIVER_ARRIVED)
+    if (
+      settled === ride ||
+      (settled.status !== RideStatus.DRIVER_ARRIVED &&
+        settled.status !== RideStatus.RIDE_STARTED)
+    )
       return settled;
     return (
-      (await this.rideModel.findById(settled._id).select("+otpCode").exec()) ??
-      settled
+      (await this.rideModel
+        .findById(settled._id)
+        .select("+otpCode +endOtpCode")
+        .exec()) ?? settled
     );
   }
 

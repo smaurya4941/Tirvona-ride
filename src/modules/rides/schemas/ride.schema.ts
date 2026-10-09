@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { SchemaTypes, Types } from "mongoose";
 import type { HydratedDocument } from "mongoose";
 import { VehicleType } from "../../vehicles/schemas/vehicle.schema";
+import { RideCompletionMode } from "../ride-completion";
 import { RidePaymentStatus } from "../ride-payment-status";
 import { RideActorType, RideStatus } from "../ride-state-machine";
 import { PromoDiscountType } from "../../promotions/promo-rules";
@@ -292,6 +293,22 @@ export class RideCancellation {
 }
 const RideCancellationSchema = SchemaFactory.createForClass(RideCancellation);
 
+/** Where the driver was when the end of the trip was requested. */
+@Schema({ _id: false })
+export class RideEndCheck {
+  /** Absent when the driver's position was unknown. */
+  @Prop({ min: 0 })
+  distanceToDestinationMeters?: number;
+
+  /** Further than RIDE_END_FAR_RADIUS_METERS from the booked drop-off. */
+  @Prop({ required: true, default: false })
+  farFromDestination!: boolean;
+
+  @Prop()
+  locationAt?: Date;
+}
+const RideEndCheckSchema = SchemaFactory.createForClass(RideEndCheck);
+
 /**
  * Denormalised from the successful payment so ride reads (customer receipt
  * link, driver "payment received", admin lists) need no join. The payments
@@ -458,6 +475,38 @@ export class Ride {
 
   @Prop()
   otpVerifiedAt?: Date;
+
+  // ── End-of-trip OTP ───────────────────────────────────────────────────
+  // The ride stays RIDE_STARTED. The driver asks to end it (`endRequestedAt`,
+  // which is also the moment the fare is priced to), the rider's app shows the
+  // code, and the driver types it to complete. Same handling as the start OTP:
+  // clear text because the rider's app displays it, select: false, expiring,
+  // attempt-limited, removed once used.
+  @Prop()
+  endRequestedAt?: Date;
+
+  @Prop({ select: false })
+  endOtpCode?: string;
+
+  @Prop()
+  endOtpExpiresAt?: Date;
+
+  @Prop({ default: 0 })
+  endOtpAttempts!: number;
+
+  @Prop()
+  endOtpVerifiedAt?: Date;
+
+  @Prop({ type: RideEndCheckSchema })
+  endCheck?: RideEndCheck;
+
+  /** How the trip ended; set when it completes. */
+  @Prop({ enum: RideCompletionMode })
+  completionMode?: RideCompletionMode;
+
+  /** Why a trip was ended without the rider's code (driver reason / admin note). */
+  @Prop({ trim: true })
+  completionNote?: string;
 
   @Prop({ type: RideCancellationSchema })
   cancellation?: RideCancellation;

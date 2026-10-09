@@ -92,6 +92,61 @@ export class RideEventsService {
   }
 
   /**
+   * The end-of-trip OTP changed: asked for (REQUESTED), taken back
+   * (CANCELLED) or rotated after expiry / lockout (OTP_REFRESHED). Both
+   * participants get their own view — the customer's carries the code — and
+   * the ride stays RIDE_STARTED, so rooms are kept. A new code also raises a
+   * push, which must work with no socket attached.
+   */
+  endOtpChanged(
+    committed: RideDocument,
+    event:
+      | typeof RideEvent.END_REQUESTED
+      | typeof RideEvent.END_CANCELLED
+      | typeof RideEvent.OTP_REFRESHED,
+  ): void {
+    if (event === RideEvent.END_REQUESTED)
+      this.domainEvents.emit("ride.end_requested", {
+        ride: rideSnapshot(committed),
+      });
+    const rideId = committed._id;
+    this.enqueue(rideId, async () => {
+      const ride = await this.rideModel
+        .findById(rideId)
+        .select("+endOtpCode")
+        .exec();
+      if (!ride || ride.status !== RideStatus.RIDE_STARTED) return;
+      const deliveries: RideDelivery[] = [
+        {
+          userId: ride.customerId.toString(),
+          room: "keep",
+          envelope: this.envelope(
+            event,
+            ride,
+            {},
+            await this.views.forCustomer(ride),
+          ),
+        },
+      ];
+      if (ride.driverId && ride.driverUserId) {
+        const driver = await this.driverModel.findById(ride.driverId).exec();
+        if (driver)
+          deliveries.push({
+            userId: ride.driverUserId.toString(),
+            room: "keep",
+            envelope: this.envelope(
+              event,
+              ride,
+              {},
+              await this.views.forDriver(ride, driver),
+            ),
+          });
+      }
+      await this.realtime.deliver(ride._id.toString(), deliveries);
+    });
+  }
+
+  /**
    * The ride's payment status changed. The customer and the ride's driver
    * each get their own ride view; `room: "keep"` because a paid/unpaid
    * completed ride has no live room to join or leave.

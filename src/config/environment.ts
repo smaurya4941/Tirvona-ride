@@ -68,6 +68,12 @@ export interface Environment {
   rideAssignmentTimeoutSeconds: number;
   rideOtpTtlMinutes: number;
   rideOtpMaxAttempts: number;
+  /** false: /complete works without the rider's end-of-trip code (older apps during a rollout). */
+  rideEndOtpEnforced: boolean;
+  /** After asking to end the trip, how long the driver waits before "rider not responding". */
+  rideEndOverrideWaitSeconds: number;
+  /** Ending the trip further than this from the booked drop-off is flagged for review. */
+  rideEndFarRadiusMeters: number;
   nearbyDriversLimit: number;
   matchingSweepIntervalMs: number;
   matchingReactiveDispatch: boolean;
@@ -325,6 +331,9 @@ export const environmentFrom = (env: RawEnvironment): Environment => ({
   ),
   rideOtpTtlMinutes: integer(env.RIDE_OTP_TTL_MINUTES, 15),
   rideOtpMaxAttempts: integer(env.RIDE_OTP_MAX_ATTEMPTS, 5),
+  rideEndOtpEnforced: boolean(env.RIDE_END_OTP_ENFORCED, true),
+  rideEndOverrideWaitSeconds: integer(env.RIDE_END_OVERRIDE_WAIT_SECONDS, 120),
+  rideEndFarRadiusMeters: integer(env.RIDE_END_FAR_RADIUS_METERS, 500),
   // Trip distance limits and the matching / nearby-drivers radii are admin
   // settings stored in MongoDB (modules/ride-config), not environment.
   // Cars drawn on the rider Home map (approximate positions, no identities):
@@ -660,6 +669,8 @@ const POSITIVE_INTEGERS = [
   "RIDE_ASSIGNMENT_TIMEOUT_SECONDS",
   "RIDE_OTP_TTL_MINUTES",
   "RIDE_OTP_MAX_ATTEMPTS",
+  "RIDE_END_OVERRIDE_WAIT_SECONDS",
+  "RIDE_END_FAR_RADIUS_METERS",
   "MATCHING_DRIVER_HEARTBEAT_SECONDS",
   "REALTIME_PING_INTERVAL_MS",
   "REALTIME_PING_TIMEOUT_MS",

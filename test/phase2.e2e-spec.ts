@@ -127,6 +127,7 @@ describe("Phase 2 — basic ride booking (e2e)", () => {
       NODE_ENV: "test",
       // Older suites assert final fare = estimate; actual-trip pricing is in payments-v2.
       FINAL_FARE_MODE: "booked",
+      RIDE_END_OTP_ENFORCED: "false",
       LOG_LEVEL: "silent",
       SWAGGER_ENABLED: "false",
       MONGODB_URI: mongo.getUri(),

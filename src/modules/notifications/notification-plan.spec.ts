@@ -1,9 +1,11 @@
+import { UserRole } from "../../common/types/user-role.enum";
 import type { RideSnapshot } from "../../infrastructure/events/domain-events";
 import { RidePaymentStatus } from "../rides/ride-payment-status";
 import { RideActorType, RideStatus } from "../rides/ride-state-machine";
 import {
   formatRupees,
   planArrivingNotification,
+  planEndOtpNotification,
   planPaymentNotifications,
   planRideNotifications,
 } from "./notification-plan";
@@ -118,6 +120,28 @@ describe("planArrivingNotification", () => {
     expect(planArrivingNotification(ride(), 60).type).toBe(
       NotificationType.RIDE_DRIVER_ARRIVING,
     );
+  });
+});
+
+describe("planEndOtpNotification", () => {
+  it("tells the customer, never the driver, and never carries a code", () => {
+    const draft = planEndOtpNotification(ride(), { driverName: "Rahul" });
+    expect(draft).toMatchObject({
+      type: NotificationType.RIDE_END_OTP,
+      recipientRole: UserRole.CUSTOMER,
+      userId: ride().customerId,
+      title: "Share your end-of-trip OTP",
+    });
+    expect(draft.message).toContain("Rahul is ending the trip");
+    expect(draft.message).not.toMatch(/\d{4}/);
+  });
+
+  it("notifies again for a fresh code, not for a replay", () => {
+    const first = planEndOtpNotification({ ...ride(), stateVersion: 5 });
+    const replay = planEndOtpNotification({ ...ride(), stateVersion: 5 });
+    const rotated = planEndOtpNotification({ ...ride(), stateVersion: 6 });
+    expect(replay.dedupeKey).toBe(first.dedupeKey);
+    expect(rotated.dedupeKey).not.toBe(first.dedupeKey);
   });
 });
 

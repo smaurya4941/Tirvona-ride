@@ -50,6 +50,11 @@ export interface RideDriverArrivingEvent {
   distanceMeters?: number;
 }
 
+/** The driver asked to end the trip: the customer must share the end-of-trip OTP. */
+export interface RideEndRequestedEvent {
+  ride: RideSnapshot;
+}
+
 export interface RidePaymentUpdatedEvent {
   ride: RideSnapshot;
   paymentStatus: RidePaymentStatus;
@@ -159,6 +164,7 @@ export interface CircuitNoticeEvent {
 export interface DomainEventMap {
   "ride.transitioned": RideTransitionedEvent;
   "ride.driver_arriving": RideDriverArrivingEvent;
+  "ride.end_requested": RideEndRequestedEvent;
   "ride.payment_updated": RidePaymentUpdatedEvent;
   "circuit.notice": CircuitNoticeEvent;
   "payment.refund_updated": PaymentRefundUpdatedEvent;

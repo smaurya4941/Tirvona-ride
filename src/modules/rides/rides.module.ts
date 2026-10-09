@@ -15,6 +15,7 @@ import { PromotionsModule } from "../promotions/promotions.module";
 import { ZonesModule } from "../zones/zones.module";
 import { DriverAvailabilityController } from "./driver-availability.controller";
 import { DriverAvailabilityService } from "./driver-availability.service";
+import { SosEvent, SosEventSchema } from "../safety/schemas/sos-event.schema";
 import { RideDispatchScheduler } from "./ride-dispatch.scheduler";
 import { RideDispatchService } from "./ride-dispatch.service";
 import { RideEventsService } from "./ride-events.service";
@@ -46,6 +47,9 @@ import {
     MongooseModule.forFeature([
       { name: Ride.name, schema: RideSchema },
       { name: RideStatusHistory.name, schema: RideStatusHistorySchema },
+      // Read-only: "is an SOS open on this ride?" decides whether the
+      // end-of-trip OTP is asked for. (Safety reads rides the same way.)
+      { name: SosEvent.name, schema: SosEventSchema },
     ]),
     UsersModule,
     DriversModule,

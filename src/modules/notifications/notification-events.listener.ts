@@ -13,6 +13,7 @@ import {
   planArrivingNotification,
   planCircuitNotifications,
   planEarningAdjustedNotification,
+  planEndOtpNotification,
   planPaymentNotifications,
   planRefundNotifications,
   planRideNotifications,
@@ -60,6 +61,12 @@ export class NotificationEventsListener implements OnModuleInit {
           event.etaSeconds,
           await this.context(snapshot),
         ),
+      ]);
+    });
+
+    this.events.on("ride.end_requested", async (event) => {
+      await this.notifications.notify([
+        planEndOtpNotification(event.ride, await this.context(event.ride)),
       ]);
     });
 

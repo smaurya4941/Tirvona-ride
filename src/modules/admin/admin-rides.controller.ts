@@ -25,6 +25,7 @@ import type {
 import type { Page } from "../rides/rides.service";
 import {
   AdminCancelRideDto,
+  AdminCompleteRideDto,
   AdminListRidesQueryDto,
 } from "./dto/admin-rides.dto";
 
@@ -78,6 +79,29 @@ export class AdminRidesController {
       targetLabel: detail.ride.rideCode,
       reason: dto.reason,
       metadata: { reasonCode: dto.reasonCode ?? "OTHER" },
+    });
+    return ok(detail);
+  }
+
+  @Post(":id/complete")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Complete a trip that is under way without the rider's code (ops)",
+  })
+  async complete(
+    @Param("id", ParseObjectIdPipe) id: string,
+    @CurrentUser() admin: AuthenticatedUser,
+    @Body() dto: AdminCompleteRideDto,
+  ): Promise<ApiSuccessBody<AdminRideDetail>> {
+    const detail = await this.rides.complete(id, admin.userId, dto.note);
+    await this.audit.record({
+      adminId: admin.userId,
+      action: "ride.complete",
+      targetType: "RIDE",
+      targetId: id,
+      targetLabel: detail.ride.rideCode,
+      reason: dto.note,
+      metadata: { completionMode: "ADMIN" },
     });
     return ok(detail);
   }

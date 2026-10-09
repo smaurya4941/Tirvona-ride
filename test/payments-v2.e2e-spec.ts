@@ -345,6 +345,7 @@ describe("Razorpay integration v2 — final fare, refunds, clawbacks, reconcilia
       DEFAULT_COMMISSION_PERCENT: "20",
       EARNINGS_HOLD_HOURS: "0",
       FINAL_FARE_MODE: "actual",
+      RIDE_END_OTP_ENFORCED: "false",
       FINAL_FARE_MAX_ESTIMATE_MULTIPLIER: "1.5",
       TRIP_METER_MAX_GAP_SECONDS: "120",
       PAYMENT_DAILY_RECONCILIATION: "true",

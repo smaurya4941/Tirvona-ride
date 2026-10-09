@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { PUSH_CHANNEL_IDS } from "../notification-types";
+import { PUSH_CHANNEL_IDS, PushSound } from "../notification-types";
 import { GOOGLE_TOKEN_URL, serviceAccountAssertion } from "./google-oauth";
 import { PushGateway } from "./push.gateway";
 import type { PushMessage, PushResult } from "./push.gateway";
@@ -126,6 +126,7 @@ export class FcmHttpGateway extends PushGateway {
     token: string,
     message: PushMessage,
   ): Record<string, unknown> {
+    const silent = message.sound === PushSound.SILENT;
     return {
       token,
       notification: { title: message.title, body: message.body },
@@ -135,7 +136,8 @@ export class FcmHttpGateway extends PushGateway {
         notification: {
           channel_id: PUSH_CHANNEL_IDS[message.sound],
           // Android 8+ plays the channel's sound; this covers older phones.
-          sound: message.sound,
+          // A silent push names no sound at all.
+          ...(silent ? {} : { sound: message.sound }),
           ...(message.collapseKey ? { tag: message.collapseKey } : {}),
         },
       },
@@ -146,7 +148,7 @@ export class FcmHttpGateway extends PushGateway {
             ? { "apns-collapse-id": message.collapseKey.slice(0, 64) }
             : {}),
         },
-        payload: { aps: { sound: `${message.sound}.wav` } },
+        payload: { aps: silent ? {} : { sound: `${message.sound}.wav` } },
       },
     };
   }

@@ -22,6 +22,13 @@ export const RideEvent = {
   DRIVER_ARRIVED: "ride.driver_arrived",
   /** Customer: the start-of-trip OTP was rotated (expiry / lockout). */
   OTP_REFRESHED: "ride.otp_refreshed",
+  /**
+   * The driver asked to end the trip: the customer's view now carries the
+   * end-of-trip OTP, the driver's view the "rider not responding" timer.
+   */
+  END_REQUESTED: "ride.end_requested",
+  /** The driver took the end request back (trip continues). */
+  END_CANCELLED: "ride.end_cancelled",
   STARTED: "ride.started",
   /** High frequency, volatile (dropped rather than queued when a client lags). */
   LOCATION_UPDATED: "ride.location_updated",

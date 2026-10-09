@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Type } from "class-transformer";
+import { Transform, Type } from "class-transformer";
 import {
   IsEnum,
   IsInt,
@@ -47,6 +47,22 @@ export class AdminListRidesQueryDto {
   @IsString()
   @Length(1, 40)
   search?: string;
+
+  /**
+   * `true`: trips that ended without the rider's code (driver override, admin,
+   * SOS) or far from the booked drop-off — what support should look at.
+   */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Transform(({ value }) => value === true || value === "true" || value === "1")
+  needsReview?: boolean;
+}
+
+export class AdminCompleteRideDto {
+  @ApiProperty({ example: "Rider unreachable; driver confirmed drop-off" })
+  @IsString()
+  @Length(3, 240)
+  note!: string;
 }
 
 export class AdminCancelRideDto {
